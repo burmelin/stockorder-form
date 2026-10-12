@@ -6,14 +6,19 @@
 // ─── CONFIGURATION ──────────────────────────────────────────
 // Change these to match your business
 var BUSINESS_NAME        = 'Burmelin';          // Your business name
-var EMPLOYEE_PASS        = 'employee2024';         // Password for employee dashboard
 var ORDERS_TAB_NAME      = 'Orders';               // Name for the new orders tab
 var INVENTORY_SHEET_NAME = 'Palladium Stock';       // Palladium warehouse stock tab
 var OLD_INVENTORY_SHEET_NAMES = ['Size Chart'];     // earlier name, still accepted
+var RETAIL_STORES        = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana'];
+
+// Passwords are NOT stored in this file (it's on GitHub). Set them in the Apps Script editor:
+// Project Settings (⚙) → Script properties → EMPLOYEE_PASS, PASS_BICASSO_1, PASS_BICASSO_2, PASS_BICASSO_NANA
+var PASSWORD_PROPS   = PropertiesService.getScriptProperties().getProperties();
+var EMPLOYEE_PASS    = PASSWORD_PROPS.EMPLOYEE_PASS || null;
 var RETAIL_PASSWORDS = {
-  'Bicasso 1':    'b1store',
-  'Bicasso 2':    'b2store',
-  'Bicasso Nana': 'bNana'
+  'Bicasso 1':    PASSWORD_PROPS.PASS_BICASSO_1 || null,
+  'Bicasso 2':    PASSWORD_PROPS.PASS_BICASSO_2 || null,
+  'Bicasso Nana': PASSWORD_PROPS.PASS_BICASSO_NANA || null
 };
 // ────────────────────────────────────────────────────────────
 
@@ -841,7 +846,8 @@ function getSalesToday(storeName) {
 // ─── VERIFY RETAIL STORE LOGIN ────────────────────────────────
 // withData: also return the store's stock + Palladium's inventory, so login needs one request
 function verifyRetailStore(storeName, password, withData) {
-  if (!RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Unknown store.' };
+  if (RETAIL_STORES.indexOf(storeName) === -1) return { success: false, error: 'Unknown store.' };
+  if (!RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Password not set up for ' + storeName + ' (Script properties).' };
   if (password !== RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Wrong password.' };
   if (!withData) return { success: true };
   var bundle = getStoreBundle(storeName);
@@ -872,7 +878,7 @@ function getRetailStock(storeName) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     // Only real stores — an unknown name must not create a new tab
-    if (storeName && !RETAIL_PASSWORDS[storeName] && storeName !== 'Palladium') return { success: false, error: 'Unknown store: ' + storeName };
+    if (storeName && RETAIL_STORES.indexOf(storeName) === -1 && storeName !== 'Palladium') return { success: false, error: 'Unknown store: ' + storeName };
     var storeNames = storeName ? [storeName] : ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
     var storesData = {};
     var groups = null; // Palladium's categories, same shape as getInventory().groups

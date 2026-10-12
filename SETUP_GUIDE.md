@@ -54,13 +54,20 @@ You need to create **3 files** in the Apps Script editor.
 
 ## Step 3 — Customize your settings
 
-In `Code.gs`, find these lines near the top and change them:
+In `Code.gs`, set your business name near the top:
 
 ```javascript
 var BUSINESS_NAME = 'My Business';      // ← Your business name
-var EMPLOYEE_PASS = 'employee2024';     // ← Password for your employees
-var ORDERS_TAB_NAME = 'Orders';         // ← Leave as-is (tab will be created automatically)
 ```
+
+Passwords are **not** kept in `Code.gs`. In the Apps Script editor open **Project Settings (⚙) → Script properties** and add:
+
+| Property | Value |
+|---|---|
+| `EMPLOYEE_PASS` | Palladium staff password |
+| `PASS_BICASSO_1` | Bicasso 1 passcode |
+| `PASS_BICASSO_2` | Bicasso 2 passcode |
+| `PASS_BICASSO_NANA` | Bicasso Nana passcode |
 
 Click **Save** (the floppy disk icon, or Ctrl+S).
 
