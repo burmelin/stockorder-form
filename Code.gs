@@ -8,13 +8,26 @@
 var BUSINESS_NAME        = 'Burmelin';          // Your business name
 var EMPLOYEE_PASS        = 'employee2024';         // Password for employee dashboard
 var ORDERS_TAB_NAME      = 'Orders';               // Name for the new orders tab
-var INVENTORY_SHEET_NAME = 'Size Chart';            // Your inventory tab name
+var INVENTORY_SHEET_NAME = 'Palladium Stock';       // Palladium warehouse stock tab
+var OLD_INVENTORY_SHEET_NAMES = ['Size Chart'];     // earlier name, still accepted
 var RETAIL_PASSWORDS = {
   'Bicasso 1':    'b1store',
   'Bicasso 2':    'b2store',
   'Bicasso Nana': 'bNana'
 };
 // ────────────────────────────────────────────────────────────
+
+// Palladium's stock tab, by its current name or the old one (names compared without stray spaces)
+function getPalladiumSheet(ss) {
+  var wanted = [INVENTORY_SHEET_NAME].concat(OLD_INVENTORY_SHEET_NAMES);
+  var sheets = ss.getSheets();
+  for (var w = 0; w < wanted.length; w++) {
+    for (var i = 0; i < sheets.length; i++) {
+      if (sheets[i].getName().trim() === wanted[w]) return sheets[i];
+    }
+  }
+  return null;
+}
 
 // ─── WEB APP ENTRY POINT ─────────────────────────────────────
 // Now doubles as a JSON API for the Vercel-hosted frontend.
@@ -94,22 +107,8 @@ function getBusinessName() {
 function getInventory() {
   try {
     var ss    = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = null;
-
-    // Find the inventory sheet by name (trim in case of trailing spaces)
-    var sheets = ss.getSheets();
-    for (var i = 0; i < sheets.length; i++) {
-      if (sheets[i].getName().trim() === INVENTORY_SHEET_NAME.trim()) {
-        sheet = sheets[i]; break;
-      }
-    }
-    // Fallback: use first non-Orders sheet
-    if (!sheet) {
-      for (var j = 0; j < sheets.length; j++) {
-        if (sheets[j].getName() !== ORDERS_TAB_NAME) { sheet = sheets[j]; break; }
-      }
-    }
-    if (!sheet) return { success: false, error: 'Inventory sheet not found.' };
+    var sheet = getPalladiumSheet(ss);
+    if (!sheet) return { success: false, error: 'Palladium stock tab not found ("' + INVENTORY_SHEET_NAME + '").' };
 
     var data       = sheet.getDataRange().getValues();
     var inventory  = {};   // productId → { "Color X": { size: stock } }
@@ -372,7 +371,7 @@ function markDone(orderId, password) {
         label: it.product + ' | ' + it.color + ' | ' + it.size
       };
     });
-    // Every order leaves Palladium's Size Chart; a store order also lands in that store's stock
+    // Every order leaves Palladium's stock; a store order also lands in that store's stock
     var warnings = deductItemsFromWholesale(ss, order.items, lines);
     if (order.orderType === 'store' && order.shopName) {
       warnings = warnings.concat(addItemsToStore(ss, order.shopName, lines));
@@ -555,10 +554,10 @@ function addItemsToStore(ss, shopName, lines) {
   return [];
 }
 
-// Deduct an order from Palladium's Size Chart in one pass
+// Deduct an order from Palladium's stock tab in one pass
 function deductItemsFromWholesale(ss, items, lines) {
   var warnings = [];
-  var sheet = ss.getSheetByName(INVENTORY_SHEET_NAME);
+  var sheet = getPalladiumSheet(ss);
   var data = sheet ? sheet.getDataRange().getValues() : [];
   var rowOf = {};
   for (var r = sheetDataStart(data); r < data.length; r++) {
@@ -659,7 +658,7 @@ function transferStock(fromStore, toStore, password, rowId, qty) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     function sheetFor(name) {
-      return ss.getSheetByName(name === 'Palladium' ? INVENTORY_SHEET_NAME : name + ' Stock');
+      return name === 'Palladium' ? getPalladiumSheet(ss) : ss.getSheetByName(name + ' Stock');
     }
     var fromSheet = sheetFor(fromStore), toSheet = sheetFor(toStore);
     if (!fromSheet) return { success: false, error: 'Sheet not found for: ' + fromStore };
@@ -884,8 +883,8 @@ function getRetailStock(storeName) {
     var groups = null; // Palladium's categories, same shape as getInventory().groups
 
     storeNames.forEach(function(name) {
-      var sheetName = name === 'Palladium' ? INVENTORY_SHEET_NAME : name + ' Stock';
-      var sheet = ss.getSheetByName(sheetName);
+      var sheetName = name + ' Stock';
+      var sheet = name === 'Palladium' ? getPalladiumSheet(ss) : ss.getSheetByName(sheetName);
       // Auto-create sheet from wholesale product list if missing (not for Palladium)
       if (!sheet && name !== 'Palladium') sheet = createRetailSheet(ss, sheetName);
       var inventory = {};
@@ -930,11 +929,7 @@ function getRetailStock(storeName) {
 // ─── CREATE RETAIL STORE SHEET (seeded from wholesale, qty=0) ─
 function createRetailSheet(ss, sheetName) {
   try {
-    var wholesale = null;
-    var sheets = ss.getSheets();
-    for (var i = 0; i < sheets.length; i++) {
-      if (sheets[i].getName().trim() === INVENTORY_SHEET_NAME.trim()) { wholesale = sheets[i]; break; }
-    }
+    var wholesale = getPalladiumSheet(ss);
     var newSheet = ss.insertSheet(sheetName);
     if (wholesale) {
       var src  = wholesale.getDataRange().getValues();
@@ -1131,12 +1126,8 @@ function generateMasterSheet(password, targets) {
     var STORES = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana'];
 
     // Load wholesale stock
-    var wsSheet = null;
-    var sheets = ss.getSheets();
-    for (var i = 0; i < sheets.length; i++) {
-      if (sheets[i].getName().trim() === INVENTORY_SHEET_NAME.trim()) { wsSheet = sheets[i]; break; }
-    }
-    if (!wsSheet) return { success: false, error: 'Size Chart sheet not found.' };
+    var wsSheet = getPalladiumSheet(ss);
+    if (!wsSheet) return { success: false, error: 'Palladium stock tab not found.' };
 
     var wData = wsSheet.getDataRange().getValues();
     var wStart = 1;
