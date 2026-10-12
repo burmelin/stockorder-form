@@ -20,6 +20,9 @@ var RETAIL_PASSWORDS = {
   'Bicasso 2':    PASSWORD_PROPS.PASS_BICASSO_2 || null,
   'Bicasso Nana': PASSWORD_PROPS.PASS_BICASSO_NANA || null
 };
+// A password only matches when it has actually been set (an unset password never lets anyone in)
+function isEmployee(p) { return !!EMPLOYEE_PASS && p === EMPLOYEE_PASS; }
+function isStorePass(store, p) { return !!RETAIL_PASSWORDS[store] && p === RETAIL_PASSWORDS[store]; }
 // ────────────────────────────────────────────────────────────
 
 // Palladium's stock tab, by its current name or the old one (names compared without stray spaces)
@@ -238,7 +241,7 @@ function submitOrder(orderData) {
 
 // ─── GET ALL ORDERS (called from Employee dashboard) ──────────
 function getOrders(password) {
-  if (password !== EMPLOYEE_PASS) {
+  if (!isEmployee(password)) {
     return { success: false, error: 'Wrong password. Please try again.' };
   }
   try {
@@ -289,7 +292,7 @@ function getOrders(password) {
 
 // ─── MARK ORDER AS INVOICED (called after employee prints invoice) ────
 function sendInvoice(orderId, password) {
-  if (password !== EMPLOYEE_PASS) {
+  if (!isEmployee(password)) {
     return { success: false, error: 'Wrong password.' };
   }
   try {
@@ -307,7 +310,7 @@ function sendInvoice(orderId, password) {
 
 // ─── DELETE ORDER (called from Employee dashboard) ────────────
 function deleteOrder(orderId, password) {
-  if (password !== EMPLOYEE_PASS) {
+  if (!isEmployee(password)) {
     return { success: false, error: 'Wrong password.' };
   }
   try {
@@ -330,7 +333,7 @@ function deleteOrder(orderId, password) {
 
 // ─── EDIT ORDER ITEMS (called from Employee dashboard) ───────
 function editOrderItems(orderId, newItems, password) {
-  if (password !== EMPLOYEE_PASS) {
+  if (!isEmployee(password)) {
     return { success: false, error: 'Wrong password.' };
   }
   if (!newItems || !newItems.length) return { success: false, error: 'An order must keep at least one item.' };
@@ -362,7 +365,7 @@ function editOrderItems(orderId, newItems, password) {
 
 // ─── MARK ORDER DONE (called from Employee dashboard) ─────────
 function markDone(orderId, password) {
-  if (password !== EMPLOYEE_PASS) {
+  if (!isEmployee(password)) {
     return { success: false, error: 'Wrong password.' };
   }
   // One completion at a time, so a retry can't pass the "Completed" guard while the first is still running
@@ -638,8 +641,8 @@ function buildCodeIndex(data) {
 function transferStock(fromStore, toStore, password, rowId, qty, transferId) {
   if (!fromStore || !toStore) return { success: false, error: 'Select both stores.' };
   if (fromStore === toStore) return { success: false, error: 'Source and destination must differ.' };
-  var validPass = (RETAIL_PASSWORDS[fromStore] && password === RETAIL_PASSWORDS[fromStore])
-               || password === EMPLOYEE_PASS;
+  var validPass = isStorePass(fromStore, password)
+               || isEmployee(password);
   if (!validPass) return { success: false, error: 'Wrong password — please log in again.' };
   var sellQ = parseInt(qty) || 0;
   if (sellQ <= 0) return { success: false, error: 'Quantity must be at least 1.' };
@@ -716,8 +719,8 @@ function findLoggedSale(log, saleId) {
 }
 
 function sellRetailStock(storeName, password, rowId, qty, saleId) {
-  var validPass = (RETAIL_PASSWORDS[storeName] && password === RETAIL_PASSWORDS[storeName])
-               || password === EMPLOYEE_PASS;
+  var validPass = isStorePass(storeName, password)
+               || isEmployee(password);
   if (!validPass) return { success: false, error: 'Wrong password.' };
   var sellQ = parseInt(qty) || 0;
   if (sellQ <= 0) return { success: false, error: 'Quantity must be at least 1.' };
@@ -757,8 +760,8 @@ function sellRetailStock(storeName, password, rowId, qty, saleId) {
 // Sell up to 5 lines as one sale. All lines are checked before anything is deducted,
 // so a sale never goes through halfway. Lines are logged as saleId#1, saleId#2, …
 function sellRetailStockBatch(storeName, password, items, saleId) {
-  var validPass = (RETAIL_PASSWORDS[storeName] && password === RETAIL_PASSWORDS[storeName])
-               || password === EMPLOYEE_PASS;
+  var validPass = isStorePass(storeName, password)
+               || isEmployee(password);
   if (!validPass) return { success: false, error: 'Wrong password.' };
   if (!saleId) return { success: false, error: 'Missing sale ID.' };
   items = (items || []).map(function(it) {
@@ -848,7 +851,7 @@ function getSalesToday(storeName) {
 function verifyRetailStore(storeName, password, withData) {
   if (RETAIL_STORES.indexOf(storeName) === -1) return { success: false, error: 'Unknown store.' };
   if (!RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Password not set up for ' + storeName + ' (Script properties).' };
-  if (password !== RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Wrong password.' };
+  if (!isStorePass(storeName, password)) return { success: false, error: 'Wrong password.' };
   if (!withData) return { success: true };
   var bundle = getStoreBundle(storeName);
   bundle.success = true;
@@ -959,8 +962,8 @@ function createRetailSheet(ss, sheetName) {
 // ─── ADD MULTIPLE ROWS TO RETAIL STOCK SHEET (batch) ────────
 // items = [{productId, category, colorNum, size, qty}, ...]
 function addRetailStockItems(storeName, password, items) {
-  var validPass = (RETAIL_PASSWORDS[storeName] && password === RETAIL_PASSWORDS[storeName])
-               || password === EMPLOYEE_PASS;
+  var validPass = isStorePass(storeName, password)
+               || isEmployee(password);
   if (!validPass) return { success: false, error: 'Wrong password.' };
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
@@ -1004,8 +1007,8 @@ function addRetailStockItems(storeName, password, items) {
 // ─── ADD NEW ROW TO RETAIL STOCK SHEET ───────────────────────
 // Palladium/employee only — set one size's quantity in a store's sheet (adds the row if missing)
 function addRetailStockItem(storeName, password, productId, category, colorNum, size, qty) {
-  var validPass = (RETAIL_PASSWORDS[storeName] && password === RETAIL_PASSWORDS[storeName])
-               || password === EMPLOYEE_PASS;
+  var validPass = isStorePass(storeName, password)
+               || isEmployee(password);
   if (!validPass) return { success: false, error: 'Wrong password.' };
   return addRetailStockItems(storeName, password, [{ productId: productId, category: category, colorNum: colorNum, size: size, qty: qty }]);
 }
@@ -1053,7 +1056,7 @@ function sheetWriter(width) {
 // quantities = all stores combined (Palladium + Bicasso 1 + Bicasso 2 + Bicasso Nana).
 // Also writes "Order Plan": per color/size, how many to order to reach the targets.
 function generateMasterSheet(password, targets) {
-  if (password !== EMPLOYEE_PASS) return { success: false, error: 'Wrong password.' };
+  if (!isEmployee(password)) return { success: false, error: 'Wrong password.' };
   targets = targets || {};
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
