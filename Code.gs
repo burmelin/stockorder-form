@@ -633,6 +633,22 @@ function notifyOwner(orderData, orderId, dateStr) {
 }
 
 // ─── TRANSFER STOCK BETWEEN STORES ───────────────────────────
+// Code → row index for a stock sheet. A code is Product ID + Color + Size, taken from
+// columns B/D/E (what the app shows); the typed ID in column A is only a fallback,
+// since some column-A IDs have typos or are shifted.
+function buildCodeIndex(data) {
+  var idx = {}, start = sheetDataStart(data), r, k;
+  for (r = start; r < data.length; r++) {
+    k = (String(data[r][1]).trim() + String(data[r][3]).trim() + String(data[r][4]).trim()).toUpperCase();
+    if (k && idx[k] === undefined) idx[k] = r;
+  }
+  for (r = start; r < data.length; r++) {
+    k = String(data[r][0]).trim().toUpperCase();
+    if (k && idx[k] === undefined) idx[k] = r;
+  }
+  return idx;
+}
+
 function transferStock(fromStore, toStore, password, rowId, qty) {
   if (!fromStore || !toStore) return { success: false, error: 'Select both stores.' };
   if (fromStore === toStore) return { success: false, error: 'Source and destination must differ.' };
@@ -645,27 +661,32 @@ function transferStock(fromStore, toStore, password, rowId, qty) {
     function sheetFor(name) {
       return ss.getSheetByName(name === 'Palladium' ? INVENTORY_SHEET_NAME : name + ' Stock');
     }
-    var fromSheet = sheetFor(fromStore);
-    var toSheet   = sheetFor(toStore);
+    var fromSheet = sheetFor(fromStore), toSheet = sheetFor(toStore);
     if (!fromSheet) return { success: false, error: 'Sheet not found for: ' + fromStore };
     if (!toSheet)   return { success: false, error: 'Sheet not found for: ' + toStore };
-    function findRow(sheet) {
-      var data = sheet.getDataRange().getValues();
-      for (var r = 1; r < data.length; r++) {
-        if (String(data[r][0]).trim().toUpperCase() === String(rowId).trim().toUpperCase())
-          return { row: r + 1, qty: parseInt(data[r][5]) || 0 };
-      }
-      return null;
+    var code = String(rowId).trim().toUpperCase();
+
+    var fData = fromSheet.getDataRange().getValues();
+    var fr = buildCodeIndex(fData)[code];
+    if (fr === undefined) return { success: false, error: 'ID not found in ' + fromStore + ': ' + rowId };
+    var fromQty = parseInt(fData[fr][5]) || 0;
+    if (fromQty < sellQ) return { success: false, error: 'Not enough stock in ' + fromStore + '. Available: ' + fromQty };
+    var pid = String(fData[fr][1]).trim(), col = String(fData[fr][3]).trim(), sz = String(fData[fr][4]).trim();
+
+    // Receiving store: same product/color/size; create the row if the store never had it
+    var tData = toSheet.getDataRange().getValues();
+    var tr = buildCodeIndex(tData)[(pid + col + sz).toUpperCase()];
+    var toQty;
+    fromSheet.getRange(fr + 1, 6).setValue(fromQty - sellQ);
+    if (tr === undefined) {
+      toQty = sellQ;
+      toSheet.getRange(toSheet.getLastRow() + 1, 1, 1, 6).setValues([[pid + col + sz, pid, fData[fr][2] || '', col, sz, toQty]]);
+    } else {
+      toQty = (parseInt(tData[tr][5]) || 0) + sellQ;
+      toSheet.getRange(tr + 1, 6).setValue(toQty);
     }
-    var from = findRow(fromSheet);
-    if (!from) return { success: false, error: 'ID not found in ' + fromStore + ': ' + rowId };
-    if (from.qty < sellQ) return { success: false, error: 'Not enough stock in ' + fromStore + '. Available: ' + from.qty };
-    var to = findRow(toSheet);
-    if (!to) return { success: false, error: 'ID not found in ' + toStore + ': ' + rowId };
-    fromSheet.getRange(from.row, 6).setValue(from.qty - sellQ);
-    toSheet.getRange(to.row, 6).setValue(to.qty + sellQ);
     SpreadsheetApp.flush();
-    return { success: true, fromNewQty: from.qty - sellQ, toNewQty: to.qty + sellQ };
+    return { success: true, fromNewQty: fromQty - sellQ, toNewQty: toQty, created: tr === undefined };
   } catch(e) { return { success: false, error: e.toString() }; }
   finally { lock.releaseLock(); }
 }
@@ -718,16 +739,15 @@ function sellRetailStock(storeName, password, rowId, qty, saleId) {
     if (!sheet) return { success: false, error: 'Store sheet not found.' };
     var data  = sheet.getDataRange().getValues();
     var code  = String(rowId).trim().toUpperCase();
-    for (var r = 1; r < data.length; r++) {
-      if (String(data[r][0]).trim().toUpperCase() === code) {
-        var cur = parseInt(data[r][5]) || 0;
-        if (cur < sellQ) return { success: false, error: 'Not enough stock. Available: ' + cur };
-        var newQty = cur - sellQ;
-        sheet.getRange(r + 1, 6).setValue(newQty);
-        log.appendRow([new Date(), storeName, code, data[r][1], data[r][3], data[r][4], sellQ, newQty, saleId || '']);
-        SpreadsheetApp.flush();
-        return { success: true, newQty: newQty };
-      }
+    var r = buildCodeIndex(data)[code];
+    if (r !== undefined) {
+      var cur = parseInt(data[r][5]) || 0;
+      if (cur < sellQ) return { success: false, error: 'Not enough stock. Available: ' + cur };
+      var newQty = cur - sellQ;
+      sheet.getRange(r + 1, 6).setValue(newQty);
+      log.appendRow([new Date(), storeName, code, data[r][1], data[r][3], data[r][4], sellQ, newQty, saleId || '']);
+      SpreadsheetApp.flush();
+      return { success: true, newQty: newQty };
     }
     return { success: false, error: 'ID not found: ' + rowId };
   } catch(e) {
@@ -767,11 +787,7 @@ function sellRetailStockBatch(storeName, password, items, saleId) {
     var sheet = ss.getSheetByName(storeName + ' Stock');
     if (!sheet) return { success: false, error: 'Store sheet not found.' };
     var data = sheet.getDataRange().getValues();
-    var rowOf = {};
-    for (var r = 1; r < data.length; r++) {
-      var id = String(data[r][0]).trim().toUpperCase();
-      if (id && rowOf[id] === undefined) rowOf[id] = r;
-    }
+    var rowOf = buildCodeIndex(data);
     // Validate everything first (same code on two lines counts together)
     var left = {};
     for (var j = 0; j < items.length; j++) {
