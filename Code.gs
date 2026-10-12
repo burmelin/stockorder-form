@@ -170,6 +170,16 @@ function getInventory() {
 }
 
 // ─── SUBMIT ORDER (called from Customer form) ─────────────────
+// Dates are written as real dates with a fixed day/month/year format, so Sheets never guesses
+// (a text '02/06/2026' was being read as 6 Feb). Read back, they become 'dd/MM/yyyy HH:mm' text.
+var DATE_FMT = 'dd/MM/yyyy HH:mm';
+function writeStamp(range, value) {
+  if (value instanceof Date) range.setValue(value).setNumberFormat(DATE_FMT); else range.setValue(value);
+}
+function cellDateText(v) {
+  return v instanceof Date ? Utilities.formatDate(v, Session.getScriptTimeZone(), DATE_FMT) : String(v || '');
+}
+
 // orderData.orderToken: sent again unchanged on a retry, so a resend can't create a second order
 function submitOrder(orderData) {
   orderData = orderData || {};
@@ -215,7 +225,7 @@ function submitOrder(orderData) {
     var totalQty = items.reduce(function(sum, i) { return sum + (parseInt(i.qty) || 0); }, 0);
     var row = ordersSheet.getLastRow() + 1;
     ordersSheet.getRange(row, 1, 1, 13).setValues([[
-      orderId, dateStr,
+      orderId, now,
       orderData.customerName  || '',
       orderData.customerEmail || '',
       orderData.customerPhone || '',
@@ -224,6 +234,7 @@ function submitOrder(orderData) {
       orderData.orderType || 'customer',
       orderData.shopName  || ''
     ]]);
+    ordersSheet.getRange(row, 2).setNumberFormat(DATE_FMT);
     ordersSheet.getRange(row, 9).setBackground('#fef9c3'); // Pending = yellow
     SpreadsheetApp.flush();
     if (token) cache.put('order:' + token, orderId, 21600);
@@ -262,7 +273,7 @@ function getOrders(password) {
       if (!row[0]) continue; // skip empty rows
       orders.push({
         orderId      : row[0],
-        date         : row[1],
+        date         : cellDateText(row[1]),
         customerName : row[2],
         customerEmail: row[3],
         customerPhone: row[4],
@@ -270,8 +281,8 @@ function getOrders(password) {
         items        : JSON.parse(row[6] || '[]'),
         totalQty     : row[7],
         status       : row[8] || 'Pending',
-        invoiceSent  : row[9],
-        completed    : row[10],
+        invoiceSent  : cellDateText(row[9]),
+        completed    : cellDateText(row[10]),
         orderType    : row[11] || 'customer',
         shopName     : row[12] || ''
       });
@@ -299,7 +310,7 @@ function sendInvoice(orderId, password) {
     var order = findOrder(orderId);
     if (!order) return { success: false, error: 'Order not found: ' + orderId };
 
-    var sentAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+    var sentAt = new Date();
     updateOrderRow(orderId, { status: 'Invoiced', invoiceSent: sentAt });
 
     return { success: true };
@@ -397,7 +408,7 @@ function markDone(orderId, password) {
     }
 
     // Mark as Completed — also record the invoice timestamp if not already set
-    var doneAt  = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+    var doneAt  = new Date();
     var updates = { status: 'Completed', completed: doneAt };
     if (!order.invoiceSent) updates.invoiceSent = doneAt;
     updateOrderRow(orderId, updates);
@@ -441,6 +452,7 @@ function saveSentOrder(ss, order, doneAt) {
   var start = sheet.getLastRow() + 1;
   var range = sheet.getRange(start, 1, rows.length, 9);
   range.setValues(rows);
+  sheet.getRange(start, 2, rows.length, 1).setNumberFormat(DATE_FMT);
   range.setBackgrounds(rows.map(function(r, i) {
     var bg = (start + i) % 2 === 0 ? '#f8fafc' : '#ffffff';
     return [bg, bg, bg, bg, bg, bg, bg, bg, bg];
@@ -460,7 +472,7 @@ function findOrder(orderId) {
       return {
         rowIndex     : i + 2,
         orderId      : data[i][0],
-        date         : data[i][1],
+        date         : cellDateText(data[i][1]),
         customerName : data[i][2],
         customerEmail: data[i][3],
         customerPhone: data[i][4],
@@ -496,8 +508,8 @@ function updateOrderRow(orderId, updates) {
                : '#fef9c3';
         sheet.getRange(r, 9).setBackground(bg);
       }
-      if (updates.invoiceSent !== undefined) sheet.getRange(r, 10).setValue(updates.invoiceSent);
-      if (updates.completed   !== undefined) sheet.getRange(r, 11).setValue(updates.completed);
+      if (updates.invoiceSent !== undefined) writeStamp(sheet.getRange(r, 10), updates.invoiceSent);
+      if (updates.completed   !== undefined) writeStamp(sheet.getRange(r, 11), updates.completed);
       return;
     }
   }

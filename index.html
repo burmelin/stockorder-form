@@ -549,6 +549,25 @@ function printOverlay() {
   navigator.share({ files: [PDF_FILE], title: PDF_NAME }).catch(function(){});
 }
 
+// ── DATES ─────────────────────────────────────────────────────────
+// Shown as '10 Oct 2026, 12:30' (month as a word, Thailand time) so day and month can't be confused.
+// An order's date comes from its ID (ORD-YYMMDD-…), which is always right; the sheet's own date
+// can be day/month-swapped (02/06 read as 6 Feb) or arrive as a UTC timestamp, so only its time is used.
+var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDay(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+function thaiTime(d) {
+  try { return d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }); }
+  catch (e) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+}
+function orderDateText(order) {
+  var raw = String(order.date || ''), time = '';
+  if (/^\d{4}-\d{2}-\d{2}T/.test(raw)) { var d = new Date(raw); if (!isNaN(d)) time = thaiTime(d); }
+  else { var t = /(\d{1,2}):(\d{2})/.exec(raw); if (t) time = ('0' + t[1]).slice(-2) + ':' + t[2]; }
+  var m = /^ORD-(\d{2})(\d{2})(\d{2})-/.exec(order.orderId || '');
+  if (!m) return raw;
+  return (+m[3]) + ' ' + MONTHS[+m[2] - 1] + ' 20' + m[1] + (time ? ', ' + time : '');
+}
+
 // ── TOAST ─────────────────────────────────────────────────────────
 var _toastTimer = null;
 function showToast(msg, retryFn) {
@@ -1822,7 +1841,7 @@ document.getElementById('btn-submit').addEventListener('click', function() {
       if (result.success) {
         ORDER_TOKEN=null;
         document.getElementById('order-id-display').textContent=result.orderId;
-        lastOrder={orderId:result.orderId,customerName:shop,items:items,date:new Date().toLocaleDateString()};
+        lastOrder={orderId:result.orderId,customerName:shop,items:items,date:new Date().toISOString()};
         document.getElementById('order-form-wrap').style.display='none';
         document.getElementById('order-success').style.display='block';
       } else {
@@ -1951,7 +1970,7 @@ function palBuildOrderCard(order) {
   return '<div class="pal-order-card" id="poc-'+order.orderId+'">'
     +'<div class="pal-order-hd" onclick="palToggleCard(\''+palEsc(order.orderId)+'\')">'
     +'<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:.88rem;color:#1a1a2e;font-family:monospace">'+order.orderId+'</div>'
-    +'<div style="font-size:.78rem;color:#aaa;margin-top:1px">'+order.date
+    +'<div style="font-size:.78rem;color:#aaa;margin-top:1px">'+orderDateText(order)
     +(isStore?'<span style="margin-left:6px;background:#ede9fe;color:#5b21b6;padding:1px 7px;border-radius:8px;font-size:.7rem;font-weight:700">🏪 '+order.shopName+'</span>':'')
     +'</div></div>'
     +'<span class="pal-sbadge '+sc+'">'+order.status+'</span>'
@@ -2059,7 +2078,7 @@ function palPrintInvoice(orderId) {
   document.getElementById('pdf-overlay-inner').innerHTML=
     '<div style="border-bottom:3px solid #1a1a2e;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end">'
     +'<div><div style="font-size:1.4rem;font-weight:900;color:#1a1a2e">Burmelin</div><div style="font-size:.82rem;color:#555">Order Invoice</div></div>'
-    +'<div style="font-size:.82rem;color:#555">'+order.date+'</div></div>'
+    +'<div style="font-size:.82rem;color:#555">'+orderDateText(order)+'</div></div>'
     +'<table style="width:100%;border-collapse:collapse;font-size:.88rem;margin-bottom:16px">'
     +'<tr><td style="padding:4px 0;color:#999;width:100px">Order ID</td><td style="font-weight:700;color:#1a1a2e">'+order.orderId+'</td></tr>'
     +'<tr><td style="padding:4px 0;color:#999">Customer</td><td>'+order.customerName+'</td></tr>'
@@ -2471,7 +2490,7 @@ function palPrintProduct(pid) {
   });
 
   var now = new Date();
-  var dateStr = now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear();
+  var dateStr = fmtDay(now);
 
   document.getElementById('pdf-overlay-inner').innerHTML =
     '<div style="border-bottom:3px solid #1a1a2e;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-end">'
@@ -2690,7 +2709,7 @@ function saveOrderPdf() {
     +'<div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;padding:24px;background:#fff">'
     +'<table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:.9rem">'
     +'<tr><td style="padding:4px 0;color:#999;width:110px">Order ID</td><td style="font-weight:700;color:#1a1a2e">'+lastOrder.orderId+'</td></tr>'
-    +'<tr><td style="padding:4px 0;color:#999">Date</td><td style="color:#333">'+lastOrder.date+'</td></tr>'
+    +'<tr><td style="padding:4px 0;color:#999">Date</td><td style="color:#333">'+orderDateText(lastOrder)+'</td></tr>'
     +'<tr><td style="padding:4px 0;color:#999">Shop</td><td style="color:#333"><strong>'+lastOrder.customerName+'</strong></td></tr>'
     +'</table>'
     +buildItemsTable(lastOrder.items)
