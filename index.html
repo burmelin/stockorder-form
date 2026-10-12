@@ -53,7 +53,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;color:#222;overflow:hidden;height:1
 /* ── MY STORE PANEL ── */
 .panel-inner{padding:14px}
 .ms-tabs{display:flex;background:#fff;border-radius:12px;padding:5px;gap:3px;margin-bottom:12px;box-shadow:0 1px 6px rgba(0,0,0,.07)}
-.mstab{flex:1;padding:10px 4px;background:none;border:none;border-radius:9px;font-size:.8rem;font-weight:700;color:#aaa;cursor:pointer;transition:.15s}
+.mstab{flex:1;padding:10px 4px;background:none;border:none;border-radius:9px;font-size:.8rem;font-weight:700;color:#64748b;cursor:pointer;transition:.15s}
 .mstab.active{background:#1a1a2e;color:#fff}
 
 /* ── STORES PANEL ── */
@@ -106,7 +106,7 @@ tbody tr:last-child td{border-bottom:none}
 
 /* Mode toggle */
 .mode-toggle{display:flex;gap:7px}
-.mode-btn{padding:6px 15px;border-radius:8px;border:2px solid #4f46e5;background:#fff;color:#4f46e5;font-size:.82rem;font-weight:700;cursor:pointer;transition:.15s}
+.mode-btn{padding:6px 10px;border-radius:8px;border:2px solid #4f46e5;background:#fff;color:#4f46e5;font-size:.82rem;font-weight:700;cursor:pointer;transition:.15s}
 .mode-btn.active{background:#4f46e5;color:#fff}
 
 /* Grid mode */
@@ -173,7 +173,10 @@ tbody tr:last-child td{border-bottom:none}
   .cs-store-name{min-width:unset;font-size:.88rem}
 }
 /* ── TOAST ── */
-#app-toast{position:fixed;bottom:calc(64px + env(safe-area-inset-bottom,0px) + 12px);left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a2e;color:#fff;padding:11px 18px;border-radius:10px;font-size:.88rem;font-weight:600;white-space:nowrap;z-index:9998;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.35)}
+#order-cart-bar{position:fixed;left:12px;right:12px;bottom:calc(64px + env(safe-area-inset-bottom,0px) + 8px);z-index:9000;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#16a34a;color:#fff;border:none;border-radius:12px;padding:12px 16px;font-size:.92rem;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.25);cursor:pointer}
+#order-cart-bar[hidden]{display:none}
+#order-form-wrap{padding-bottom:76px} /* room so Submit Order can scroll clear of the bar */
+#app-toast{position:fixed;bottom:calc(64px + env(safe-area-inset-bottom,0px) + 68px);max-width:calc(100% - 32px);left:50%;transform:translateX(-50%) translateY(20px);background:#1a1a2e;color:#fff;padding:11px 18px;border-radius:10px;font-size:.88rem;font-weight:600;white-space:normal;text-align:center;z-index:9998;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.35)}
 #app-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #app-toast button{background:rgba(255,255,255,.2);border:none;color:#fff;padding:4px 10px;border-radius:6px;font-size:.8rem;font-weight:700;cursor:pointer;pointer-events:all}
 
@@ -317,8 +320,7 @@ tbody tr:last-child td{border-bottom:none}
           <button class="mstab active" id="sp-tab-mystock" onclick="switchStoreTab('mystock')">📦 Stock</button>
           <button class="mstab" id="sp-tab-sell" onclick="switchStoreTab('sell')">💸 Sell</button>
           <button class="mstab" id="sp-tab-transfer" onclick="switchStoreTab('transfer')">↔ Transfer</button>
-          <button class="mstab" id="sp-tab-addstock" onclick="switchStoreTab('addstock')">＋ Add</button>
-          <button class="mstab" id="sp-tab-reorder" onclick="switchStoreTab('reorder')">📋 Reorder</button>
+          <button class="mstab" id="sp-tab-addstock" onclick="switchStoreTab('addstock')">🔢 Count</button>
         </div>
         <div id="pal-order-filter-tabs">
           <button class="pal-filter-tab active" data-pf="all" onclick="palFilterOrders('all')">All <span id="pal-cnt-all">0</span></button>
@@ -360,10 +362,11 @@ tbody tr:last-child td{border-bottom:none}
         <!-- Add Items card -->
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #f0f2f5">
-            <h2 style="margin:0;border:none;padding:0">Add Items</h2>
+            <h2 style="margin:0;border:none;padding:0;white-space:nowrap">Add Items</h2>
             <div class="mode-toggle">
               <button class="mode-btn active" id="btn-mode-simple" onclick="switchMode('simple')">Simple</button>
               <button class="mode-btn" id="btn-mode-grid" onclick="switchMode('grid')">Grid</button>
+              <button class="mode-btn" id="btn-mode-restock" onclick="switchMode('restock')">Restock</button>
             </div>
           </div>
 
@@ -400,6 +403,8 @@ tbody tr:last-child td{border-bottom:none}
           </div>
 
           <!-- Grid mode -->
+          <div id="restock-mode" style="display:none"><div id="restock-body"></div></div>
+
           <div id="grid-mode" style="display:none">
             <div class="form-group" style="position:relative">
               <label for="grid-search">Product ID</label>
@@ -444,7 +449,7 @@ tbody tr:last-child td{border-bottom:none}
       <span class="nav-icon">📦</span><span>My Store</span>
     </button>
     <button class="nav-btn" id="nav-stores" onclick="showPanel('stores')">
-      <span class="nav-icon">🔍</span><span>Stores</span>
+      <span class="nav-icon">🔍</span><span>All Stores</span>
     </button>
     <button class="nav-btn" id="nav-order" onclick="showPanel('order')">
       <span class="nav-icon">📋</span><span>Order</span>
@@ -457,6 +462,9 @@ tbody tr:last-child td{border-bottom:none}
 
 <!-- Toast notification -->
 <div id="app-toast"></div>
+
+<!-- Shown on the Order screen while the order has items: jumps to the summary to review and submit -->
+<button id="order-cart-bar" hidden onclick="var c=document.getElementById('cart-wrap'); if(c) c.scrollIntoView({block:'center'})"><span id="order-cart-bar-txt"></span><span>Review &amp; Submit ↓</span></button>
 
 <!-- PDF overlay -->
 <div id="pdf-overlay">
@@ -687,7 +695,7 @@ function appLogout() {
   document.getElementById('screen-app').classList.remove('active');
   document.getElementById('screen-app').classList.remove('pal-mode');
   document.getElementById('nav-mystore').innerHTML = '<span class="nav-icon">📦</span><span>My Store</span>';
-  document.getElementById('nav-stores').innerHTML  = '<span class="nav-icon">🔍</span><span>Stores</span>';
+  document.getElementById('nav-stores').innerHTML  = '<span class="nav-icon">🔍</span><span>All Stores</span>';
   document.getElementById('nav-order').innerHTML   = '<span class="nav-icon">📋</span><span>Order</span>';
   document.getElementById('screen-login').style.display = 'flex';
   document.getElementById('sli-pass').value  = '';
@@ -738,6 +746,7 @@ function showPanel(name) {
     var nb = document.getElementById('nav-' + p);
     if (nb) nb.classList.toggle('active', p === name);
   });
+  updateOrderBar();
   if (SESSION_STORE && SESSION_STORE.isPalladium) {
     if (name === 'stores') palShowStock();
     if (name === 'order')  palLoadRetail();
@@ -772,13 +781,11 @@ function applyStoreBundle(r) {
 
 // Re-draw the current store tab with new data, without wiping anything being typed
 function refreshStoreView() {
-  if (CURRENT_PANEL !== 'mystore') return;
-  if (CURRENT_TAB === 'mystock') {
+  if (CURRENT_PANEL === 'mystore' && CURRENT_TAB === 'mystock') {
     var el = document.getElementById('ms-list'), s = document.getElementById('ms-search');
     if (el) rerenderKeepOpen(el, myStockHtml(s ? s.value : '')); else renderMyStock();
-  } else if (CURRENT_TAB === 'reorder') {
-    renderReorderTab();
   }
+  if (CURRENT_PANEL === 'order' && ORDER_MODE === 'restock') renderReorderTab();
 }
 
 // Store stock + Palladium sizes in one request
@@ -849,7 +856,7 @@ function loadAllRetail(onData, onFail) {
 // ── STORE TABS ────────────────────────────────────────────────────
 function switchStoreTab(tab) {
   CURRENT_TAB = tab;
-  ['mystock','sell','transfer','addstock','reorder'].forEach(function(t) {
+  ['mystock','sell','transfer','addstock'].forEach(function(t) {
     var el = document.getElementById('sp-tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
@@ -857,7 +864,6 @@ function switchStoreTab(tab) {
   else if (tab === 'sell') renderSellTab();
   else if (tab === 'transfer') renderTransferTab();
   else if (tab === 'addstock') renderAddStockTab();
-  else if (tab === 'reorder') renderReorderTab();
   updateBackBtn();
 }
 
@@ -1242,12 +1248,23 @@ function renderTransferTab() {
     + '<label style="display:block;font-size:.85rem;font-weight:600;color:#555;margin-bottom:5px">To store</label>'
     + '<select id="tr-to" style="width:100%;padding:11px 12px;border:2px solid #e2e8f0;border-radius:9px;font-size:.95rem;margin-bottom:12px">' + toOpts + '</select>'
     + '<label style="display:block;font-size:.85rem;font-weight:600;color:#555;margin-bottom:5px">Product ID</label>'
-    + '<input id="tr-id" type="text" placeholder="e.g. T90274352" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"'
-    + ' style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:9px;font-size:1rem;font-family:monospace;margin-bottom:12px;text-transform:uppercase">'
+    + '<input id="tr-id" type="text" placeholder="e.g. T90274352" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase();trUpdateInfo()"'
+    + ' style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:9px;font-size:1rem;font-family:monospace;margin-bottom:4px;text-transform:uppercase">'
+    + '<div id="tr-info" style="font-size:.78rem;min-height:18px;margin-bottom:10px"></div>'
     + '<label style="display:block;font-size:.85rem;font-weight:600;color:#555;margin-bottom:5px">Quantity</label>'
     + '<input id="tr-qty" type="number" min="1" value="1" style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:9px;font-size:1rem;margin-bottom:16px">'
     + '<button id="tr-btn" onclick="doTransfer()" style="width:100%;padding:14px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer">↔ Transfer Stock</button>'
     + '<div id="tr-result" style="margin-top:14px;text-align:center;font-size:.92rem;min-height:24px"></div>';
+}
+
+function trUpdateInfo() {
+  var el = document.getElementById('tr-info'); if (!el) return;
+  var code = (document.getElementById('tr-id').value || '').replace(/\s+/g, '').toUpperCase();
+  if (!code) { el.innerHTML = ''; return; }
+  var info = sellCodeInfo(code);
+  if (!info) { el.innerHTML = code.length >= 6 ? '<span style="color:#b45309">Not found in your stock</span>' : ''; return; }
+  el.innerHTML = '<span style="color:#555">' + info.pid + ' · Color ' + info.cn + ' · Size ' + info.size + '</span>'
+    + ' <span style="color:' + (info.stock > 0 ? '#15803d' : '#b91c1c') + ';font-weight:700">· you have ' + info.stock + '</span>';
 }
 
 // Kept after an unconfirmed transfer: tapping Transfer again for the same item reuses the
@@ -1471,7 +1488,7 @@ function renderOtherStores() {
     + ' oninput="csSearchFlat(this.value)"'
     + ' style="width:100%;padding:11px 14px;border:none;border-radius:9px;font-size:.97rem;font-family:monospace;background:rgba(255,255,255,.1);color:#fff;outline:none">'
     + '<div style="display:flex;gap:8px;margin-top:8px">'
-    + STORE_LABELS.map(function(l,i){ return '<div style="flex:1;text-align:center;background:rgba(255,255,255,.08);border-radius:6px;padding:5px 2px;font-size:.72rem;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase">' + l + '</div>'; }).join('')
+    + STORE_LABELS.map(function(l,i){ var me = SESSION_STORE && SESSION_STORE.name === ALL_STORES[i]; return '<div style="flex:1;text-align:center;background:' + (me ? '#4f46e5' : 'rgba(255,255,255,.08)') + ';border-radius:6px;padding:5px 2px;font-size:.72rem;font-weight:700;color:' + (me ? '#fff' : 'rgba(255,255,255,.6)') + ';text-transform:uppercase">' + (me ? 'You' : l) + '</div>'; }).join('')
     + '</div>'
     + '</div>'
     + '<div id="cs-result"></div>';
@@ -1522,7 +1539,7 @@ function csSearchFlat(q) {
     html += '<thead><tr style="background:#f8fafc">'
       + '<th style="padding:7px 10px;text-align:left;font-size:.7rem;text-transform:uppercase;color:#888;font-weight:700">Color</th>'
       + '<th style="padding:7px 8px;text-align:center;font-size:.7rem;text-transform:uppercase;color:#888;font-weight:700">Size</th>'
-      + STORE_SHORT.map(function(s){ return '<th style="padding:7px 6px;text-align:center;font-size:.7rem;text-transform:uppercase;color:#888;font-weight:700">'+s+'</th>'; }).join('')
+      + STORE_SHORT.map(function(s, k){ var me = SESSION_STORE && SESSION_STORE.name === STORE_KEYS[k]; return '<th style="padding:7px 6px;text-align:center;font-size:.7rem;text-transform:uppercase;font-weight:700;'+(me?'color:#4f46e5;background:#eef2ff':'color:#888')+'">'+(me?'You':s)+'</th>'; }).join('')
       + '</tr></thead><tbody>';
     rows.forEach(function(r, i) {
       var border = i < rows.length-1 ? 'border-bottom:1px solid #f0f2f5' : '';
@@ -1539,9 +1556,8 @@ function csSearchFlat(q) {
               else { bg='background:#f0fdf4'; color='#15803d'; }
             }
             var bold = isSelf ? 'font-weight:700;' : '';
-            var selfMark = isSelf ? '★' : '';
-            return '<td style="padding:8px 6px;text-align:center;' + bg + bold + '">'
-              + (typeof qty==='number' ? '<span style="color:' + color + ';font-weight:700">' + selfMark + qty + '</span>' : '<span style="color:#d1d5db">–</span>')
+            return '<td style="padding:8px 6px;text-align:center;' + (isSelf && !bg ? 'background:#f5f7ff;' : bg) + bold + '">'
+              + (typeof qty==='number' ? '<span style="color:' + color + ';font-weight:700">' + qty + '</span>' : '<span style="color:#d1d5db">–</span>')
               + '</td>';
           }).join('')
         + '</tr>';
@@ -1589,13 +1605,15 @@ function loadInventory() {
 }
 
 // ── MODE TOGGLE ───────────────────────────────────────────────────
+var ORDER_MODE = 'simple';
 function switchMode(mode) {
-  var isGrid = mode === 'grid';
-  document.getElementById('simple-mode').style.display = isGrid ? 'none' : 'block';
-  document.getElementById('grid-mode').style.display   = isGrid ? 'block' : 'none';
-  document.getElementById('btn-mode-simple').classList.toggle('active', !isGrid);
-  document.getElementById('btn-mode-grid').classList.toggle('active',  isGrid);
-  if (isGrid) setTimeout(function(){ document.getElementById('grid-search').focus(); }, 50);
+  ORDER_MODE = mode;
+  ['simple','grid','restock'].forEach(function(m) {
+    document.getElementById(m + '-mode').style.display = m === mode ? 'block' : 'none';
+    document.getElementById('btn-mode-' + m).classList.toggle('active', m === mode);
+  });
+  if (mode === 'grid') setTimeout(function(){ document.getElementById('grid-search').focus(); }, 50);
+  if (mode === 'restock') renderReorderTab();
 }
 
 // ── GRID MODE ─────────────────────────────────────────────────────
@@ -1643,11 +1661,12 @@ function buildProductGrid(prod) {
       var avail  = Math.max(0,stock-inCart);
       if (stock<=0) return '<td class="grid-td-cell"><input class="grid-cell-out" type="text" disabled value="—" tabindex="-1"></td>';
       var id = 'gc-'+prod.replace(/[^a-z0-9]/gi,'_')+'-'+color.replace(/\s/g,'_')+'-'+size;
-      return '<td class="grid-td-cell"><input class="grid-cell" id="'+id+'" type="number" inputmode="numeric" min="0" max="'+avail+'" placeholder="" data-prod="'+prod+'" data-color="'+color+'" data-size="'+size+'" data-stock="'+stock+'" data-avail="'+avail+'" oninput="onGridCellInput(this)"></td>';
+      return '<td class="grid-td-cell"><input class="grid-cell" id="'+id+'" type="number" inputmode="numeric" min="0" max="'+avail+'" placeholder="'+avail+'" aria-label="'+color+' size '+size+', '+avail+' available" data-prod="'+prod+'" data-color="'+color+'" data-size="'+size+'" data-stock="'+stock+'" data-avail="'+avail+'" oninput="onGridCellInput(this)"></td>';
     }).join('');
     return '<tr><td class="grid-td-color">'+color+'</td>'+cells+'</tr>';
   }).join('');
-  document.getElementById('grid-wrap').innerHTML = '<table class="grid-table"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table>';
+  document.getElementById('grid-wrap').innerHTML = '<div style="font-size:.76rem;color:#64748b;margin-bottom:6px">Grey number in a box = how many Palladium has. Type how many you want.</div>'
+    + '<table class="grid-table"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table>';
   document.getElementById('grid-product-name').textContent = prod;
   document.getElementById('btn-add-grid').textContent = '＋ Add '+prod+' to Order';
   document.getElementById('grid-product-view').style.display = 'block';
@@ -1806,8 +1825,18 @@ inpQty.addEventListener('input', function() {
 });
 
 // ── CART ──────────────────────────────────────────────────────────
+function updateOrderBar() {
+  var bar=document.getElementById('order-cart-bar'); if(!bar) return;
+  var total=cart.reduce(function(s,i){ return s+i.qty; },0);
+  var show=total>0 && CURRENT_PANEL==='order' && SESSION_STORE && !SESSION_STORE.isPalladium
+    && document.getElementById('order-form-wrap').style.display!=='none';
+  bar.hidden=!show;
+  document.getElementById('order-cart-bar-txt').textContent='🛒 '+total+(total===1?' pc':' pcs')+' in your order';
+}
+
 function renderCart() {
   var total=cart.reduce(function(s,i){ return s+i.qty; },0);
+  updateOrderBar();
   var cc=document.getElementById('cart-count');
   if (total>0){ cc.style.display='inline'; cc.textContent=total; } else { cc.style.display='none'; }
   var wrap=document.getElementById('cart-wrap');
@@ -1844,6 +1873,7 @@ document.getElementById('btn-submit').addEventListener('click', function() {
         lastOrder={orderId:result.orderId,customerName:shop,items:items,date:new Date().toISOString()};
         document.getElementById('order-form-wrap').style.display='none';
         document.getElementById('order-success').style.display='block';
+        updateOrderBar();
       } else {
         document.getElementById('btn-submit').disabled=false;
         errEl.textContent='❌ Error: '+result.error; errEl.style.display='block';
@@ -2508,7 +2538,8 @@ function palPrintProduct(pid) {
 function renderReorderTab() {
   if (!SESSION_STORE) return;
   var inv = ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name];
-  var el = document.getElementById('sp-body');
+  var el = document.getElementById('restock-body');
+  if (!el) return;
   if (!inv) {
     el.innerHTML = '<div class="sp-empty">Loading stock data…</div>';
     ALL_RETAIL_STOCK = null;
@@ -2523,7 +2554,7 @@ function renderReorderTab() {
       .withSuccessHandler(function(r) {
         if (r && r.success) {
           INVENTORY = r.inventory; GROUPS = r.groups; INVENTORY_LOADED = true;
-          if (CURRENT_TAB === 'reorder') renderReorderTab();
+          if (CURRENT_PANEL === 'order' && ORDER_MODE === 'restock') renderReorderTab();
         } else {
           el.innerHTML = '<div class="sp-empty">⚠ Could not load Palladium stock.</div>';
         }
@@ -2552,7 +2583,7 @@ function renderReorderTab() {
   }
 
   var html = '<div style="font-size:.8rem;color:#888;margin-bottom:12px;padding:8px 10px;background:#f0f2f5;border-radius:8px">'
-    + '📋 Based on Palladium\'s full size &amp; color range — every size is topped up to <strong>2 pcs</strong>. Tap <strong>Order</strong> to add these to your order.'
+    + '📋 What your store is missing: every size Palladium makes, topped up to <strong>2 pcs</strong>. Tap <strong>Add</strong> on a product to put it in your order below.'
     + '</div>';
 
   pOrder.forEach(function(pid) {
@@ -2564,7 +2595,7 @@ function renderReorderTab() {
       + '<span style="flex:1;font-weight:700;font-family:monospace;color:#fff;font-size:.9rem">' + pid + '</span>'
       + '<span style="font-size:.72rem;color:rgba(255,255,255,.6)">' + orderable.length + ' size' + (orderable.length!==1?'s':'') + ' · ' + totalPcs + ' pcs</span>'
       + (orderable.length
-          ? '<button onclick="reorderByProduct(\'' + palEsc(pid) + '\')" style="background:#4f46e5;border:none;color:#fff;padding:5px 12px;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer">🛒 Order</button>'
+          ? '<button onclick="reorderByProduct(\'' + palEsc(pid) + '\')" style="background:#4f46e5;border:none;color:#fff;padding:5px 12px;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer">＋ Add</button>'
           : '')
       + '</div>'
       + '<div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:#fff">';
@@ -2645,8 +2676,7 @@ function doReorderByProduct(pid) {
 
   renderCart();
   if (added > 0) {
-    showPanel('order');
-    showToast('✅ ' + added + ' size' + (added>1?'s':'') + ' · ' + pcs + ' pcs added to order');
+    showToast('✅ ' + pcs + (pcs === 1 ? ' pc' : ' pcs') + ' added to your order');
   } else {
     showToast('Nothing to order — Palladium has none of the needed sizes');
   }
