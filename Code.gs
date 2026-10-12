@@ -78,16 +78,14 @@ function handleApi(action, params, body) {
     case 'deleteOrder':     out = deleteOrder(body.orderId, body.password); break;
     case 'editOrderItems':  out = editOrderItems(body.orderId, body.newItems, body.password); break;
     case 'markDone':             out = markDone(body.orderId, body.password); break;
-    case 'updateStockQty':       out = updateStockQty(body.productId, body.colorNum, body.size, body.newQty, body.password); break;
     case 'getAllRetailStock':     out = getAllRetailStock(); break;
     case 'getStoreStock':        out = getRetailStock(body && body.storeName); break;
     case 'sellRetailStock':      out = sellRetailStock(body.storeName, body.password, body.rowId, body.qty, body.saleId); break;
     case 'sellRetailStockBatch': out = sellRetailStockBatch(body.storeName, body.password, body.items, body.saleId); break;
     case 'getSalesToday':        out = getSalesToday(body && body.storeName); break;
-    case 'transferStock':        out = transferStock(body.fromStore, body.toStore, body.password, body.rowId, body.qty); break;
+    case 'transferStock':        out = transferStock(body.fromStore, body.toStore, body.password, body.rowId, body.qty, body.transferId); break;
     case 'verifyRetailStore':    out = verifyRetailStore(body.storeName, body.password, body.withData); break;
     case 'getStoreBundle':       out = getStoreBundle(body && body.storeName); break;
-    case 'updateRetailStockQty': out = updateRetailStockQty(body.storeName, body.password, body.productId, body.colorNum, body.size, body.newQty); break;
     case 'addRetailStockItem':   out = addRetailStockItem(body.storeName, body.password, body.productId, body.category, body.colorNum, body.size, body.qty); break;
     case 'addRetailStockItems':    out = addRetailStockItems(body.storeName, body.password, body.items); break;
     case 'generateMasterSheet':    out = generateMasterSheet(body.password, body.targets); break;
@@ -141,7 +139,7 @@ function getInventory() {
         categories[productId] = category;
       }
       if (!inventory[productId][colorKey]) inventory[productId][colorKey] = {};
-      inventory[productId][colorKey][size] = stock;
+      if (inventory[productId][colorKey][size] === undefined) inventory[productId][colorKey][size] = stock;
     }
 
     // Build groups from categories (preserves insertion order)
@@ -164,8 +162,21 @@ function getInventory() {
 }
 
 // ─── SUBMIT ORDER (called from Customer form) ─────────────────
+// orderData.orderToken: sent again unchanged on a retry, so a resend can't create a second order
 function submitOrder(orderData) {
+  orderData = orderData || {};
+  var items = orderData.items || [];
+  if (!items.length) return { success: false, error: 'No items in the order.' };
+  var token = String(orderData.orderToken || '');
+  var cache = CacheService.getScriptCache();
+  var lock  = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  var orderId, dateStr;
   try {
+    if (token) {
+      var prevId = cache.get('order:' + token);
+      if (prevId) return { success: true, orderId: prevId, alreadyDone: true };
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var ordersSheet = ss.getSheetByName(ORDERS_TAB_NAME);
 
@@ -181,49 +192,43 @@ function submitOrder(orderData) {
       ordersSheet.setColumnWidth(7, 300); // Items column wider
     }
 
-    // Generate order ID: ORD-YYMMDD-XXXX
-    var now    = new Date();
-    var datePart = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyMMdd');
-    var rand   = Math.floor(1000 + Math.random() * 9000);
-    var orderId = 'ORD-' + datePart + '-' + rand;
-    var dateStr = Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
+    // Order ID: ORD-YYMMDD-XXXX, never reusing an existing one
+    var now      = new Date();
+    var tz       = Session.getScriptTimeZone();
+    var datePart = Utilities.formatDate(now, tz, 'yyMMdd');
+    dateStr      = Utilities.formatDate(now, tz, 'dd/MM/yyyy HH:mm');
+    var taken = {};
+    if (ordersSheet.getLastRow() > 1) {
+      ordersSheet.getRange(2, 1, ordersSheet.getLastRow() - 1, 1).getValues()
+        .forEach(function(r) { taken[String(r[0])] = true; });
+    }
+    do { orderId = 'ORD-' + datePart + '-' + Math.floor(1000 + Math.random() * 9000); } while (taken[orderId]);
 
-    var items      = orderData.items || [];
-    var itemsJson  = JSON.stringify(items);
-    var totalQty   = items.reduce(function(sum, i) { return sum + (i.qty || 0); }, 0);
-
-    // Append order row
-    ordersSheet.appendRow([
-      orderId,
-      dateStr,
+    var totalQty = items.reduce(function(sum, i) { return sum + (parseInt(i.qty) || 0); }, 0);
+    var row = ordersSheet.getLastRow() + 1;
+    ordersSheet.getRange(row, 1, 1, 13).setValues([[
+      orderId, dateStr,
       orderData.customerName  || '',
       orderData.customerEmail || '',
       orderData.customerPhone || '',
       orderData.notes         || '',
-      itemsJson,
-      totalQty,
-      'Pending',
-      '',  // Invoice sent at
-      '',  // Completed at
+      JSON.stringify(items), totalQty, 'Pending', '', '',
       orderData.orderType || 'customer',
       orderData.shopName  || ''
-    ]);
-
-    // Color-code the new row
-    var lastRow = ordersSheet.getLastRow();
-    ordersSheet.getRange(lastRow, 9).setBackground('#fef9c3'); // Pending = yellow
-
-    // Send auto-confirmation to customer
-    try { sendConfirmationEmail(orderData, orderId, dateStr); } catch(e) {}
-
-    // Notify the business owner
-    try { notifyOwner(orderData, orderId, dateStr); } catch(e) {}
-
-    return { success: true, orderId: orderId };
-
+    ]]);
+    ordersSheet.getRange(row, 9).setBackground('#fef9c3'); // Pending = yellow
+    SpreadsheetApp.flush();
+    if (token) cache.put('order:' + token, orderId, 21600);
   } catch (err) {
     return { success: false, error: err.toString() };
+  } finally {
+    lock.releaseLock();
   }
+
+  // Emails after the lock is released, so they never hold up other requests
+  try { sendConfirmationEmail(orderData, orderId, dateStr); } catch(e) {}
+  try { notifyOwner(orderData, orderId, dateStr); } catch(e) {}
+  return { success: true, orderId: orderId };
 }
 
 // ─── GET ALL ORDERS (called from Employee dashboard) ──────────
@@ -323,6 +328,9 @@ function editOrderItems(orderId, newItems, password) {
   if (password !== EMPLOYEE_PASS) {
     return { success: false, error: 'Wrong password.' };
   }
+  if (!newItems || !newItems.length) return { success: false, error: 'An order must keep at least one item.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
   try {
     var ss    = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(ORDERS_TAB_NAME);
@@ -331,16 +339,19 @@ function editOrderItems(orderId, newItems, password) {
     var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
     for (var i = 0; i < data.length; i++) {
       if (String(data[i][0]) === String(orderId)) {
+        // Completed orders already moved stock; their items must match what was sent
+        if (String(data[i][8]) === 'Completed') return { success: false, error: 'This order is already completed and can no longer be edited.' };
         var r        = i + 2;
-        var totalQty = newItems.reduce(function(s, item) { return s + (item.qty || 0); }, 0);
-        sheet.getRange(r, 7).setValue(JSON.stringify(newItems));
-        sheet.getRange(r, 8).setValue(totalQty);
+        var totalQty = newItems.reduce(function(s, item) { return s + (parseInt(item.qty) || 0); }, 0);
+        sheet.getRange(r, 7, 1, 2).setValues([[JSON.stringify(newItems), totalQty]]);
         return { success: true, totalQty: totalQty };
       }
     }
     return { success: false, error: 'Order not found.' };
   } catch (err) {
     return { success: false, error: err.toString() };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -393,38 +404,6 @@ function markDone(orderId, password) {
     return { success: false, error: err.toString() };
   } finally {
     lock.releaseLock();
-  }
-}
-
-// ─── UPDATE STOCK QTY (called from Employee stock view) ──────
-function updateStockQty(productId, colorNum, size, newQty, password) {
-  if (password !== EMPLOYEE_PASS) return { success: false, error: 'Wrong password.' };
-  try {
-    var ss     = SpreadsheetApp.getActiveSpreadsheet();
-    var sheets = ss.getSheets();
-
-    for (var s = 0; s < sheets.length; s++) {
-      var sheet = sheets[s];
-      if (sheet.getName().trim() === ORDERS_TAB_NAME) continue;
-      var data = sheet.getDataRange().getValues();
-
-      var startRow = 1;
-      for (var h = 0; h < data.length; h++) {
-        if (String(data[h][1]).trim().toLowerCase() === 'product id') { startRow = h + 1; break; }
-      }
-
-      for (var r = startRow; r < data.length; r++) {
-        if (String(data[r][1]).trim() === String(productId).trim() &&
-            String(data[r][3]).trim() === String(colorNum).trim()  &&
-            String(data[r][4]).trim() === String(size).trim()) {
-          sheet.getRange(r + 1, 6).setValue(parseInt(newQty) || 0);
-          return { success: true };
-        }
-      }
-    }
-    return { success: false, error: 'Item not found in sheet.' };
-  } catch(err) {
-    return { success: false, error: err.toString() };
   }
 }
 
@@ -633,29 +612,40 @@ function notifyOwner(orderData, orderId, dateStr) {
 
 // ─── TRANSFER STOCK BETWEEN STORES ───────────────────────────
 // Code → row index for a stock sheet. A code is Product ID + Color + Size, taken from
-// columns B/D/E (what the app shows); the typed ID in column A is only a fallback,
-// since some column-A IDs have typos or are shifted.
+// columns B/D/E (what the app shows); the typed ID in column A is only a fallback.
+// Spaces are ignored, so "BZ003D BROWNL" and "BZ003DBROWNL" are the same code.
+function normCode(s) { return String(s || '').replace(/\s+/g, '').toUpperCase(); }
+
 function buildCodeIndex(data) {
   var idx = {}, start = sheetDataStart(data), r, k;
   for (r = start; r < data.length; r++) {
-    k = (String(data[r][1]).trim() + String(data[r][3]).trim() + String(data[r][4]).trim()).toUpperCase();
+    k = normCode(String(data[r][1]) + String(data[r][3]) + String(data[r][4]));
     if (k && idx[k] === undefined) idx[k] = r;
   }
   for (r = start; r < data.length; r++) {
-    k = String(data[r][0]).trim().toUpperCase();
+    k = normCode(data[r][0]);
     if (k && idx[k] === undefined) idx[k] = r;
   }
   return idx;
 }
 
-function transferStock(fromStore, toStore, password, rowId, qty) {
+// transferId: sent again unchanged on a retry, so a resend can't move the stock twice
+function transferStock(fromStore, toStore, password, rowId, qty, transferId) {
   if (!fromStore || !toStore) return { success: false, error: 'Select both stores.' };
   if (fromStore === toStore) return { success: false, error: 'Source and destination must differ.' };
+  var validPass = (RETAIL_PASSWORDS[fromStore] && password === RETAIL_PASSWORDS[fromStore])
+               || password === EMPLOYEE_PASS;
+  if (!validPass) return { success: false, error: 'Wrong password — please log in again.' };
   var sellQ = parseInt(qty) || 0;
   if (sellQ <= 0) return { success: false, error: 'Quantity must be at least 1.' };
+  var cache = CacheService.getScriptCache();
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
   try {
+    if (transferId) {
+      var prev = cache.get('transfer:' + transferId);
+      if (prev) { var p = JSON.parse(prev); p.alreadyDone = true; return p; }
+    }
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     function sheetFor(name) {
       return name === 'Palladium' ? getPalladiumSheet(ss) : ss.getSheetByName(name + ' Stock');
@@ -663,7 +653,7 @@ function transferStock(fromStore, toStore, password, rowId, qty) {
     var fromSheet = sheetFor(fromStore), toSheet = sheetFor(toStore);
     if (!fromSheet) return { success: false, error: 'Sheet not found for: ' + fromStore };
     if (!toSheet)   return { success: false, error: 'Sheet not found for: ' + toStore };
-    var code = String(rowId).trim().toUpperCase();
+    var code = normCode(rowId);
 
     var fData = fromSheet.getDataRange().getValues();
     var fr = buildCodeIndex(fData)[code];
@@ -674,7 +664,7 @@ function transferStock(fromStore, toStore, password, rowId, qty) {
 
     // Receiving store: same product/color/size; create the row if the store never had it
     var tData = toSheet.getDataRange().getValues();
-    var tr = buildCodeIndex(tData)[(pid + col + sz).toUpperCase()];
+    var tr = buildCodeIndex(tData)[normCode(pid + col + sz)];
     var toQty;
     fromSheet.getRange(fr + 1, 6).setValue(fromQty - sellQ);
     if (tr === undefined) {
@@ -685,7 +675,10 @@ function transferStock(fromStore, toStore, password, rowId, qty) {
       toSheet.getRange(tr + 1, 6).setValue(toQty);
     }
     SpreadsheetApp.flush();
-    return { success: true, fromNewQty: fromQty - sellQ, toNewQty: toQty, created: tr === undefined };
+    var result = { success: true, fromNewQty: fromQty - sellQ, toNewQty: toQty, created: tr === undefined,
+                   productId: pid, color: col, size: sz };
+    if (transferId) cache.put('transfer:' + transferId, JSON.stringify(result), 21600);
+    return result;
   } catch(e) { return { success: false, error: e.toString() }; }
   finally { lock.releaseLock(); }
 }
@@ -737,7 +730,7 @@ function sellRetailStock(storeName, password, rowId, qty, saleId) {
     var sheet = ss.getSheetByName(storeName + ' Stock');
     if (!sheet) return { success: false, error: 'Store sheet not found.' };
     var data  = sheet.getDataRange().getValues();
-    var code  = String(rowId).trim().toUpperCase();
+    var code  = normCode(rowId);
     var r = buildCodeIndex(data)[code];
     if (r !== undefined) {
       var cur = parseInt(data[r][5]) || 0;
@@ -764,7 +757,7 @@ function sellRetailStockBatch(storeName, password, items, saleId) {
   if (!validPass) return { success: false, error: 'Wrong password.' };
   if (!saleId) return { success: false, error: 'Missing sale ID.' };
   items = (items || []).map(function(it) {
-    return { code: String(it.rowId || '').trim().toUpperCase(), qty: parseInt(it.qty) || 0 };
+    return { code: normCode(it.rowId), qty: parseInt(it.qty) || 0 };
   }).filter(function(it) { return it.code; });
   if (!items.length) return { success: false, error: 'No items to sell.' };
   if (items.length > 5) return { success: false, error: 'Maximum 5 items per sale.' };
@@ -878,6 +871,8 @@ function getAllRetailStock() {
 function getRetailStock(storeName) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
+    // Only real stores — an unknown name must not create a new tab
+    if (storeName && !RETAIL_PASSWORDS[storeName] && storeName !== 'Palladium') return { success: false, error: 'Unknown store: ' + storeName };
     var storeNames = storeName ? [storeName] : ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
     var storesData = {};
     var groups = null; // Palladium's categories, same shape as getInventory().groups
@@ -914,7 +909,7 @@ function getRetailStock(storeName) {
             }
           }
           if (!inventory[pid][colorKey]) inventory[pid][colorKey] = {};
-          inventory[pid][colorKey][size] = stock;
+          if (inventory[pid][colorKey][size] === undefined) inventory[pid][colorKey][size] = stock;
         }
       }
       storesData[name] = inventory;
@@ -972,13 +967,14 @@ function addRetailStockItems(storeName, password, items) {
     var data  = sheet.getDataRange().getValues();
     var rowOf = {};
     for (var r = sheetDataStart(data); r < data.length; r++) {
-      var k = String(data[r][1]).trim() + '|' + String(data[r][3]).trim() + '|' + String(data[r][4]).trim();
+      var k = normCode(data[r][1]) + '|' + normCode(data[r][3]) + '|' + normCode(data[r][4]);
       if (rowOf[k] === undefined) rowOf[k] = r;
     }
     var appends = [], appendAt = {}, results = [];
     (items || []).forEach(function(it) {
-      var pid = String(it.productId).trim(), col = String(it.colorNum).trim(), sz = String(it.size).trim();
-      var qty = parseInt(it.qty) || 0, key = pid + '|' + col + '|' + sz;
+      var pid = normCode(it.productId), col = String(it.colorNum).trim(), sz = String(it.size).trim();
+      var qty = parseInt(it.qty) || 0, key = pid + '|' + normCode(col) + '|' + normCode(sz);
+      if (!pid || !col || !sz) { results.push({ size: sz, ok: false }); return; }
       if (rowOf[key] !== undefined) {
         sheet.getRange(rowOf[key] + 1, 6).setValue(qty);
       } else if (appendAt[key] !== undefined) {
@@ -1000,143 +996,69 @@ function addRetailStockItems(storeName, password, items) {
 }
 
 // ─── ADD NEW ROW TO RETAIL STOCK SHEET ───────────────────────
-// Palladium/employee only — appends a new product row to a store's sheet
+// Palladium/employee only — set one size's quantity in a store's sheet (adds the row if missing)
 function addRetailStockItem(storeName, password, productId, category, colorNum, size, qty) {
   var validPass = (RETAIL_PASSWORDS[storeName] && password === RETAIL_PASSWORDS[storeName])
                || password === EMPLOYEE_PASS;
   if (!validPass) return { success: false, error: 'Wrong password.' };
-  try {
-    var ss        = SpreadsheetApp.getActiveSpreadsheet();
-    var sheetName = storeName + ' Stock';
-    var sheet     = ss.getSheetByName(sheetName);
-    if (!sheet) return { success: false, error: 'Sheet for "' + storeName + '" not found.' };
-
-    var data     = sheet.getDataRange().getValues();
-    // Check it doesn't already exist
-    var startRow = 1;
-    for (var h = 0; h < data.length; h++) {
-      if (String(data[h][1]).trim().toLowerCase() === 'product id') { startRow = h + 1; break; }
-    }
-    for (var r = startRow; r < data.length; r++) {
-      if (String(data[r][1]).trim() === String(productId).trim() &&
-          String(data[r][3]).trim() === String(colorNum).trim()  &&
-          String(data[r][4]).trim() === String(size).trim()) {
-        // Row exists — update qty instead of failing
-        sheet.getRange(r + 1, 6).setValue(parseInt(qty) || 0);
-        return { success: true };
-      }
-    }
-    // Composite ID: ProductID + Color + Size (e.g. T9027 + 91 + 48 = T9027914 8)
-    var compositeId = String(productId).trim() + String(colorNum).trim() + String(size).trim();
-    sheet.appendRow([compositeId, productId, category || '', colorNum, size, parseInt(qty) || 0]);
-    return { success: true };
-  } catch(err) {
-    return { success: false, error: err.toString() };
-  }
-}
-
-// ─── UPDATE RETAIL STOCK QTY ──────────────────────────────────
-// Accepts store-specific passcode OR master employee password
-function updateRetailStockQty(storeName, password, productId, colorNum, size, newQty) {
-  var validPass = (RETAIL_PASSWORDS[storeName] && password === RETAIL_PASSWORDS[storeName])
-               || password === EMPLOYEE_PASS;
-  if (!validPass) return { success: false, error: 'Wrong password.' };
-  try {
-    var ss        = SpreadsheetApp.getActiveSpreadsheet();
-    var sheetName = storeName + ' Stock';
-    var sheet     = ss.getSheetByName(sheetName);
-    if (!sheet) return { success: false, error: 'Sheet for "' + storeName + '" not found. Please contact admin.' };
-
-    var data     = sheet.getDataRange().getValues();
-    var startRow = 1;
-    for (var h = 0; h < data.length; h++) {
-      if (String(data[h][1]).trim().toLowerCase() === 'product id') { startRow = h + 1; break; }
-    }
-    for (var r = startRow; r < data.length; r++) {
-      if (String(data[r][1]).trim() === String(productId).trim() &&
-          String(data[r][3]).trim() === String(colorNum).trim()  &&
-          String(data[r][4]).trim() === String(size).trim()) {
-        sheet.getRange(r + 1, 6).setValue(parseInt(newQty) || 0);
-        return { success: true };
-      }
-    }
-    return { success: false, error: 'Item not found in ' + storeName + ' stock.' };
-  } catch(err) {
-    return { success: false, error: err.toString() };
-  }
-}
-
-// ─── INTERNAL: BUILD INVOICE HTML ─────────────────────────────
-function buildInvoiceHtml(order) {
-  var rows = (order.items || []).map(function(item) {
-    return '<tr>'
-      + '<td style="padding:12px 14px;border-bottom:1px solid #f0f0f0">' + item.product + '</td>'
-      + '<td style="padding:12px 14px;border-bottom:1px solid #f0f0f0">' + item.color   + '</td>'
-      + '<td style="padding:12px 14px;border-bottom:1px solid #f0f0f0">' + item.size    + '</td>'
-      + '<td style="padding:12px 14px;border-bottom:1px solid #f0f0f0;text-align:center;font-weight:bold">' + item.qty + '</td>'
-      + '</tr>';
-  }).join('');
-
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="margin:0;padding:30px;background:#f5f5f5;font-family:Arial,sans-serif">'
-  + '<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 20px rgba(0,0,0,0.1)">'
-  + '<div style="background:#1a1a2e;color:#fff;padding:35px 30px;text-align:center">'
-  +   '<h1 style="margin:0;font-size:1.6rem;font-weight:700">' + BUSINESS_NAME + '</h1>'
-  +   '<p style="margin:8px 0 0;opacity:0.75;font-size:0.95rem">Order Invoice</p>'
-  + '</div>'
-  + '<div style="padding:30px">'
-  +   '<table style="width:100%;margin-bottom:25px;font-size:0.9rem;color:#555">'
-  +     '<tr><td style="padding:5px 0;color:#999;width:130px">Order ID</td><td style="font-weight:bold;color:#1a1a2e">' + order.orderId + '</td></tr>'
-  +     '<tr><td style="padding:5px 0;color:#999">Date</td><td>' + order.date + '</td></tr>'
-  +     '<tr><td style="padding:5px 0;color:#999">Customer</td><td><strong>' + order.customerName + '</strong></td></tr>'
-  +     (order.customerPhone ? '<tr><td style="padding:5px 0;color:#999">Phone</td><td>' + order.customerPhone + '</td></tr>' : '')
-  +   '</table>'
-  +   '<h3 style="font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:#999;margin-bottom:8px">Order Items</h3>'
-  +   '<table style="width:100%;border-collapse:collapse;font-size:0.9rem">'
-  +     '<thead><tr style="background:#f8fafc">'
-  +       '<th style="padding:10px 14px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#aaa">Product</th>'
-  +       '<th style="padding:10px 14px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#aaa">Color</th>'
-  +       '<th style="padding:10px 14px;text-align:left;font-size:0.78rem;text-transform:uppercase;color:#aaa">Size</th>'
-  +       '<th style="padding:10px 14px;text-align:center;font-size:0.78rem;text-transform:uppercase;color:#aaa">Qty</th>'
-  +     '</tr></thead>'
-  +     '<tbody>' + rows + '</tbody>'
-  +   '</table>'
-  +   '<div style="background:#f8fafc;border-radius:8px;padding:16px 14px;margin-top:16px;display:flex;justify-content:space-between;align-items:center">'
-  +     '<span style="color:#555;font-size:0.9rem">Total Items</span>'
-  +     '<span style="font-size:1.1rem;font-weight:700;color:#1a1a2e">' + order.totalQty + '</span>'
-  +   '</div>'
-  +   (order.notes ? '<div style="margin-top:16px;padding:14px;background:#fffbeb;border-radius:8px;border-left:3px solid #f59e0b;font-size:0.9rem"><strong>Notes:</strong> ' + order.notes + '</div>' : '')
-  + '</div>'
-  + '<div style="background:#f8fafc;padding:22px 30px;text-align:center;color:#aaa;font-size:0.85rem">'
-  +   '<p style="margin:0">Thank you for your order! Questions? Just reply to this email.</p>'
-  + '</div>'
-  + '</div></body></html>';
+  return addRetailStockItems(storeName, password, [{ productId: productId, category: category, colorNum: colorNum, size: size, qty: qty }]);
 }
 
 // ─── GENERATE MASTER SHEET ────────────────────────────────────────────────────
+// Sizes in natural order: numbers ascending, then S < M < L < XL …, then anything else
+function sortSizesGs(a, b) {
+  var na = parseFloat(a), nb = parseFloat(b);
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  var order = ['XS','S','M','L','XL','XXL','2XL','3XL','XXXL','4XL','5XL'];
+  var ia = order.indexOf(String(a).toUpperCase()), ib = order.indexOf(String(b).toUpperCase());
+  if (ia > -1 && ib > -1) return ia - ib;
+  return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+}
+
+// Collects a whole sheet in memory and writes it in four calls (values, colors, fonts, bold)
+function sheetWriter(width) {
+  var w = { vals: [], bgs: [], fcs: [], fws: [] };
+  w.row = function(values, bg, fc, bold) {
+    var v = [], b = [], f = [], fw = [];
+    for (var i = 0; i < width; i++) {
+      var inRow = i < values.length;
+      v.push(inRow ? values[i] : '');
+      b.push(inRow && bg ? bg : '#ffffff');
+      f.push(fc || '#000000');
+      fw.push(inRow && bold ? 'bold' : 'normal');
+    }
+    w.vals.push(v); w.bgs.push(b); w.fcs.push(f); w.fws.push(fw);
+    return w.vals.length - 1;
+  };
+  w.cell = function(r, c, bg, fc, bold) {
+    if (bg) w.bgs[r][c] = bg;
+    if (fc) w.fcs[r][c] = fc;
+    if (bold) w.fws[r][c] = 'bold';
+  };
+  w.write = function(sheet) {
+    if (!w.vals.length) return;
+    var rg = sheet.getRange(1, 1, w.vals.length, width);
+    rg.setValues(w.vals); rg.setBackgrounds(w.bgs); rg.setFontColors(w.fcs); rg.setFontWeights(w.fws);
+  };
+  return w;
+}
+
 // Pivot layout: one section per product code, sizes as columns, colors as rows,
-// quantities = all stores combined (Palladium + Bicasso 1 + Bicasso 2 + Bicasso Nana)
+// quantities = all stores combined (Palladium + Bicasso 1 + Bicasso 2 + Bicasso Nana).
+// Also writes "Order Plan": per color/size, how many to order to reach the targets.
 function generateMasterSheet(password, targets) {
   if (password !== EMPLOYEE_PASS) return { success: false, error: 'Wrong password.' };
   targets = targets || {};
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var master = ss.getSheetByName('Master');
-    if (!master) { master = ss.insertSheet('Master'); } else { master.clearContents(); master.clearFormats(); }
-
     var STORES = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana'];
 
-    // Load wholesale stock
     var wsSheet = getPalladiumSheet(ss);
     if (!wsSheet) return { success: false, error: 'Palladium stock tab not found.' };
-
     var wData = wsSheet.getDataRange().getValues();
-    var wStart = 1;
-    for (var h = 0; h < wData.length; h++) {
-      if (String(wData[h][1]).trim().toLowerCase() === 'product id') { wStart = h + 1; break; }
-    }
 
     var palMap = {}, productOrder = [], colorOrder = {}, sizeOrder = {}, categoryMap = {};
-    for (var r = wStart; r < wData.length; r++) {
+    for (var r = sheetDataStart(wData); r < wData.length; r++) {
       var row = wData[r];
       var pid = String(row[1]).trim(), cat = String(row[2]).trim();
       var cn = String(row[3]).trim(), sz = String(row[4]).trim(), qty = parseInt(row[5]) || 0;
@@ -1144,162 +1066,90 @@ function generateMasterSheet(password, targets) {
       if (!palMap[pid]) { palMap[pid] = {}; productOrder.push(pid); colorOrder[pid] = []; sizeOrder[pid] = []; categoryMap[pid] = cat; }
       if (!palMap[pid][cn]) { palMap[pid][cn] = {}; colorOrder[pid].push(cn); }
       if (sizeOrder[pid].indexOf(sz) === -1) sizeOrder[pid].push(sz);
-      palMap[pid][cn][sz] = qty;
+      if (palMap[pid][cn][sz] === undefined) palMap[pid][cn][sz] = qty;
     }
-    productOrder.forEach(function(p) { sizeOrder[p].sort(function(a,b){ return parseFloat(a)-parseFloat(b); }); });
+    var width = 2;
+    productOrder.forEach(function(p) { sizeOrder[p].sort(sortSizesGs); width = Math.max(width, sizeOrder[p].length + 2); });
 
-    // Load retail stock
     var retailMap = {};
     STORES.forEach(function(s) {
       retailMap[s] = {};
       var sh = ss.getSheetByName(s + ' Stock');
       if (!sh) return;
       var d = sh.getDataRange().getValues();
-      var st = 1;
-      for (var h2 = 0; h2 < d.length; h2++) {
-        if (String(d[h2][1]).trim().toLowerCase() === 'product id') { st = h2 + 1; break; }
-      }
-      for (var r2 = st; r2 < d.length; r2++) {
-        var pid2 = String(d[r2][1]).trim(), cn2 = String(d[r2][3]).trim().replace(/^Color\s*/i,'');
+      for (var r2 = sheetDataStart(d); r2 < d.length; r2++) {
+        var pid2 = String(d[r2][1]).trim(), cn2 = String(d[r2][3]).trim().replace(/^Color\s*/i, '');
         var sz2 = String(d[r2][4]).trim(), qty2 = parseInt(d[r2][5]) || 0;
         if (!pid2 || !cn2 || !sz2) continue;
-        retailMap[s][pid2+'||'+cn2+'||'+sz2] = (retailMap[s][pid2+'||'+cn2+'||'+sz2] || 0) + qty2;
+        var k = pid2 + '||' + cn2 + '||' + sz2;
+        retailMap[s][k] = (retailMap[s][k] || 0) + qty2;
       }
     });
+    function totalAt(pid, cn, sz) {
+      var pal = (palMap[pid][cn] && palMap[pid][cn][sz] !== undefined) ? (parseInt(palMap[pid][cn][sz]) || 0) : 0;
+      var retail = 0;
+      STORES.forEach(function(s) { retail += (retailMap[s][pid + '||' + cn + '||' + sz] || 0); });
+      return pal + retail;
+    }
+    function header(pid) {
+      var h = [pid + (categoryMap[pid] ? '  ' + categoryMap[pid] : '')];
+      sizeOrder[pid].forEach(function(sz) { h.push(sz); });
+      h.push('Total');
+      return h;
+    }
 
-    // Write each product section
-    var currentRow = 1;
+    // ── Master ──
+    var m = sheetWriter(width);
     productOrder.forEach(function(pid) {
-      var sizes = sizeOrder[pid];
-      var colors = colorOrder[pid];
-      var numCols = sizes.length + 2; // Color + sizes + Total
-
-      // Product header: [T9027  LINEN SHIRTS, 48, 50, 52, ..., Total]
-      var hdrRow = [pid + (categoryMap[pid] ? '  ' + categoryMap[pid] : '')];
-      sizes.forEach(function(sz) { hdrRow.push(sz); });
-      hdrRow.push('Total');
-      master.getRange(currentRow, 1, 1, numCols).setValues([hdrRow])
-        .setBackground('#1a5c2f').setFontColor('#f5d020').setFontWeight('bold');
-      currentRow++;
-
-      // Pre-compute cell values for column totals
-      var colTotals = {}; // sz -> total across all colors
-      sizes.forEach(function(sz) { colTotals[sz] = 0; });
-      var grandTotal = 0;
-
-      // One row per color
-      colors.forEach(function(cn, ci) {
-        var dataRow = ['Color ' + cn];
-        var rowTotal = 0;
-        sizes.forEach(function(sz) {
-          var pal = (palMap[pid][cn] && palMap[pid][cn][sz] !== undefined) ? (parseInt(palMap[pid][cn][sz]) || 0) : 0;
-          var retail = 0;
-          STORES.forEach(function(s) { retail += (retailMap[s][pid+'||'+cn+'||'+sz] || 0); });
-          var cell = pal + retail;
-          dataRow.push(cell);
-          rowTotal += cell;
-          colTotals[sz] += cell;
-        });
-        dataRow.push(rowTotal);
-        grandTotal += rowTotal;
-        var bg = ci % 2 === 0 ? '#fff9db' : '#ffffff';
-        master.getRange(currentRow, 1, 1, numCols).setValues([dataRow]).setBackground(bg);
-        master.getRange(currentRow, 1).setFontWeight('bold');
-        // Row total cell styling
-        master.getRange(currentRow, numCols).setBackground('#e0e7ff').setFontColor('#3730a3').setFontWeight('bold');
-        currentRow++;
+      var sizes = sizeOrder[pid], numCols = sizes.length + 2;
+      m.row(header(pid), '#1a5c2f', '#f5d020', true);
+      var colTotals = sizes.map(function() { return 0; }), grand = 0;
+      colorOrder[pid].forEach(function(cn, ci) {
+        var line = ['Color ' + cn], rowTotal = 0;
+        sizes.forEach(function(sz, si) { var v = totalAt(pid, cn, sz); line.push(v); rowTotal += v; colTotals[si] += v; });
+        line.push(rowTotal); grand += rowTotal;
+        var ri = m.row(line, ci % 2 === 0 ? '#fff9db' : '#ffffff', '#000000', false);
+        m.cell(ri, 0, null, null, true);
+        m.cell(ri, numCols - 1, '#e0e7ff', '#3730a3', true);
       });
-
-      // Column totals row
-      var totRow = ['Total'];
-      sizes.forEach(function(sz) { totRow.push(colTotals[sz]); });
-      totRow.push(grandTotal);
-      master.getRange(currentRow, 1, 1, numCols).setValues([totRow])
-        .setBackground('#e0e7ff').setFontColor('#3730a3').setFontWeight('bold');
-      // Grand total corner
-      master.getRange(currentRow, numCols).setBackground('#1a1a2e').setFontColor('#c7d2fe');
-      currentRow++;
-
-      currentRow++; // blank separator between products
+      var ti = m.row(['Total'].concat(colTotals, [grand]), '#e0e7ff', '#3730a3', true);
+      m.cell(ti, numCols - 1, '#1a1a2e', '#c7d2fe', true);
+      m.row([], null, null, false);
     });
 
-    master.autoResizeColumns(1, 20);
-
-    // ── Order Plan sheet ──────────────────────────────────────────
-    var plan = ss.getSheetByName('Order Plan');
-    if (!plan) { plan = ss.insertSheet('Order Plan'); } else { plan.clearContents(); plan.clearFormats(); }
-
-    var planRow = 1;
+    // ── Order Plan ──
+    var p = sheetWriter(width);
     productOrder.forEach(function(pid) {
-      var pidTargets = targets[pid] || targets[pid.trim()] || {};
-      var sizes = sizeOrder[pid];
-      var colors = colorOrder[pid];
-      var numCols = sizes.length + 2;
-      var hasAnyTarget = sizes.some(function(sz) { return pidTargets[sz] > 0; });
-
-      // Product header
-      var hdrRow = [pid + (categoryMap[pid] ? '  ' + categoryMap[pid] : '')];
-      sizes.forEach(function(sz) { hdrRow.push(sz); });
-      hdrRow.push('Total');
-      plan.getRange(planRow, 1, 1, numCols).setValues([hdrRow])
-        .setBackground('#1a5c2f').setFontColor('#f5d020').setFontWeight('bold');
-      planRow++;
-
-      // Target row
-      var targetRow = ['🎯 Target'];
-      sizes.forEach(function(sz) { targetRow.push(pidTargets[sz] || 0); });
-      targetRow.push('');
-      plan.getRange(planRow, 1, 1, numCols).setValues([targetRow])
-        .setBackground('#fef3c7').setFontColor('#92400e').setFontWeight('bold');
-      planRow++;
-
-      // Color rows — show how many to order per size
-      var colOrderTotals = {};
-      sizes.forEach(function(sz) { colOrderTotals[sz] = 0; });
-      var grandOrderTotal = 0;
-
-      colors.forEach(function(cn, ci) {
-        var dataRow = ['Color ' + cn];
-        var rowTotal = 0;
-        sizes.forEach(function(sz) {
-          var pal = (palMap[pid][cn] && palMap[pid][cn][sz] !== undefined) ? (parseInt(palMap[pid][cn][sz]) || 0) : 0;
-          var retail = 0;
-          STORES.forEach(function(s) { retail += (retailMap[s][pid+'||'+cn+'||'+sz] || 0); });
-          var current = pal + retail;
-          var tgt = pidTargets[sz] || 0;
-          var toOrder = Math.max(0, tgt - current);
-          dataRow.push(toOrder);
-          rowTotal += toOrder;
-          colOrderTotals[sz] += toOrder;
-        });
-        dataRow.push(rowTotal);
-        grandOrderTotal += rowTotal;
-        var bg = ci % 2 === 0 ? '#fff9db' : '#ffffff';
-        plan.getRange(planRow, 1, 1, numCols).setValues([dataRow]).setBackground(bg);
-        plan.getRange(planRow, 1).setFontWeight('bold');
-        // Highlight cells where order is needed
+      var pidTargets = targets[pid] || {};
+      var sizes = sizeOrder[pid], numCols = sizes.length + 2;
+      p.row(header(pid), '#1a5c2f', '#f5d020', true);
+      p.row(['🎯 Target'].concat(sizes.map(function(sz) { return pidTargets[sz] || 0; }), ['']), '#fef3c7', '#92400e', true);
+      var colTotals = sizes.map(function() { return 0; }), grand = 0;
+      colorOrder[pid].forEach(function(cn, ci) {
+        var line = ['Color ' + cn], rowTotal = 0;
         sizes.forEach(function(sz, si) {
-          if (dataRow[si + 1] > 0) {
-            plan.getRange(planRow, si + 2).setBackground('#fee2e2').setFontColor('#b91c1c').setFontWeight('bold');
-          }
+          var toOrder = Math.max(0, (parseInt(pidTargets[sz]) || 0) - totalAt(pid, cn, sz));
+          line.push(toOrder); rowTotal += toOrder; colTotals[si] += toOrder;
         });
-        if (rowTotal > 0) plan.getRange(planRow, numCols).setBackground('#fca5a5').setFontColor('#7f1d1d').setFontWeight('bold');
-        planRow++;
+        line.push(rowTotal); grand += rowTotal;
+        var ri = p.row(line, ci % 2 === 0 ? '#fff9db' : '#ffffff', '#000000', false);
+        p.cell(ri, 0, null, null, true);
+        sizes.forEach(function(sz, si) { if (line[si + 1] > 0) p.cell(ri, si + 1, '#fee2e2', '#b91c1c', true); });
+        if (rowTotal > 0) p.cell(ri, numCols - 1, '#fca5a5', '#7f1d1d', true);
       });
-
-      // Totals row
-      var totRow = ['Total to Order'];
-      sizes.forEach(function(sz) { totRow.push(colOrderTotals[sz]); });
-      totRow.push(grandOrderTotal);
-      plan.getRange(planRow, 1, 1, numCols).setValues([totRow])
-        .setBackground('#1a1a2e').setFontColor('#ffffff').setFontWeight('bold');
-      if (grandOrderTotal > 0) plan.getRange(planRow, numCols).setBackground('#dc2626').setFontColor('#ffffff');
-      planRow++;
-
-      planRow++; // blank separator
+      var ti = p.row(['Total to Order'].concat(colTotals, [grand]), '#1a1a2e', '#ffffff', true);
+      if (grand > 0) p.cell(ti, numCols - 1, '#dc2626', '#ffffff', true);
+      p.row([], null, null, false);
     });
 
-    plan.autoResizeColumns(1, 20);
+    var master = ss.getSheetByName('Master') || ss.insertSheet('Master');
+    master.clear();
+    m.write(master);
+    master.autoResizeColumns(1, width);
+    var plan = ss.getSheetByName('Order Plan') || ss.insertSheet('Order Plan');
+    plan.clear();
+    p.write(plan);
+    plan.autoResizeColumns(1, width);
 
     var dateStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm');
     return { success: true, products: productOrder.length, updated: dateStr };

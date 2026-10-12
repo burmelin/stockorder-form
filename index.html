@@ -475,9 +475,9 @@ var API_URL = 'https://script.google.com/macros/s/AKfycby-5YfvPpePbg1ni36sL5AI-D
   var GET_ACTIONS = { getBusinessName:1, getInventory:1, getAllRetailStock:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, updateRetailStockQty:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
-  var RETRY_OK = { getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1 };
-  var POST_ARGS = { getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty'], updateRetailStockQty:['storeName','password','productId','colorNum','size','newQty'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var WRITES = { submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
+  var RETRY_OK = { getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
+  var POST_ARGS = { getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -1227,51 +1227,64 @@ function renderTransferTab() {
     + ' style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:9px;font-size:1rem;font-family:monospace;margin-bottom:12px;text-transform:uppercase">'
     + '<label style="display:block;font-size:.85rem;font-weight:600;color:#555;margin-bottom:5px">Quantity</label>'
     + '<input id="tr-qty" type="number" min="1" value="1" style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:9px;font-size:1rem;margin-bottom:16px">'
-    + '<button onclick="doTransfer()" style="width:100%;padding:14px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer">↔ Transfer Stock</button>'
+    + '<button id="tr-btn" onclick="doTransfer()" style="width:100%;padding:14px;background:#7c3aed;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer">↔ Transfer Stock</button>'
     + '<div id="tr-result" style="margin-top:14px;text-align:center;font-size:.92rem;min-height:24px"></div>';
 }
+
+// Kept after an unconfirmed transfer: tapping Transfer again for the same item reuses the
+// transferId, and the server ignores a transferId it has already processed.
+var PENDING_TRANSFER = null;
 
 function doTransfer() {
   var fromStore = SESSION_STORE ? SESSION_STORE.name : '';
   var toStore   = document.getElementById('tr-to').value;
-  var rowId     = (document.getElementById('tr-id').value || '').trim().toUpperCase();
+  var rowId     = (document.getElementById('tr-id').value || '').replace(/\s+/g, '').toUpperCase();
   var qty       = parseInt(document.getElementById('tr-qty').value) || 0;
   var resEl     = document.getElementById('tr-result');
+  var btn       = document.getElementById('tr-btn');
+  if (btn.disabled) return;
   if (fromStore === toStore) { resEl.innerHTML = '<span style="color:#b91c1c">⚠ Source and destination must differ.</span>'; return; }
   if (!rowId) { resEl.innerHTML = '<span style="color:#b91c1c">⚠ Enter a product ID.</span>'; return; }
   if (qty <= 0) { resEl.innerHTML = '<span style="color:#b91c1c">⚠ Quantity must be at least 1.</span>'; return; }
+  var key = [toStore, rowId, qty].join('|');
+  if (!PENDING_TRANSFER || PENDING_TRANSFER.key !== key) PENDING_TRANSFER = { id: newSaleId(), key: key };
+  var tid = PENDING_TRANSFER.id;
+  btn.disabled = true; btn.style.opacity = '.7'; btn.textContent = '⏳ Transferring…';
   resEl.innerHTML = '<span style="color:#888">Transferring…</span>';
+  function resetBtn() { var b = document.getElementById('tr-btn'); if (b) { b.disabled = false; b.style.opacity = '1'; b.textContent = '↔ Transfer Stock'; } }
   google.script.run
     .withSuccessHandler(function(r) {
+      resetBtn();
+      var el = document.getElementById('tr-result'); if (!el) return;
       if (r.success) {
-        if (ALL_RETAIL_STOCK) {
-          [fromStore, toStore].forEach(function(st) {
-            if (!ALL_RETAIL_STOCK[st]) return;
-            Object.keys(ALL_RETAIL_STOCK[st]).forEach(function(pid) {
-              Object.keys(ALL_RETAIL_STOCK[st][pid]).forEach(function(colorKey) {
-                var cn = colorKey.replace(/^Color\s*/i,'');
-                Object.keys(ALL_RETAIL_STOCK[st][pid][colorKey]).forEach(function(size) {
-                  if ((pid+cn+size).toUpperCase() === rowId) {
-                    ALL_RETAIL_STOCK[st][pid][colorKey][size] = st === fromStore ? r.fromNewQty : r.toNewQty;
-                  }
-                });
-              });
-            });
+        PENDING_TRANSFER = null;
+        // Keep the on-screen stock in step, including a row the receiving store didn't have yet
+        if (ALL_RETAIL_STOCK && r.productId) {
+          var ck = 'Color ' + r.color;
+          [[fromStore, r.fromNewQty], [toStore, r.toNewQty]].forEach(function(pair) {
+            var inv = ALL_RETAIL_STOCK[pair[0]]; if (!inv) return;
+            if (!inv[r.productId]) inv[r.productId] = {};
+            if (!inv[r.productId][ck]) inv[r.productId][ck] = {};
+            inv[r.productId][ck][r.size] = pair[1];
           });
+          CS_ROWS = null;
         }
-        resEl.innerHTML = '<span style="color:#16a34a;font-weight:700">✓ Transferred ' + qty + ' from ' + fromStore + ' to ' + toStore + '</span>'
+        el.innerHTML = '<span style="color:#16a34a;font-weight:700">✓ ' + (r.alreadyDone ? 'Already transferred — not moved again' : 'Transferred ' + qty + ' from ' + fromStore + ' to ' + toStore) + '</span>'
           + '<br><span style="color:#555;font-size:.85rem">' + fromStore + ': ' + r.fromNewQty + ' left &nbsp;|&nbsp; ' + toStore + ': ' + r.toNewQty + ' now</span>';
         document.getElementById('tr-id').value = '';
         document.getElementById('tr-qty').value = '1';
       } else {
-        resEl.innerHTML = '<span style="color:#b91c1c">❌ ' + (r.error || 'Error') + '</span>';
+        PENDING_TRANSFER = null;
+        el.innerHTML = '<span style="color:#b91c1c">❌ ' + (r.error || 'Error') + '</span><br><span style="color:#888;font-size:.8rem">Nothing was moved.</span>';
       }
     })
     .withFailureHandler(function() {
-      resEl.innerHTML = '<span style="color:#b91c1c">❌ Failed. Please try again.</span>';
-      showToast('Connection error — tap Retry', function(){ doTransfer(); });
+      resetBtn();
+      var el = document.getElementById('tr-result'); if (!el) return;
+      el.innerHTML = '<span style="color:#b45309;font-weight:700">⚠ Connection problem — transfer not confirmed.</span>'
+        + '<br><span style="color:#555;font-size:.83rem">Tap Transfer again — it will never move the stock twice.</span>';
     })
-    .transferStock(fromStore, toStore, '', rowId, qty);
+    .transferStock(fromStore, toStore, SESSION_STORE.pass, rowId, qty, tid);
 }
 
 // ── ADD STOCK TAB ─────────────────────────────────────────────────
@@ -1335,11 +1348,14 @@ function asRenderRows() {
 }
 
 function doAddStock() {
-  var pid   = (document.getElementById('as-pid').value || '').trim().toUpperCase();
+  var pid   = (document.getElementById('as-pid').value || '').replace(/\s+/g, '').toUpperCase();
   var color = (document.getElementById('as-color').value || '').trim();
   var resEl = document.getElementById('as-result');
   if (!pid)        { resEl.innerHTML = '<span style="color:#b91c1c">⚠ Enter a product ID.</span>'; return; }
   if (!color)      { resEl.innerHTML = '<span style="color:#b91c1c">⚠ Enter a color number.</span>'; return; }
+  // A typo here would create a brand-new product in the store's sheet
+  var ref = palRefInv();
+  if (ref && !ref[pid] && !confirm('"' + pid + '" is not one of Palladium\'s products.\nCheck the label. Save anyway?')) return;
   // Also pick up any size/qty typed but not yet added
   var pendingSize = (document.getElementById('as-size').value || '').trim();
   var pendingQty  = parseInt(document.getElementById('as-qty').value);
@@ -1777,6 +1793,7 @@ function removeItem(id) {
 }
 
 // ── SUBMIT ORDER ──────────────────────────────────────────────────
+var ORDER_TOKEN = null;
 document.getElementById('btn-submit').addEventListener('click', function() {
   var shop = SESSION_STORE ? SESSION_STORE.name : document.getElementById('cust-shop').value.trim();
   var errEl = document.getElementById('submit-error');
@@ -1784,12 +1801,16 @@ document.getElementById('btn-submit').addEventListener('click', function() {
   if (!shop){ errEl.textContent='⚠ Please select a shop.'; errEl.style.display='block'; return; }
   if (cart.length===0){ errEl.textContent='⚠ Please add at least one item.'; errEl.style.display='block'; return; }
   var items=cart.map(function(i){ return {product:i.product,color:i.color,size:i.size,qty:i.qty,lookupType:i.lookupType,lp:i.lp,lc:i.lc,ls:i.ls}; });
+  // Same cart → same token, so a retry after a connection error can't create a second order
+  var cartKey=JSON.stringify(items);
+  if(!ORDER_TOKEN||ORDER_TOKEN.key!==cartKey) ORDER_TOKEN={id:newSaleId(),key:cartKey};
   document.getElementById('loading-bar').style.display='block';
   document.getElementById('btn-submit').disabled=true;
   google.script.run
     .withSuccessHandler(function(result) {
       document.getElementById('loading-bar').style.display='none';
       if (result.success) {
+        ORDER_TOKEN=null;
         document.getElementById('order-id-display').textContent=result.orderId;
         lastOrder={orderId:result.orderId,customerName:shop,items:items,date:new Date().toLocaleDateString()};
         document.getElementById('order-form-wrap').style.display='none';
@@ -1802,10 +1823,9 @@ document.getElementById('btn-submit').addEventListener('click', function() {
     .withFailureHandler(function() {
       document.getElementById('loading-bar').style.display='none';
       document.getElementById('btn-submit').disabled=false;
-      errEl.textContent='❌ Connection error. Please try again.'; errEl.style.display='block';
-      showToast('Connection error — tap Retry', function(){ document.getElementById('btn-submit').click(); });
+      errEl.textContent='⚠ Connection problem — order not confirmed. Tap Submit again: it will not create a duplicate.'; errEl.style.display='block';
     })
-    .submitOrder({customerName:shop,customerEmail:'',customerPhone:'',notes:'',items:items,orderType:'store',shopName:shop});
+    .submitOrder({customerName:shop,customerEmail:'',customerPhone:'',notes:'',items:items,orderType:'store',shopName:shop,orderToken:ORDER_TOKEN.id});
 });
 
 function resetOrderForm() {
@@ -1994,7 +2014,7 @@ function palMarkDone(orderId) {
   var order=ALL_ORDERS.find(function(o){ return o.orderId===orderId; });
   var isStore=order&&order.orderType==='store';
   var msg=isStore
-    ?'Mark '+orderId+' as DONE?\nItems will be added to '+((order&&order.shopName)||'the store')+'\'s stock. Cannot be undone.'
+    ?'Send '+orderId+' to '+((order&&order.shopName)||'the store')+'?\nItems will be deducted from Palladium and added to '+((order&&order.shopName)||'the store')+'\'s stock. Cannot be undone.'
     :'Mark '+orderId+' as DONE?\nThis deducts stock from the sheet and cannot be undone.';
   if(!confirm(msg)) return;
   var btn=document.getElementById('pdone-'+orderId), msg=document.getElementById('pmsg-'+orderId);
@@ -2004,6 +2024,8 @@ function palMarkDone(orderId) {
       if(r.success){
         var order=ALL_ORDERS.find(function(o){ return o.orderId===orderId; });
         if(order){ order.status='Completed'; order.completed='Just now'; }
+        // Stock moved on the server: reload it next time Stock / Retail / Master opens
+        STOCK_DATA=null; ALL_RETAIL_STOCK=null; CS_ROWS=null;
         palUpdateCounts();
         var card=document.getElementById('poc-'+orderId); if(card) card.outerHTML=palBuildOrderCard(order);
         var b=document.getElementById('pob-'+orderId); if(b) b.classList.add('open');
