@@ -1293,7 +1293,7 @@ var AS_ROWS = []; // pending size/qty rows before save
 function renderAddStockTab() {
   AS_ROWS = [];
   document.getElementById('sp-body').innerHTML =
-    '<div style="font-size:.82rem;color:#888;margin-bottom:14px;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px">Enter the Product ID and Color once, then add all sizes.</div>'
+    '<div style="font-size:.82rem;color:#92400e;margin-bottom:14px;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px"><strong>First-time count only.</strong> Each size is set to the number you type. Refills from Palladium are added automatically when Palladium sends your order — don\'t enter them here.</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
     + '<div><label style="display:block;font-size:.82rem;font-weight:600;color:#555;margin-bottom:4px">Product ID</label>'
     + '<input id="as-pid" type="text" placeholder="T9027" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"'
@@ -1363,6 +1363,16 @@ function doAddStock() {
   if (!AS_ROWS.length) { resEl.innerHTML = '<span style="color:#b91c1c">⚠ Add at least one size.</span>'; return; }
 
   var rows = AS_ROWS.slice();
+  // Add Stock replaces the count, so warn before overwriting sizes that already have stock
+  var myInv = ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name];
+  var existing = myInv && myInv[pid] && myInv[pid]['Color ' + color];
+  var counted = rows.filter(function(r) { return existing && (parseInt(existing[r.size]) || 0) > 0; });
+  if (counted.length && !confirm('These sizes already have stock:\n'
+      + counted.map(function(r) { return 'Size ' + r.size + ': ' + existing[r.size] + ' → ' + r.qty; }).join('\n')
+      + '\n\nThis replaces the count (refills are added automatically by Palladium). Replace?')) {
+    resEl.innerHTML = '<span style="color:#888">Not saved.</span>';
+    return;
+  }
   resEl.innerHTML = '<span style="color:#888">Saving ' + rows.length + ' size' + (rows.length>1?'s':'') + '…</span>';
   var items = rows.map(function(r){ return { productId: pid, category: '', colorNum: color, size: r.size, qty: r.qty }; });
   google.script.run
