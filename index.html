@@ -253,7 +253,7 @@ tbody tr:last-child td{border-bottom:none}
 .sg-chip.edit:active{transform:scale(.95)}
 
 /* ── PALLADIUM MODE ── */
-.pal-mode .ms-tabs{display:none}
+.pal-mode .ms-tabs:not(.rp-tabs){display:none}
 .pal-mode .order-banner,.pal-mode #order-success,.pal-mode #order-form-wrap{display:none!important}
 #pal-retail-wrap{display:none}
 .pal-mode #pal-retail-wrap{display:block}
@@ -283,7 +283,48 @@ tbody tr:last-child td{border-bottom:none}
 /* ── MASTER / REORDER VIEWS ── */
 #nav-plan{display:none}
 .pal-mode #nav-plan{display:flex}
-.pal-mode #app-nav{grid-template-columns:1fr 1fr 1fr 1fr}
+.pal-mode #app-nav{grid-template-columns:repeat(5,1fr)}
+#nav-report{display:none}
+.pal-mode #nav-report{display:flex}
+.pal-mode .nav-btn{padding-left:2px;padding-right:2px}
+/* ── STOCK HISTORY ── */
+.sg-hist{padding:8px 14px 12px;border-top:1px solid #f0f2f5}
+.sg-hist-btn{background:#f5f7ff;border:1px solid #e0e4ff;color:#4f46e5;font-weight:700;font-size:.78rem;padding:7px 12px;border-radius:8px;cursor:pointer}
+.hist-list .ld{padding:14px 0}
+.hist-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #f5f6f8}
+.hist-row:last-child{border-bottom:none}
+.hist-main{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.hist-main b{font-size:.84rem;color:#1a1a2e}
+.hist-act{font-size:.76rem;color:#475569}
+.hist-when{font-size:.7rem;color:#94a3b8;overflow-wrap:anywhere}
+.hist-num{display:flex;flex-direction:column;align-items:flex-end;gap:1px;white-space:nowrap}
+.hist-ch{font-weight:800;font-size:.92rem;color:#64748b}
+.hist-ch.up{color:#15803d}
+.hist-ch.down{color:#b91c1c}
+.hist-ba{font-size:.72rem;color:#94a3b8}
+.hist-empty{font-size:.8rem;color:#94a3b8;padding:10px 0}
+/* ── SALES REPORT ── */
+.rp-card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 5px rgba(0,0,0,.07)}
+.rp-title{display:flex;align-items:baseline;gap:8px;font-weight:800;color:#1a1a2e;font-size:.92rem;margin-bottom:10px}
+.rp-big{margin-left:auto;font-size:1.5rem;color:#4f46e5}
+.rp-sub{font-weight:500;font-size:.72rem;color:#94a3b8}
+.rp-bar-row{display:flex;align-items:center;gap:8px;margin:7px 0;font-size:.8rem}
+.rp-lbl{width:86px;flex-shrink:0;color:#475569}
+.rp-bar{flex:1;display:flex;height:12px;background:#f1f5f9;border-radius:6px;overflow:hidden}
+.rp-bar i{display:block;height:100%}
+.rp-bar-row b{width:34px;text-align:right;color:#1a1a2e}
+.st0{background:#6366f1}.st1{background:#f59e0b}.st2{background:#10b981}
+.rp-legend{display:flex;flex-wrap:wrap;gap:10px;font-size:.72rem;color:#64748b;margin-bottom:6px}
+.rp-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.rp-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f6f8}
+.rp-item:last-child{border-bottom:none}
+.rp-rank{width:22px;height:22px;border-radius:50%;background:#eef2ff;color:#4f46e5;font-weight:800;font-size:.72rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rp-item-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.rp-item-main b{font-size:.86rem;color:#1a1a2e}
+.rp-item-main span{font-size:.72rem;color:#64748b;overflow-wrap:anywhere}
+.rp-item-num{display:flex;flex-direction:column;align-items:flex-end;gap:2px;white-space:nowrap;font-size:.8rem}
+.rp-item-num span{font-size:.7rem;color:#64748b}
+.rp-item-num .rp-warn{color:#b91c1c;font-weight:700}
 .plan-section{margin-bottom:18px}
 .plan-section-hd{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#888;margin-bottom:8px;display:flex;align-items:center;gap:6px}
 .plan-product{background:#fff;border-radius:12px;box-shadow:0 1px 6px rgba(0,0,0,.07);margin-bottom:10px;overflow:hidden}
@@ -478,6 +519,11 @@ tbody tr:last-child td{border-bottom:none}
       <div class="panel-inner" id="plan-content"></div>
     </div>
 
+    <!-- Panel 5: Sales report (Palladium only) -->
+    <div id="panel-report" class="panel">
+      <div class="panel-inner" id="report-content"></div>
+    </div>
+
   </div><!-- /app-body -->
 
   <nav id="app-nav">
@@ -492,6 +538,9 @@ tbody tr:last-child td{border-bottom:none}
     </button>
     <button class="nav-btn" id="nav-plan" onclick="showPanel('plan')">
       <span class="nav-icon">📊</span><span>Master</span>
+    </button>
+    <button class="nav-btn" id="nav-report" onclick="showPanel('report')">
+      <span class="nav-icon">📈</span><span>Sales</span>
     </button>
   </nav>
 </div><!-- /screen-app -->
@@ -516,13 +565,13 @@ tbody tr:last-child td{border-bottom:none}
 var API_URL = 'https://script.google.com/macros/s/AKfycby-5YfvPpePbg1ni36sL5AI-DelH_I5qHgm1mkmAKqBSsopJPn-YWi24kXDMPMFkD-v/exec';
 (function(){
   if (typeof google !== 'undefined' && google.script && google.script.run) return;
-  var GET_ACTIONS = { getBusinessName:1, getInventory:1, getAllRetailStock:1 };
+  var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
   var WRITES = { submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
-  var RETRY_OK = { getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
-  function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
+  var RETRY_OK = { getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
+  var POST_ARGS = { getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
 
@@ -779,6 +828,7 @@ function refreshCurrent() {
     else if (CURRENT_PANEL === 'stores') { STOCK_DATA=null; palShowStock(); }
     else if (CURRENT_PANEL === 'order')  { ALL_RETAIL_STOCK=null; palLoadRetail(); }
     else if (CURRENT_PANEL === 'plan')   { ALL_RETAIL_STOCK=null; STOCK_DATA=null; palShowPlan(); }
+    else if (CURRENT_PANEL === 'report') { ALL_RETAIL_STOCK=null; REPORT_DATA={}; palShowReport(); }
   } else {
     if (CURRENT_PANEL === 'mystore') { ALL_RETAIL_STOCK=null; CS_ROWS=null; INVENTORY_LOADED=false; loadStoreStock(); }
     else if (CURRENT_PANEL === 'stores') { ALL_RETAIL_STOCK=null; CS_ROWS=null; renderOtherStores(); }
@@ -789,7 +839,7 @@ function refreshCurrent() {
 // ── APP NAVIGATION ────────────────────────────────────────────────
 function showPanel(name) {
   CURRENT_PANEL = name;
-  ['mystore','stores','order','plan'].forEach(function(p) {
+  ['mystore','stores','order','plan','report'].forEach(function(p) {
     document.getElementById('panel-' + p).classList.toggle('active', p === name);
     var nb = document.getElementById('nav-' + p);
     if (nb) nb.classList.toggle('active', p === name);
@@ -799,6 +849,7 @@ function showPanel(name) {
     if (name === 'stores') palShowStock();
     if (name === 'order')  palLoadRetail();
     if (name === 'plan')   palShowPlan();
+    if (name === 'report') palShowReport();
   } else {
     if (name === 'stores') renderOtherStores();
     if (name === 'order')  loadInventory();
@@ -970,7 +1021,8 @@ function stockGroupsHtml(inv, q, opts) {
       + '<span class="sg-meta">' + nColors + ' color' + (nColors !== 1 ? 's' : '') + '</span>'
       + (pOut ? '<span class="sg-pill out">' + pOut + ' out</span>' : '')
       + (pLow ? '<span class="sg-pill low">' + pLow + ' low</span>' : '')
-      + '<span class="sg-total">' + pPcs + ' pcs</span></summary>' + colorsHtml });
+      + '<span class="sg-total">' + pPcs + ' pcs</span></summary>' + colorsHtml
+      + (opts.historyStore ? '<div class="sg-hist"><button class="sg-hist-btn" onclick="showHistory(this,\'' + palEsc(opts.historyStore) + '\',\'' + palEsc(pid) + '\')">🕘 History</button><div class="hist-list"></div></div>' : '') });
   });
 
   if (!cards.length) {
@@ -1005,6 +1057,172 @@ function stockGroupsHtml(inv, q, opts) {
     + body;
 }
 
+// ── STOCK HISTORY (🕘 inside each product card) ────────────────────
+function histWhen(w) {
+  var d = /^\d{4}-\d{2}-\d{2}T/.test(w) ? new Date(w) : null;
+  if (!d || isNaN(d)) return w || '';
+  var day;
+  try { day = d.toLocaleDateString('en-GB', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' }); }
+  catch (e) { day = d.getDate() + ' ' + MONTHS[d.getMonth()]; }
+  return day + ', ' + thaiTime(d);
+}
+function showHistory(btn, store, pid) {
+  var box = btn.nextElementSibling;
+  if (box.dataset.open === '1') { box.dataset.open = ''; box.innerHTML = ''; btn.textContent = '🕘 History'; return; }
+  box.dataset.open = '1'; btn.textContent = '🕘 Hide history';
+  box.innerHTML = loaderHtml('search', 'Looking up changes…', true);
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (box.dataset.open !== '1') return;
+      if (!r || !r.success) { box.innerHTML = '<div class="hist-empty">⚠ ' + ((r && r.error) || 'Could not load history') + '</div>'; return; }
+      if (!r.rows.length) { box.innerHTML = '<div class="hist-empty">No changes recorded yet. History starts from the day this feature was added.</div>'; return; }
+      box.innerHTML = r.rows.map(function(h) {
+        var ch = h.change === '' || h.change == null ? '' : (h.change > 0 ? '+' + h.change : String(h.change));
+        var cls = h.change > 0 ? 'up' : (h.change < 0 ? 'down' : '');
+        var cn = /^\d+$/.test(h.color) ? 'Color ' + h.color : h.color;
+        return '<div class="hist-row"><div class="hist-main"><b>' + cn + ' · ' + h.size + '</b>'
+          + '<span class="hist-act">' + h.action + (h.by && h.by !== store ? ' · by ' + h.by : '') + '</span>'
+          + '<span class="hist-when">' + histWhen(h.when) + (h.ref ? ' · ' + h.ref : '') + '</span></div>'
+          + '<div class="hist-num"><span class="hist-ch ' + cls + '">' + ch + '</span>'
+          + '<span class="hist-ba">' + (h.before === '' ? '' : h.before + ' → ') + h.after + '</span></div></div>';
+      }).join('');
+    })
+    .withFailureHandler(function() {
+      if (box.dataset.open === '1') box.innerHTML = '<div class="hist-empty">⚠ Connection error — tap History again</div>';
+      box.dataset.open = ''; btn.textContent = '🕘 History';
+    })
+    .getStockHistory(store, pid);
+}
+
+// ── SALES REPORT (Palladium only) ─────────────────────────────────
+var REPORT_DAYS = 7, REPORT_DATA = {};
+function palShowReport(days) {
+  if (days) REPORT_DAYS = days;
+  var el = document.getElementById('report-content'); if (!el) return;
+  var d = REPORT_DAYS, cached = REPORT_DATA[d] || cacheGet('report_' + d);
+  if (cached) { REPORT_DATA[d] = cached; palRenderReport(); }
+  else el.innerHTML = reportTabsHtml() + loaderHtml('sell', 'Adding up sales…');
+  setUpdating(true);
+  var pending = 2, failed = false;
+  function done() { if (--pending) return; setUpdating(false); if (CURRENT_PANEL === 'report' && REPORT_DAYS === d && REPORT_DATA[d]) palRenderReport(); }
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (r && r.success) { REPORT_DATA[d] = r; cacheSet('report_' + d, r); }
+      else if (!cached && REPORT_DAYS === d) el.innerHTML = reportTabsHtml() + '<div class="sp-empty">⚠ ' + ((r && r.error) || 'Could not load sales') + '</div>';
+      done();
+    })
+    .withFailureHandler(function() {
+      setUpdating(false);
+      if (!cached && REPORT_DAYS === d) el.innerHTML = reportTabsHtml() + '<div class="sp-empty">⚠ Could not load sales.</div>';
+      showToast(cached ? 'Could not update — showing saved report' : 'Connection error — tap Retry', function() { palShowReport(); });
+      pending = -99;
+    })
+    .getSalesReport(d);
+  // Slow movers need every store's stock
+  // (loadAllRetail may answer twice: saved copy first, then fresh data)
+  var retailIn = false;
+  function retailDone() {
+    if (!retailIn) { retailIn = true; done(); }
+    else if (CURRENT_PANEL === 'report' && REPORT_DAYS === d && REPORT_DATA[d]) palRenderReport();
+  }
+  if (ALL_RETAIL_STOCK && ['Bicasso 1','Bicasso 2','Bicasso Nana'].every(function(s){ return ALL_RETAIL_STOCK[s]; })) retailDone();
+  else loadAllRetail(retailDone, retailDone);
+}
+
+function reportTabsHtml() {
+  return '<div class="ms-tabs rp-tabs">' + [[1,'Today'],[7,'7 days'],[30,'30 days'],[90,'90 days']].map(function(o) {
+    return '<button class="mstab' + (REPORT_DAYS === o[0] ? ' active' : '') + '" onclick="palShowReport(' + o[0] + ')">' + o[1] + '</button>';
+  }).join('') + '</div>';
+}
+
+function palRenderReport() {
+  var el = document.getElementById('report-content'); if (!el) return;
+  var r = REPORT_DATA[REPORT_DAYS]; if (!r) return;
+  var stores = ['Bicasso 1','Bicasso 2','Bicasso Nana'];
+  var total = 0, byStore = {}, byDay = {}, byItem = {}, soldKey = {};
+  stores.forEach(function(s) { byStore[s] = 0; });
+  r.lines.forEach(function(l) {
+    var day = l[0], store = l[1], pid = l[2], col = l[3], sz = l[4], q = l[5];
+    total += q;
+    byStore[store] = (byStore[store] || 0) + q;
+    byDay[day] = byDay[day] || {}; byDay[day][store] = (byDay[day][store] || 0) + q;
+    var k = pid + '|' + col;
+    if (!byItem[k]) byItem[k] = { pid: pid, col: col, qty: 0, sizes: {} };
+    byItem[k].qty += q; byItem[k].sizes[sz] = (byItem[k].sizes[sz] || 0) + q;
+    soldKey[k] = 1;
+  });
+  var colorName = function(c) { return /^\d+$/.test(c) ? 'Color ' + c : c; };
+  var h = reportTabsHtml();
+
+  // Totals
+  var maxStore = Math.max.apply(null, stores.map(function(s) { return byStore[s]; }).concat([1]));
+  h += '<div class="rp-card"><div class="rp-title">Pieces sold<span class="rp-big">' + total + '</span></div>'
+    + stores.map(function(s, i) {
+        return '<div class="rp-bar-row"><span class="rp-lbl">' + s + '</span><span class="rp-bar"><i class="st' + i + '" style="width:' + (byStore[s] / maxStore * 100) + '%"></i></span><b>' + byStore[s] + '</b></div>';
+      }).join('') + '</div>';
+
+  // Per day (per week for long periods), newest first
+  if (REPORT_DAYS > 1) {
+    var buckets = [], start = new Date(r.since + 'T00:00:00');
+    var step = REPORT_DAYS > 7 ? 7 : 1;
+    for (var t = 0; t < REPORT_DAYS; t += step) {
+      var b = { from: new Date(start.getTime() + t * 864e5), per: {}, sum: 0 };
+      for (var k2 = 0; k2 < step && t + k2 < REPORT_DAYS; k2++) {
+        var dd = new Date(start.getTime() + (t + k2) * 864e5);
+        var key = dd.getFullYear() + '-' + ('0' + (dd.getMonth() + 1)).slice(-2) + '-' + ('0' + dd.getDate()).slice(-2);
+        stores.forEach(function(s) { var q = (byDay[key] && byDay[key][s]) || 0; b.per[s] = (b.per[s] || 0) + q; b.sum += q; });
+      }
+      buckets.push(b);
+    }
+    var maxB = Math.max.apply(null, buckets.map(function(b) { return b.sum; }).concat([1]));
+    h += '<div class="rp-card"><div class="rp-title">' + (step === 7 ? 'Per week' : 'Per day') + '</div>'
+      + '<div class="rp-legend">' + stores.map(function(s, i) { return '<span><i class="st' + i + '"></i>' + s + '</span>'; }).join('') + '</div>'
+      + buckets.reverse().map(function(b) {
+          var lbl = (step === 7 ? 'From ' : '') + b.from.getDate() + ' ' + MONTHS[b.from.getMonth()];
+          return '<div class="rp-bar-row"><span class="rp-lbl">' + lbl + '</span><span class="rp-bar">'
+            + stores.map(function(s, i) { return b.per[s] ? '<i class="st' + i + '" style="width:' + (b.per[s] / maxB * 100) + '%"></i>' : ''; }).join('')
+            + '</span><b>' + b.sum + '</b></div>';
+        }).join('') + '</div>';
+  }
+
+  // Best sellers, with what Palladium still holds of that color
+  var pal = (STOCK_DATA && STOCK_DATA.inventory) || (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK.Palladium) || {};
+  var best = Object.keys(byItem).map(function(k) { return byItem[k]; }).sort(function(a, b) { return b.qty - a.qty; }).slice(0, 15);
+  h += '<div class="rp-card"><div class="rp-title">Best sellers</div>'
+    + (best.length ? best.map(function(it, i) {
+        var pc = pal[it.pid] && pal[it.pid]['Color ' + it.col], palPcs = 0;
+        if (pc) Object.keys(pc).forEach(function(s) { palPcs += parseInt(pc[s]) || 0; });
+        var sizes = Object.keys(it.sizes).sort(sortSizes).map(function(s) { return s + '×' + it.sizes[s]; }).join('  ');
+        return '<div class="rp-item"><span class="rp-rank">' + (i + 1) + '</span><div class="rp-item-main"><b>' + it.pid + ' · ' + colorName(it.col) + '</b>'
+          + '<span>' + sizes + '</span></div><div class="rp-item-num"><b>' + it.qty + ' sold</b>'
+          + '<span class="' + (palPcs <= 3 ? 'rp-warn' : '') + '">Palladium has ' + palPcs + '</span></div></div>';
+      }).join('') : '<div class="hist-empty">No sales in this period.</div>') + '</div>';
+
+  // Slow movers: in a store's stock, not one sale in the period
+  var slow = {};
+  stores.forEach(function(s) {
+    var inv = (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s]) || {};
+    Object.keys(inv).forEach(function(pid) {
+      Object.keys(inv[pid]).forEach(function(ck) {
+        var col = ck.replace(/^Color\s*/i, ''), pcs = 0;
+        Object.keys(inv[pid][ck]).forEach(function(sz) { pcs += parseInt(inv[pid][ck][sz]) || 0; });
+        if (!pcs || soldKey[pid + '|' + col]) return;
+        var k = pid + '|' + col;
+        if (!slow[k]) slow[k] = { pid: pid, col: col, pcs: 0, where: [] };
+        slow[k].pcs += pcs; slow[k].where.push(s + ' ' + pcs);
+      });
+    });
+  });
+  var slowList = Object.keys(slow).map(function(k) { return slow[k]; }).sort(function(a, b) { return b.pcs - a.pcs; });
+  h += '<div class="rp-card"><div class="rp-title">Not selling<span class="rp-sub">in the stores, no sales in ' + (REPORT_DAYS === 1 ? 'today' : 'the last ' + REPORT_DAYS + ' days') + '</span></div>'
+    + (slowList.length ? slowList.slice(0, 20).map(function(it) {
+        return '<div class="rp-item"><div class="rp-item-main"><b>' + it.pid + ' · ' + colorName(it.col) + '</b><span>' + it.where.join(' · ') + '</span></div>'
+          + '<div class="rp-item-num"><b>' + it.pcs + ' pcs</b></div></div>';
+      }).join('') + (slowList.length > 20 ? '<div class="hist-empty">+ ' + (slowList.length - 20) + ' more</div>' : '')
+      : '<div class="hist-empty">Everything in stock sold at least once. 🎉</div>') + '</div>';
+  el.innerHTML = h;
+}
+
 // Palladium's inventory = the reference size range for every product
 function palRefInv() {
   return (STOCK_DATA && STOCK_DATA.inventory) || (INVENTORY_LOADED && INVENTORY) || (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK.Palladium) || null;
@@ -1032,7 +1250,7 @@ function rerenderKeepOpen(el, html) {
 }
 
 function myStockHtml(q) {
-  return stockGroupsHtml(ALL_RETAIL_STOCK && SESSION_STORE && ALL_RETAIL_STOCK[SESSION_STORE.name], q, { lowMax: 1, refInv: palRefInv() });
+  return stockGroupsHtml(ALL_RETAIL_STOCK && SESSION_STORE && ALL_RETAIL_STOCK[SESSION_STORE.name], q, { lowMax: 1, refInv: palRefInv(), historyStore: SESSION_STORE && SESSION_STORE.name });
 }
 
 function renderMyStock() {
@@ -2209,7 +2427,7 @@ function palShowStock() {
 }
 
 function palStockHtml(q){
-  return stockGroupsHtml(STOCK_DATA.inventory,q,{lowMax:3,sections:STOCK_DATA.groups});
+  return stockGroupsHtml(STOCK_DATA.inventory,q,{lowMax:3,sections:STOCK_DATA.groups,historyStore:'Palladium'});
 }
 
 function palStockFilter(q){
@@ -2278,7 +2496,7 @@ function palBuildRetailList(storeName,q){
   if(!inv) return '<div class="sp-empty">No data.</div>';
   ensurePalRef(palRefreshRetailList);
   var groups=(STOCK_DATA&&STOCK_DATA.groups)||(GROUPS&&GROUPS.length?GROUPS:null);
-  return stockGroupsHtml(inv,q,{lowMax:1,editStore:storeName,refInv:palRefInv(),sections:groups});
+  return stockGroupsHtml(inv,q,{lowMax:1,editStore:storeName,refInv:palRefInv(),sections:groups,historyStore:storeName});
 }
 
 function palRefreshRetailList(){

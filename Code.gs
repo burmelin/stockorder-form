@@ -74,8 +74,17 @@ function jsonOut(value) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// Reading stock, sales or history needs a logged-in store or Palladium. The app sends the
+// login with every request as auth/authStore (in the request body, never in a link).
+var READ_ACTIONS = { getInventory: 1, getAllRetailStock: 1, getStoreStock: 1, getStoreBundle: 1,
+                     getSalesToday: 1, getStockHistory: 1, getSalesReport: 1 };
+function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isStorePass(b.authStore, b.auth)); }
+
 // Central API router — maps an action name to the existing functions
 function handleApi(action, params, body) {
+  if (READ_ACTIONS[action] && !isLoggedIn(body)) {
+    return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
+  }
   var out;
   switch (action) {
     case 'getBusinessName': out = BUSINESS_NAME; break;
@@ -95,8 +104,10 @@ function handleApi(action, params, body) {
     case 'verifyRetailStore':    out = verifyRetailStore(body.storeName, body.password, body.withData); break;
     case 'getStoreBundle':       out = getStoreBundle(body && body.storeName); break;
     case 'addRetailStockItem':   out = addRetailStockItem(body.storeName, body.password, body.productId, body.category, body.colorNum, body.size, body.qty); break;
-    case 'addRetailStockItems':    out = addRetailStockItems(body.storeName, body.password, body.items); break;
-    case 'generateMasterSheet':    out = generateMasterSheet(body.password, body.targets); break;
+    case 'addRetailStockItems':  out = addRetailStockItems(body.storeName, body.password, body.items); break;
+    case 'generateMasterSheet':  out = generateMasterSheet(body.password, body.targets); break;
+    case 'getStockHistory':      out = getStockHistory(body, body.store, body.productId); break;
+    case 'getSalesReport':       out = getSalesReport(body, body.days); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
   }
   return jsonOut(out);
@@ -402,10 +413,17 @@ function markDone(orderId, password) {
       };
     });
     // Every order leaves Palladium's stock; a store order also lands in that store's stock
-    var warnings = deductItemsFromWholesale(ss, order.items, lines);
+    var changes = [];
+    var warnings = deductItemsFromWholesale(ss, order.items, lines, changes);
+    var dest = order.orderType === 'store' && order.shopName ? order.shopName : (order.customerName || 'customer');
+    changes.forEach(function(c) { c.action = 'Sent to ' + dest; });
     if (order.orderType === 'store' && order.shopName) {
-      warnings = warnings.concat(addItemsToStore(ss, order.shopName, lines));
+      var got = [];
+      warnings = warnings.concat(addItemsToStore(ss, order.shopName, lines, got));
+      got.forEach(function(c) { c.action = 'Received from Palladium'; });
+      changes = changes.concat(got);
     }
+    logHistory(ss, changes, '', orderId, 'Palladium');
 
     // Mark as Completed — also record the invoice timestamp if not already set
     var doneAt  = new Date();
@@ -524,8 +542,9 @@ function sheetDataStart(data) {
   return 1;
 }
 
-// Add quantities to a shop's stock sheet: one read, then only the changed cells + one append
-function addItemsToStore(ss, shopName, lines) {
+// Add quantities to a shop's stock sheet: one read, then only the changed cells + one append.
+// Each change is pushed to `changes` as {store,pid,col,sz,before,after} for the Stock History.
+function addItemsToStore(ss, shopName, lines, changes) {
   var sheet = ss.getSheetByName(shopName + ' Stock');
   if (!sheet) return lines.map(function(l) { return l.label + ': Sheet not found for store: ' + shopName; });
   var data = sheet.getDataRange().getValues();
@@ -536,25 +555,29 @@ function addItemsToStore(ss, shopName, lines) {
   }
   var changed = {}, appends = [], appendAt = {};
   lines.forEach(function(l) {
-    var k = l.pid + '|' + l.col + '|' + l.sz;
+    var k = l.pid + '|' + l.col + '|' + l.sz, before;
     if (rowOf[k] !== undefined) {
       var row = rowOf[k];
-      data[row][5] = (parseInt(data[row][5]) || 0) + l.qty;
+      before = parseInt(data[row][5]) || 0;
+      data[row][5] = before + l.qty;
       changed[row] = true;
     } else if (appendAt[k] !== undefined) {
+      before = appends[appendAt[k]][5];
       appends[appendAt[k]][5] += l.qty;
     } else {
+      before = 0;
       appendAt[k] = appends.length;
       appends.push([l.pid + l.col + l.sz, l.pid, '', l.col, l.sz, l.qty]);
     }
+    if (changes) changes.push({ store: shopName, pid: l.pid, col: l.col, sz: l.sz, before: before, after: before + l.qty });
   });
   Object.keys(changed).forEach(function(row) { sheet.getRange(Number(row) + 1, 6).setValue(data[row][5]); });
   if (appends.length) sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, 6).setValues(appends);
   return [];
 }
 
-// Deduct an order from Palladium's stock tab in one pass
-function deductItemsFromWholesale(ss, items, lines) {
+// Deduct an order from Palladium's stock tab in one pass (changes recorded as in addItemsToStore)
+function deductItemsFromWholesale(ss, items, lines, changes) {
   var warnings = [];
   var sheet = getPalladiumSheet(ss);
   var data = sheet ? sheet.getDataRange().getValues() : [];
@@ -564,7 +587,7 @@ function deductItemsFromWholesale(ss, items, lines) {
     if (rowOf[k] === undefined) rowOf[k] = r;
   }
   var changed = {};
-  lines.forEach(function(l, i) {
+  lines.forEach(function(l) {
     var k = l.pid + '|' + l.col + '|' + l.sz;
     if (rowOf[k] !== undefined) {
       var row = rowOf[k];
@@ -572,6 +595,7 @@ function deductItemsFromWholesale(ss, items, lines) {
       if (have < l.qty) warnings.push(l.label + ': Palladium had only ' + have + ' — set to 0');
       data[row][5] = Math.max(0, have - l.qty);
       changed[row] = true;
+      if (changes) changes.push({ store: 'Palladium', pid: l.pid, col: l.col, sz: l.sz, before: have, after: data[row][5] });
     } else {
       warnings.push(l.label + ': not found in ' + INVENTORY_SHEET_NAME + ' — Palladium stock not changed');
     }
@@ -694,6 +718,11 @@ function transferStock(fromStore, toStore, password, rowId, qty, transferId) {
       toQty = (parseInt(tData[tr][5]) || 0) + sellQ;
       toSheet.getRange(tr + 1, 6).setValue(toQty);
     }
+    var by = whoIs(password, fromStore);
+    logHistory(ss, [
+      { store: fromStore, pid: pid, col: col, sz: sz, before: fromQty, after: fromQty - sellQ, action: 'Transfer out → ' + toStore },
+      { store: toStore, pid: pid, col: col, sz: sz, before: toQty - sellQ, after: toQty, action: 'Transfer in ← ' + fromStore }
+    ], '', transferId || '', by);
     SpreadsheetApp.flush();
     var result = { success: true, fromNewQty: fromQty - sellQ, toNewQty: toQty, created: tr === undefined,
                    productId: pid, color: col, size: sz };
@@ -758,6 +787,8 @@ function sellRetailStock(storeName, password, rowId, qty, saleId) {
       var newQty = cur - sellQ;
       sheet.getRange(r + 1, 6).setValue(newQty);
       log.appendRow([new Date(), storeName, code, data[r][1], data[r][3], data[r][4], sellQ, newQty, saleId || '']);
+      logHistory(ss, [{ store: storeName, pid: String(data[r][1]).trim(), col: String(data[r][3]).trim(), sz: String(data[r][4]).trim(),
+                        before: cur, after: newQty }], 'Sale', saleId || '', whoIs(password, storeName));
       SpreadsheetApp.flush();
       return { success: true, newQty: newQty };
     }
@@ -820,6 +851,11 @@ function sellRetailStockBatch(storeName, password, items, saleId) {
     });
     Object.keys(stock).forEach(function(code) { sheet.getRange(rowOf[code] + 1, 6).setValue(stock[code]); });
     log.getRange(log.getLastRow() + 1, 1, logRows.length, SALES_LOG_HEADERS.length).setValues(logRows);
+    logHistory(ss, Object.keys(stock).map(function(code) {
+      var row = rowOf[code];
+      return { store: storeName, pid: String(data[row][1]).trim(), col: String(data[row][3]).trim(), sz: String(data[row][4]).trim(),
+               before: parseInt(data[row][5]) || 0, after: stock[code] };
+    }), 'Sale', saleId, whoIs(password, storeName));
     SpreadsheetApp.flush();
     return { success: true, lines: lines, sales: getSalesToday(storeName).sales };
   } catch (e) {
@@ -991,22 +1027,28 @@ function addRetailStockItems(storeName, password, items) {
       var k = normCode(data[r][1]) + '|' + normCode(data[r][3]) + '|' + normCode(data[r][4]);
       if (rowOf[k] === undefined) rowOf[k] = r;
     }
-    var appends = [], appendAt = {}, results = [];
+    var appends = [], appendAt = {}, results = [], changes = [];
     (items || []).forEach(function(it) {
       var pid = normCode(it.productId), col = String(it.colorNum).trim(), sz = String(it.size).trim();
       var qty = parseInt(it.qty) || 0, key = pid + '|' + normCode(col) + '|' + normCode(sz);
       if (!pid || !col || !sz) { results.push({ size: sz, ok: false }); return; }
       if (rowOf[key] !== undefined) {
-        sheet.getRange(rowOf[key] + 1, 6).setValue(qty);
+        var row = rowOf[key];
+        changes.push({ store: storeName, pid: pid, col: col, sz: sz, before: parseInt(data[row][5]) || 0, after: qty });
+        data[row][5] = qty;
+        sheet.getRange(row + 1, 6).setValue(qty);
       } else if (appendAt[key] !== undefined) {
+        changes.push({ store: storeName, pid: pid, col: col, sz: sz, before: appends[appendAt[key]][5], after: qty });
         appends[appendAt[key]][5] = qty;
       } else {
+        changes.push({ store: storeName, pid: pid, col: col, sz: sz, before: 0, after: qty });
         appendAt[key] = appends.length;
         appends.push([pid + col + sz, pid, it.category || '', col, sz, qty]);
       }
       results.push({ size: sz, ok: true });
     });
     if (appends.length) sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, 6).setValues(appends);
+    logHistory(ss, changes, isEmployee(password) ? 'Palladium edit' : 'Count', '', whoIs(password, storeName));
     SpreadsheetApp.flush();
     return { success: true, results: results };
   } catch(err) {
@@ -1178,3 +1220,143 @@ function generateMasterSheet(password, targets) {
   } catch(e) { return { success: false, error: e.toString() }; }
 }
 
+// ─── STOCK HISTORY ────────────────────────────────────────────
+// One row per change to any stock number: what changed, before → after, why, and who.
+var HISTORY_SHEET   = 'Stock History';
+var HISTORY_HEADERS = ['Date/Time', 'Store', 'Product ID', 'Color', 'Size', 'Change', 'Before', 'After', 'Action', 'Reference', 'By'];
+var STOCK_TABS      = ['Bicasso 1 Stock', 'Bicasso 2 Stock', 'Bicasso Nana Stock'];
+
+function getHistorySheet(ss) {
+  var sh = ss.getSheetByName(HISTORY_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(HISTORY_SHEET);
+    sh.getRange(1, 1, 1, HISTORY_HEADERS.length).setValues([HISTORY_HEADERS])
+      .setFontWeight('bold').setBackground('#1a1a2e').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+// changes: [{store,pid,col,sz,before,after}] — unchanged quantities are skipped
+function logHistory(ss, changes, action, ref, by) {
+  var now = new Date();
+  var rows = (changes || []).filter(function(c) { return c.before !== c.after; }).map(function(c) {
+    return [now, c.store, c.pid, c.col, c.sz, c.after - c.before, c.before, c.after, c.action || action, c.ref || ref || '', by || ''];
+  });
+  if (!rows.length) return;
+  try {
+    var sh = getHistorySheet(ss);
+    var start = sh.getLastRow() + 1;
+    sh.getRange(start, 1, rows.length, HISTORY_HEADERS.length).setValues(rows);
+    sh.getRange(start, 1, rows.length, 1).setNumberFormat(DATE_FMT);
+  } catch (e) { /* history must never block a sale or transfer */ }
+}
+
+// Who made a change, from the password used
+function whoIs(password, store) { return isEmployee(password) ? 'Palladium' : (store || ''); }
+
+// Recent changes for one store (and optionally one product), newest first.
+// A store may only read its own history; Palladium may read any.
+function getStockHistory(b, store, productId) {
+  if (!isEmployee(b.auth) && b.authStore !== store) return { success: false, error: 'You can only see your own store\'s history.' };
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sh = ss.getSheetByName(HISTORY_SHEET);
+    if (!sh || sh.getLastRow() < 2) return { success: true, rows: [] };
+    var last = sh.getLastRow(), from = Math.max(2, last - 4999);
+    var data = sh.getRange(from, 1, last - from + 1, HISTORY_HEADERS.length).getValues();
+    var pid = normCode(productId), out = [];
+    for (var i = data.length - 1; i >= 0 && out.length < 60; i--) {
+      var d = data[i];
+      if (String(d[1]) !== store) continue;
+      if (pid && normCode(d[2]) !== pid) continue;
+      out.push({ when: d[0] instanceof Date ? d[0].toISOString() : String(d[0]), color: String(d[3]), size: String(d[4]), change: Number(d[5]) || 0,
+                 before: d[6], after: d[7], action: String(d[8]), ref: String(d[9]), by: String(d[10]) });
+    }
+    return { success: true, rows: out };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// Hand edits in the Google Sheet are logged too (simple trigger: runs on every edit by a person).
+// Only the Stock column (F) of the four stock tabs counts. A pasted block has no old values,
+// so those rows show only the new number.
+function onEdit(e) {
+  try {
+    var sh = e.range.getSheet(), name = sh.getName().trim();
+    var store = (name === INVENTORY_SHEET_NAME || OLD_INVENTORY_SHEET_NAMES.indexOf(name) > -1) ? 'Palladium'
+              : (STOCK_TABS.indexOf(name) > -1 ? name.replace(/ Stock$/, '') : null);
+    if (!store || e.range.getColumn() > 6 || e.range.getLastColumn() < 6) return;
+    var single = e.range.getNumRows() === 1 && e.range.getNumColumns() === 1;
+    var rows = sh.getRange(e.range.getRow(), 1, e.range.getNumRows(), 6).getValues();
+    var by = '';
+    try { by = Session.getActiveUser().getEmail(); } catch (x) {}
+    var now = new Date(), out = [];
+    rows.forEach(function(row) {
+      if (!String(row[1]).trim()) return;
+      var after = parseInt(row[5]) || 0;
+      var before = single ? (parseInt(e.oldValue) || 0) : '';
+      if (single && before === after) return;
+      out.push([now, store, String(row[1]).trim(), String(row[3]).trim(), String(row[4]).trim(),
+                single ? after - before : '', before, after, single ? 'Sheet edit' : 'Sheet edit (pasted)', '', by || 'Google Sheet']);
+    });
+    if (!out.length) return;
+    var hs = getHistorySheet(e.source), start = hs.getLastRow() + 1;
+    hs.getRange(start, 1, out.length, HISTORY_HEADERS.length).setValues(out);
+    hs.getRange(start, 1, out.length, 1).setNumberFormat(DATE_FMT);
+  } catch (err) { /* never interrupt typing in the sheet */ }
+}
+
+// ─── SALES REPORT ─────────────────────────────────────────────
+// Palladium only: every sale line of the last `days` days, for the app to total up
+function getSalesReport(b, days) {
+  if (!isEmployee(b.auth)) return { success: false, error: 'Only Palladium can see the sales report.' };
+  try {
+    days = Math.min(Math.max(parseInt(days) || 7, 1), 92);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var log = ss.getSheetByName(SALES_LOG_SHEET);
+    if (!log || log.getLastRow() < 2) return { success: true, lines: [], days: days };
+    var tz = Session.getScriptTimeZone();
+    var since = new Date(); since.setDate(since.getDate() - (days - 1));
+    var sinceKey = Utilities.formatDate(since, tz, 'yyyy-MM-dd');
+    var last = log.getLastRow(), from = Math.max(2, last - 9999);
+    var rows = log.getRange(from, 1, last - from + 1, SALES_LOG_HEADERS.length).getValues();
+    var lines = [];
+    rows.forEach(function(r) {
+      if (!(r[0] instanceof Date)) return;
+      var day = Utilities.formatDate(r[0], tz, 'yyyy-MM-dd');
+      if (day < sinceKey) return;
+      lines.push([day, String(r[1]), String(r[3]), String(r[4]), String(r[5]), parseInt(r[6]) || 0]);
+    });
+    return { success: true, lines: lines, days: days, since: sinceKey };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+// ─── DAILY BACKUP ─────────────────────────────────────────────
+// Run setupDailyBackup() once from the Apps Script editor. It makes a copy now and then
+// every night, in a Drive folder "Burmelin Backups", keeping the newest 30 copies.
+var BACKUP_FOLDER = 'Burmelin Backups';
+var BACKUP_KEEP   = 30;
+
+function dailyBackup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var it = DriveApp.getFoldersByName(BACKUP_FOLDER);
+  var folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
+  var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+  DriveApp.getFileById(ss.getId()).makeCopy(ss.getName() + ' — backup ' + stamp, folder);
+  var files = [], f = folder.getFiles();
+  while (f.hasNext()) files.push(f.next());
+  files.sort(function(a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  files.slice(BACKUP_KEEP).forEach(function(old) { old.setTrashed(true); }); // stays in Drive's trash for 30 days
+}
+
+function setupDailyBackup() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'dailyBackup') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(23).create();
+  dailyBackup();
+}
