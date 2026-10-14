@@ -49,9 +49,6 @@ button,input,select,textarea{font-family:inherit}
 .btn-logout:hover{border-color:rgba(255,255,255,.6);color:#fff}
 .btn-back{background:none;border:none;color:#fff;font-size:1.25rem;padding:6px 10px 6px 4px;cursor:pointer;line-height:1;opacity:.8}
 .btn-back:hover{opacity:1}
-.btn-refresh{background:none;border:1px solid rgba(255,255,255,.28);color:rgba(255,255,255,.85);padding:6px 10px;border-radius:6px;font-size:1rem;cursor:pointer;line-height:1}
-.btn-refresh:hover{border-color:rgba(255,255,255,.6);color:#fff}
-.btn-refresh.spinning{animation:spin .6s linear infinite}
 #app-body{flex:1;overflow:hidden;position:relative}
 .panel{position:absolute;inset:0;overflow-y:auto;display:none;-webkit-overflow-scrolling:touch}
 .panel.active{display:block}
@@ -413,7 +410,6 @@ tbody tr:last-child td{border-bottom:none}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
-      <button class="btn-refresh" id="btn-refresh" onclick="refreshCurrent()" title="Refresh">&#8635;</button>
       <button class="btn-logout" onclick="appLogout()">Logout</button>
     </div>
   </div>
@@ -557,19 +553,19 @@ tbody tr:last-child td{border-bottom:none}
   </div><!-- /app-body -->
 
   <nav id="app-nav">
-    <button class="nav-btn active" id="nav-mystore" onclick="showPanel('mystore')">
+    <button class="nav-btn active" id="nav-mystore" onclick="navTap(\'mystore\')">
       <span class="nav-icon"><svg><use href="#i-box"/></svg></span><span>My Store</span>
     </button>
-    <button class="nav-btn" id="nav-stores" onclick="showPanel('stores')">
+    <button class="nav-btn" id="nav-stores" onclick="navTap(\'stores\')">
       <span class="nav-icon"><svg><use href="#i-search"/></svg></span><span>All Stores</span>
     </button>
-    <button class="nav-btn" id="nav-order" onclick="showPanel('order')">
+    <button class="nav-btn" id="nav-order" onclick="navTap(\'order\')">
       <span class="nav-icon"><svg><use href="#i-order"/></svg></span><span>Order</span>
     </button>
-    <button class="nav-btn" id="nav-plan" onclick="showPanel('plan')">
+    <button class="nav-btn" id="nav-plan" onclick="navTap(\'plan\')">
       <span class="nav-icon"><svg><use href="#i-grid"/></svg></span><span>Master</span>
     </button>
-    <button class="nav-btn" id="nav-report" onclick="showPanel('report')">
+    <button class="nav-btn" id="nav-report" onclick="navTap(\'report\')">
       <span class="nav-icon"><svg><use href="#i-chart"/></svg></span><span>Sales</span>
     </button>
   </nav>
@@ -850,9 +846,15 @@ function goBack() {
   }
 }
 
+// Bottom-nav taps: tapping the tab you're already on reloads it; Palladium's Orders
+// reloads whenever you come back to it, so new store orders show up
+function navTap(name) {
+  if (name === CURRENT_PANEL) { refreshCurrent(); return; }
+  showPanel(name);
+  if (name === 'mystore' && SESSION_STORE && SESSION_STORE.isPalladium) palLoadOrders();
+}
+
 function refreshCurrent() {
-  var btn = document.getElementById('btn-refresh');
-  if (btn) { btn.classList.add('spinning'); setTimeout(function(){ btn.classList.remove('spinning'); }, 800); }
   if (SESSION_STORE && SESSION_STORE.isPalladium) {
     if (CURRENT_PANEL === 'mystore') { ALL_ORDERS=[]; palLoadOrders(); }
     else if (CURRENT_PANEL === 'stores') { STOCK_DATA=null; palShowStock(); }
@@ -895,12 +897,6 @@ function cacheSet(key, val) { try { localStorage.setItem('bm_cache_' + key, JSON
 function cacheClear() {
   try { Object.keys(localStorage).forEach(function(k) { if (k.indexOf('bm_cache_') === 0) localStorage.removeItem(k); }); } catch (e) {}
 }
-var UPDATING_COUNT = 0;
-function setUpdating(on) {
-  UPDATING_COUNT = Math.max(0, UPDATING_COUNT + (on ? 1 : -1));
-  var b = document.getElementById('btn-refresh');
-  if (b) b.classList.toggle('spinning', UPDATING_COUNT > 0);
-}
 
 function applyStoreBundle(r) {
   ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {};
@@ -925,17 +921,13 @@ function loadStoreStock() {
   var cached = cacheGet('bundle_' + myStore);
   if (cached) { applyStoreBundle(cached); switchStoreTab(CURRENT_TAB || 'mystock'); }
   else document.getElementById('sp-body').innerHTML = loaderHtml('stock', 'Loading your stock…');
-  setUpdating(true);
   google.script.run
     .withSuccessHandler(function(r) {
-      setUpdating(false);
       if (r && !r.success && /Unknown action/.test(r.error || '')) {
         // Server not redeployed yet: fall back to the old stock-only request
-        setUpdating(true);
         google.script.run.withSuccessHandler(function(o) {
-          setUpdating(false);
           if (o && o.success) { applyStoreBundle(o); CS_ROWS = null; if (cached) refreshStoreView(); else switchStoreTab(CURRENT_TAB || 'mystock'); }
-        }).withFailureHandler(function() { setUpdating(false); }).getStoreStock(myStore);
+        }).getStoreStock(myStore);
         return;
       }
       if (r && r.success) {
@@ -946,7 +938,6 @@ function loadStoreStock() {
       }
     })
     .withFailureHandler(function() {
-      setUpdating(false);
       if (!cached) document.getElementById('sp-body').innerHTML = '<div class="sp-empty">⚠ Could not load stock.</div>';
       showToast(cached ? 'Could not update — showing saved stock' : 'Connection error — tap Retry', function(){ ALL_RETAIL_STOCK=null; loadStoreStock(); });
     })
@@ -968,15 +959,12 @@ function applyAllRetail(r, fromCache) {
 function loadAllRetail(onData, onFail) {
   var cached = cacheGet('allretail');
   if (cached) { applyAllRetail(cached, true); onData(); }
-  setUpdating(true);
   google.script.run
     .withSuccessHandler(function(r) {
-      setUpdating(false);
       if (r && r.success) { applyAllRetail(r, false); cacheSet('allretail', r); onData(); }
       else if (!cached) onFail(r && r.error);
     })
     .withFailureHandler(function() {
-      setUpdating(false);
       if (!cached) onFail(); else showToast('Could not update — showing saved stock');
     })
     .getAllRetailStock();
@@ -1132,9 +1120,8 @@ function palShowReport(days) {
   var d = REPORT_DAYS, cached = REPORT_DATA[d] || cacheGet('report_' + d);
   if (cached) { REPORT_DATA[d] = cached; palRenderReport(); }
   else el.innerHTML = reportTabsHtml() + loaderHtml('sell', 'Adding up sales…');
-  setUpdating(true);
   var pending = 2, failed = false;
-  function done() { if (--pending) return; setUpdating(false); if (CURRENT_PANEL === 'report' && REPORT_DAYS === d && REPORT_DATA[d]) palRenderReport(); }
+  function done() { if (--pending) return; if (CURRENT_PANEL === 'report' && REPORT_DAYS === d && REPORT_DATA[d]) palRenderReport(); }
   google.script.run
     .withSuccessHandler(function(r) {
       if (r && r.success) { REPORT_DATA[d] = r; cacheSet('report_' + d, r); }
@@ -1142,7 +1129,6 @@ function palShowReport(days) {
       done();
     })
     .withFailureHandler(function() {
-      setUpdating(false);
       if (!cached && REPORT_DAYS === d) el.innerHTML = reportTabsHtml() + '<div class="sp-empty">⚠ Could not load sales.</div>';
       showToast(cached ? 'Could not update — showing saved report' : 'Connection error — tap Retry', function() { palShowReport(); });
       pending = -99;
@@ -2234,14 +2220,15 @@ function palFilterOrders(filter) {
 }
 
 function palLoadOrders() {
-  document.getElementById('sp-body').innerHTML=loaderHtml('orders', 'Loading orders…');
+  var have = ALL_ORDERS && ALL_ORDERS.length;
+  if (!have) document.getElementById('sp-body').innerHTML=loaderHtml('orders', 'Loading orders…');
   google.script.run
     .withSuccessHandler(function(r){
       if(r.success){ ALL_ORDERS=r.orders||[]; palUpdateCounts(); palFilterOrders(PAL_FILTER); }
-      else { document.getElementById('sp-body').innerHTML='<div class="sp-empty">⚠ '+(r.error||'Error')+'</div>'; }
+      else if (!have) { document.getElementById('sp-body').innerHTML='<div class="sp-empty">⚠ '+(r.error||'Error')+'</div>'; }
     })
     .withFailureHandler(function(){
-      document.getElementById('sp-body').innerHTML='<div class="sp-empty">⚠ Could not load orders.</div>';
+      if (!have) document.getElementById('sp-body').innerHTML='<div class="sp-empty">⚠ Could not load orders.</div>';
       showToast('Connection error — tap Retry',function(){ palLoadOrders(); });
     })
     .getOrders(SESSION_STORE.pass);
@@ -2435,10 +2422,8 @@ function palShowStock() {
   var cached=cacheGet('palinv');
   if(cached){ STOCK_DATA=cached; palRenderStockCats(); }
   else el.innerHTML=loaderHtml('stock', 'Loading Palladium stock…');
-  setUpdating(true);
   google.script.run
     .withSuccessHandler(function(r){
-      setUpdating(false);
       if(r&&r.success){
         STOCK_DATA=r; cacheSet('palinv',r);
         if(CURRENT_PANEL!=='stores') return;
@@ -2448,7 +2433,6 @@ function palShowStock() {
       else if(!cached){ el.innerHTML='<div class="sp-empty">⚠ '+(r&&r.error||'Error')+'</div>'; }
     })
     .withFailureHandler(function(){
-      setUpdating(false);
       if(!cached) el.innerHTML='<div class="sp-empty">⚠ Could not load stock.</div>';
       showToast(cached?'Could not update — showing saved stock':'Connection error — tap Retry',function(){ STOCK_DATA=null; palShowStock(); });
     })
