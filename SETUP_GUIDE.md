@@ -137,6 +137,23 @@ The URL stays the same — no need to resend links.
 
 ---
 
+## Daily backup (one-time setup)
+
+In the Apps Script editor, pick **setupDailyBackup** in the function list at the top and click **Run**.
+Google asks for permission to use Drive and to run on a schedule. Allow it.
+
+From then on a copy of the whole Google Sheet is saved every night (around 23:00) in the Drive folder
+**Burmelin Backups**. The newest 30 copies are kept. Older ones go to Drive's trash.
+To restore, open a backup copy and copy the tab you need back into the main sheet.
+
+## Stock History tab
+
+Every stock change is written to the **Stock History** tab: sales, transfers, counts, Palladium edits,
+Mark Done, and numbers typed straight into the sheet. Each row records the time, store, item, change,
+before → after, the reason, and who made it. Don't edit or sort this tab. The app reads it from the bottom up.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
