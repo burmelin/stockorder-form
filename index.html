@@ -101,6 +101,42 @@ tbody tr:last-child td{border-bottom:none}
 .btn-submit:hover{background:#15803d}
 .btn-submit:disabled{background:#94a3b8;cursor:not-allowed}
 .loading-bar{display:none;text-align:center;padding:12px;color:#4f46e5;font-weight:500;font-size:.9rem}
+/* Loading scenes: small themed animations while data loads (still for reduced-motion) */
+.ld{display:flex;flex-direction:column;align-items:center;gap:12px;padding:34px 12px;color:#64748b;font-size:.88rem;font-weight:600;animation:ldIn .25s ease-out}
+.ld.ld-sm{padding:14px 12px;gap:6px;font-size:.8rem}
+.ld-scene{position:relative;width:180px;height:64px;font-size:28px;line-height:1}
+.ld-sm .ld-scene{transform:scale(.7);height:46px}
+.ld-scene span{position:absolute}
+@keyframes ldIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ld-stock .ld-shelf{left:14px;right:14px;bottom:4px;height:5px;border-radius:3px;background:#cbd5e1}
+.ld-stock .b{bottom:9px;animation:ldDrop 1.8s ease-in infinite}
+.ld-stock .b1{left:34px}.ld-stock .b2{left:76px;animation-delay:.25s}.ld-stock .b3{left:118px;animation-delay:.5s}
+@keyframes ldDrop{0%{transform:translateY(-58px);opacity:0}22%{transform:translateY(0);opacity:1}28%{transform:translateY(-7px)}34%,78%{transform:translateY(0);opacity:1}100%{transform:translateY(0);opacity:0}}
+.ld-move .s1{left:0;bottom:4px}.ld-move .s2{right:0;bottom:4px}
+.ld-move .b{left:38px;bottom:12px;font-size:22px;animation:ldMove 1.6s ease-in-out infinite}
+@keyframes ldMove{0%{transform:translate(0,0);opacity:0}15%{opacity:1}50%{transform:translate(52px,-16px)}85%{opacity:1}100%{transform:translate(104px,0);opacity:0}}
+.ld-search .b{bottom:4px;font-size:22px;opacity:.5}
+.ld-search .m{top:2px;left:4px;animation:ldScan 1.9s ease-in-out infinite alternate}
+@keyframes ldScan{from{transform:translateX(0) rotate(-12deg)}to{transform:translateX(130px) rotate(12deg)}}
+.ld-orders .road{left:0;right:0;bottom:2px;height:3px;background:repeating-linear-gradient(90deg,#cbd5e1 0 14px,transparent 14px 24px);animation:ldRoad .5s linear infinite}
+.ld-orders .t{bottom:7px;left:0;animation:ldDrive 2.2s linear infinite}
+@keyframes ldDrive{0%{transform:translateX(-34px) scaleX(-1)}100%{transform:translateX(190px) scaleX(-1)}}
+@keyframes ldRoad{to{background-position:-24px 0}}
+.ld-sell .r{left:74px;bottom:2px}
+.ld-sell .c{left:82px;bottom:16px;font-size:18px;opacity:0;animation:ldCoin 1.5s ease-out infinite}
+.ld-sell .c2{animation-delay:.5s}.ld-sell .c3{animation-delay:1s}
+@keyframes ldCoin{0%{transform:translate(0,0);opacity:0}20%{opacity:1}100%{transform:translate(var(--dx,30px),-44px);opacity:0}}
+.ld-sell .c1{--dx:-34px}.ld-sell .c2{--dx:4px}.ld-sell .c3{--dx:38px}
+.panel.active{animation:ldIn .18s ease-out}
+.pal-grp{margin-bottom:10px;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;background:#fff}
+.pal-grp>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:4px 8px;flex-wrap:wrap;background:#1a1a2e;color:#fff;padding:10px 36px 10px 14px;position:relative}
+.pal-grp>summary::-webkit-details-marker{display:none}
+.pal-grp>summary::after{content:"›";position:absolute;right:14px;top:50%;margin-top:-.6em;color:rgba(255,255,255,.6);font-size:1.2rem;line-height:1.2;transition:transform .15s}
+.pal-grp[open]>summary::after{transform:rotate(90deg)}
+.pal-grp-name{font-weight:700;font-size:.92rem}
+.pal-grp-pend{background:#f59e0b;color:#1a1a2e;font-size:.7rem;font-weight:800;padding:2px 8px;border-radius:10px}
+.pal-grp-meta{width:100%;font-size:.72rem;color:rgba(255,255,255,.6)}
+@media (prefers-reduced-motion:reduce){.ld,.ld *,.panel.active{animation:none!important}.ld-scene span{opacity:1!important}}
 .spinner{display:inline-block;width:15px;height:15px;border:2px solid #c7d2fe;border-top-color:#4f46e5;border-radius:50%;animation:spin .7s linear infinite;margin-right:7px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -325,7 +361,7 @@ tbody tr:last-child td{border-bottom:none}
         <div id="pal-order-filter-tabs">
           <button class="pal-filter-tab active" data-pf="all" onclick="palFilterOrders('all')">All <span id="pal-cnt-all">0</span></button>
           <button class="pal-filter-tab" data-pf="Pending" onclick="palFilterOrders('Pending')">Pending <span id="pal-cnt-pending">0</span></button>
-          <button class="pal-filter-tab" data-pf="Invoiced" onclick="palFilterOrders('Invoiced')">Invoiced <span id="pal-cnt-invoiced">0</span></button>
+          <button class="pal-filter-tab" data-pf="Invoiced" onclick="palFilterOrders('Invoiced')" hidden>Invoiced <span id="pal-cnt-invoiced">0</span></button>
           <button class="pal-filter-tab" data-pf="Completed" onclick="palFilterOrders('Completed')">Done <span id="pal-cnt-completed">0</span></button>
         </div>
         <div id="sp-body"></div>
@@ -555,6 +591,18 @@ function printOverlay() {
     showToast('Sharing not supported — open in Safari to print'); return;
   }
   navigator.share({ files: [PDF_FILE], title: PDF_NAME }).catch(function(){});
+}
+
+// ── LOADING SCENES ───────────────────────────────────────────────
+function loaderHtml(kind, text, small) {
+  var scenes = {
+    stock:  '<span class="ld-shelf"></span><span class="b b1">📦</span><span class="b b2">📦</span><span class="b b3">📦</span>',
+    move:   '<span class="s1">🏬</span><span class="b">📦</span><span class="s2">🏪</span>',
+    search: '<span class="b" style="left:20px">📦</span><span class="b" style="left:78px">📦</span><span class="b" style="left:136px">📦</span><span class="m">🔍</span>',
+    orders: '<span class="road"></span><span class="t">🚚</span>',
+    sell:   '<span class="r">🧾</span><span class="c c1">🪙</span><span class="c c2">🪙</span><span class="c c3">🪙</span>'
+  };
+  return '<div class="ld ld-' + kind + (small ? ' ld-sm' : '') + '" role="status"><div class="ld-scene" aria-hidden="true">' + scenes[kind] + '</div><div>' + text + '</div></div>';
 }
 
 // ── DATES ─────────────────────────────────────────────────────────
@@ -795,7 +843,7 @@ function loadStoreStock() {
   if (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[myStore]) { switchStoreTab(CURRENT_TAB || 'mystock'); return; }
   var cached = cacheGet('bundle_' + myStore);
   if (cached) { applyStoreBundle(cached); switchStoreTab(CURRENT_TAB || 'mystock'); }
-  else document.getElementById('sp-body').innerHTML = '<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Loading stock…</div>';
+  else document.getElementById('sp-body').innerHTML = loaderHtml('stock', 'Loading your stock…');
   setUpdating(true);
   google.script.run
     .withSuccessHandler(function(r) {
@@ -1042,7 +1090,7 @@ function renderSellTab() {
     + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'
     + '<span style="font-weight:800;color:#1a1a2e;font-size:.95rem">🧾 Today\'s Sales</span>'
     + '<span id="sell-hist-total" style="font-size:.78rem;color:#888"></span></div>'
-    + '<div id="sell-history"><div style="text-align:center;color:#aaa;padding:16px;font-size:.85rem">Loading…</div></div>'
+    + '<div id="sell-history">' + loaderHtml('sell', 'Loading today\'s sales…', true) + '</div>'
     + '</div>';
   renderSellLines();
   var first = document.getElementById('sl-code-0'); if (first) first.focus();
@@ -1466,7 +1514,7 @@ function renderOtherStores() {
   if (!el) return;
   var allLoaded = ALL_STORES.every(function(s){ return ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s]; });
   if (!allLoaded) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Loading stores…</div>';
+    el.innerHTML = loaderHtml('search', 'Searching all stores…');
     loadAllRetail(function() {
       CS_ROWS = null;
       if (CURRENT_PANEL !== 'stores') return;
@@ -1939,7 +1987,7 @@ function palFilterOrders(filter) {
 }
 
 function palLoadOrders() {
-  document.getElementById('sp-body').innerHTML='<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Loading orders…</div>';
+  document.getElementById('sp-body').innerHTML=loaderHtml('orders', 'Loading orders…');
   google.script.run
     .withSuccessHandler(function(r){
       if(r.success){ ALL_ORDERS=r.orders||[]; palUpdateCounts(); palFilterOrders(PAL_FILTER); }
@@ -1959,26 +2007,40 @@ function palRenderOrders(filter) {
   palFilterOrders(filter);
 }
 
+// Newest first: the order ID carries the date (ORD-YYMMDD-…), the saved date carries the time
+function orderSortKey(o) {
+  var m = /^ORD-(\d{6})-/.exec(o.orderId || '');
+  var t = /(\d{1,2}):(\d{2})/.exec(orderDateText(o));
+  return (m ? m[1] : '000000') + (t ? ('0' + t[1]).slice(-2) + t[2] : '0000');
+}
+
+// One group per store or customer; "Bicasso2", "BICASSO 2" and "Bicasso 2" are the same group
 function palShowOrderList(list, filter) {
-  var el=document.getElementById('sp-body');
-  if(!list.length){ el.innerHTML='<div class="sp-empty">No '+(filter==='all'?'':filter.toLowerCase()+' ')+'orders.</div>'; return; }
-  var groups={},gOrder=[];
-  list.forEach(function(o){ var n=o.customerName||'Unknown'; if(!groups[n]){ groups[n]=[]; gOrder.push(n); } groups[n].push(o); });
-  var html='';
-  gOrder.forEach(function(name){
-    var orders=groups[name],first=orders[0];
-    html+='<div style="margin-bottom:12px">'
-      +'<div style="background:#1a1a2e;color:#fff;padding:10px 14px;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between">'
-      +'<span style="font-weight:700;font-size:.9rem">👤 '+name+'</span>'
-      +'<div style="display:flex;align-items:center;gap:8px;font-size:.78rem">'
-      +(first.customerPhone?'<span style="color:rgba(255,255,255,.7)">'+first.customerPhone+'</span>':'')
-      +'<span style="background:rgba(255,255,255,.18);padding:2px 8px;border-radius:10px;color:#fff;font-weight:700">'+orders.length+'</span>'
-      +'</div></div>'
-      +'<div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;overflow:hidden">'
-      +orders.map(function(o){ return palBuildOrderCard(o); }).join('')
-      +'</div></div>';
+  var el = document.getElementById('sp-body');
+  if (!list.length) { el.innerHTML = '<div class="sp-empty">No ' + (filter === 'all' ? '' : filter.toLowerCase() + ' ') + 'orders.</div>'; return; }
+  var norm = function(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); };
+  var groups = {}, keys = [];
+  list.slice().sort(function(a, b) { return orderSortKey(b) < orderSortKey(a) ? -1 : 1; }).forEach(function(o) {
+    var name = (o.orderType === 'store' && o.shopName) ? o.shopName : (o.customerName || 'Unknown');
+    var k = norm(name);
+    if (!groups[k]) {
+      var store = ALL_STORES.filter(function(s) { return norm(s) === k; })[0];
+      groups[k] = { name: store || name, isStore: !!store, orders: [], pending: 0 };
+      keys.push(k);
+    }
+    groups[k].orders.push(o);
+    if (o.status !== 'Completed') groups[k].pending++;
   });
-  el.innerHTML=html;
+  el.innerHTML = keys.map(function(k) {
+    var g = groups[k], last = orderDateText(g.orders[0]).split(',')[0];
+    var open = g.pending > 0 || filter !== 'all';
+    return '<details class="pal-grp"' + (open ? ' open' : '') + '>'
+      + '<summary><span class="pal-grp-name">' + (g.isStore ? '🏪 ' : '👤 ') + g.name + '</span>'
+      + (g.pending ? '<span class="pal-grp-pend">' + g.pending + ' pending</span>' : '')
+      + '<span class="pal-grp-meta">' + g.orders.length + ' order' + (g.orders.length !== 1 ? 's' : '') + ' · last ' + last + '</span></summary>'
+      + '<div class="pal-grp-body">' + g.orders.map(function(o) { return palBuildOrderCard(o); }).join('') + '</div>'
+      + '</details>';
+  }).join('');
 }
 
 function palBuildOrderCard(order) {
@@ -2125,7 +2187,7 @@ function palShowStock() {
   if(STOCK_DATA){ palRenderStockCats(); return; }
   var cached=cacheGet('palinv');
   if(cached){ STOCK_DATA=cached; palRenderStockCats(); }
-  else el.innerHTML='<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Loading stock…</div>';
+  else el.innerHTML=loaderHtml('stock', 'Loading Palladium stock…');
   setUpdating(true);
   google.script.run
     .withSuccessHandler(function(r){
@@ -2168,7 +2230,7 @@ function palLoadRetail(){
   var el=document.getElementById('pal-retail-content'); if(!el) return;
   var RSTORES=['Bicasso 1','Bicasso 2','Bicasso Nana'];
   if(ALL_RETAIL_STOCK&&RSTORES.every(function(s){ return ALL_RETAIL_STOCK[s]; })){ palRenderRetailView(); return; }
-  el.innerHTML='<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Loading retail stock…</div>';
+  el.innerHTML=loaderHtml('move', 'Loading store stock…');
   loadAllRetail(function(){
     if(CURRENT_PANEL!=='order') return;
     if(document.getElementById('pal-retail-list')) palRefreshRetailList(); else palRenderRetailView();
@@ -2296,7 +2358,7 @@ function palShowPlan() {
   var allLoaded = STOCK_DATA && ALL_RETAIL_STOCK &&
     ['Bicasso 1','Bicasso 2','Bicasso Nana'].every(function(s){ return ALL_RETAIL_STOCK[s]; });
   if (allLoaded) { palRenderPlan(); return; }
-  el.innerHTML = '<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Loading data…</div>';
+  el.innerHTML = loaderHtml('stock', 'Adding up all 4 stores…');
   loadAllRetail(function() {
     if (CURRENT_PANEL !== 'plan') return;
     if (!STOCK_DATA) {
@@ -2541,7 +2603,7 @@ function renderReorderTab() {
   var el = document.getElementById('restock-body');
   if (!el) return;
   if (!inv) {
-    el.innerHTML = '<div class="sp-empty">Loading stock data…</div>';
+    el.innerHTML = loaderHtml('stock', 'Loading your stock…');
     ALL_RETAIL_STOCK = null;
     loadStoreStock();
     return;
@@ -2549,7 +2611,7 @@ function renderReorderTab() {
 
   // Palladium's size/color matrix is the reference — load it first
   if (!INVENTORY_LOADED) {
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#888"><div class="spinner"></div><br><br>Checking Palladium stock…</div>';
+    el.innerHTML = loaderHtml('move', 'Checking what Palladium has…');
     google.script.run
       .withSuccessHandler(function(r) {
         if (r && r.success) {
