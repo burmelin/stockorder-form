@@ -754,7 +754,7 @@ function doStoreLogin() {
           try { localStorage.setItem('burmelin_session', JSON.stringify(SESSION_STORE)); } catch(e){}
           showApp();
         } else {
-          errEl.textContent = '❌ Wrong password. Please try again.';
+          errEl.textContent = '❌ ' + (result.showError ? result.error : 'Wrong password. Please try again.');
         }
       })
       .withFailureHandler(function() {
@@ -772,7 +772,7 @@ function doStoreLogin() {
           if (result.stores) { applyStoreBundle(result); cacheSet('bundle_' + storeName, result); }
           showApp();
         } else {
-          errEl.textContent = '❌ Wrong passcode. Please try again.';
+          errEl.textContent = '❌ ' + (result.showError ? result.error : 'Wrong passcode. Please try again.');
         }
       })
       .withFailureHandler(function() {

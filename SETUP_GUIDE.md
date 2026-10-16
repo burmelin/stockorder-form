@@ -126,14 +126,13 @@ https://script.google.com/macros/s/XXXXXXXXXX/exec
 
 ## After you make code changes
 
-Every time you edit the code, you must **re-deploy**:
+Server code changes deploy themselves: when a change to `apps-script/` is merged into `main`
+on GitHub, the **Deploy Apps Script** action makes it live at the same URL. Don't edit the
+code in the Apps Script editor (the next deploy overwrites it). One-time setup and details:
+README → **Automatic Apps Script deploys**.
 
-1. Click **Deploy** → **Manage deployments**
-2. Click the pencil ✏ icon
-3. Change Version to **"New version"**
-4. Click **Deploy**
-
-The URL stays the same — no need to resend links.
+If deploys aren't set up yet, re-deploy by hand: **Deploy** → **Manage deployments** → pencil ✏ →
+Version **"New version"** → **Deploy**. The URL stays the same, so there's no need to resend links.
 
 ---
 

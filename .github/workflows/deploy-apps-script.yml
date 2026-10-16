@@ -1,0 +1,71 @@
+# Pushes apps-script/ to Google Apps Script and points the EXISTING web app deployment at the
+# new version, so the web app URL in index.html never changes. Needs the repository secret
+# CLASPRC_JSON (the contents of %USERPROFILE%\.clasprc.json after `clasp login`). See README.
+name: Deploy Apps Script
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/**'
+      - '.github/workflows/deploy-apps-script.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-apps-script
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # The web app deployment the app calls (the id inside API_URL in index.html). Never create a new one.
+  DEPLOYMENT_ID: AKfycby-5YfvPpePbg1ni36sL5AI-DelH_I5qHgm1mkmAKqBSsopJPn-YWi24kXDMPMFkD-v
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install clasp
+        run: npm i -g @google/clasp@3.4.1
+
+      - name: Write clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::The repository secret CLASPRC_JSON is missing. Add it under Settings > Secrets and variables > Actions (see README)."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+
+      - name: Push code, create a version, update the web app
+        working-directory: apps-script
+        run: |
+          set -euo pipefail
+          DESC="$(git log -1 --format=%s | cut -c1-80) ($(git rev-parse --short HEAD))"
+
+          clasp push --force
+
+          OUT="$(clasp create-version "$DESC")"
+          echo "$OUT"
+          VERSION="$(printf '%s\n' "$OUT" | grep -oE 'Created version [0-9]+' | grep -oE '[0-9]+' | tail -n 1 || true)"
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read the new version number from clasp's output."
+            exit 1
+          fi
+
+          clasp update-deployment "$DEPLOYMENT_ID" -V "$VERSION" -d "$DESC"
+          echo "Deployed version $VERSION to $DEPLOYMENT_ID"
+
+      - name: Remove clasp credentials
+        if: always()
+        run: rm -f ~/.clasprc.json

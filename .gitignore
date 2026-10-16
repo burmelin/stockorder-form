@@ -1,5 +1,5 @@
 # Google Apps Script local config (machine-specific path + auth)
-.clasp.json
+/.clasp.json
 .clasprc.json
 
 # Node
