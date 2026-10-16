@@ -4,7 +4,7 @@
   "description": "Stock, sales and orders for Burmelin stores",
   "start_url": "/",
   "scope": "/",
-  "display": "standalone",
+  "display": "minimal-ui",
   "orientation": "portrait",
   "background_color": "#0054A5",
   "theme_color": "#003D7A",
