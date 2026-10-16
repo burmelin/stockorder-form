@@ -126,8 +126,80 @@ var READ_ACTIONS = { getInventory: 1, getAllRetailStock: 1, getStoreStock: 1, ge
                      getSalesToday: 1, getStockHistory: 1, getSalesReport: 1 };
 function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isOwner(b.auth) || isStorePass(b.authStore, b.auth)); }
 
+// ─── 30-DAY SIGN-IN TOKENS ───────────────────────────────────
+// After logging in, a phone keeps a signed token instead of the password:
+//   "v1.<base64 {l: login, t: issued ms, f: password fingerprint}>.<HMAC signature>"
+// The secret lives in Script properties (TOKEN_SECRET, created on first use). A token is
+// renewed when it's over a day old, so a phone in daily use stays signed in; one unused for
+// 30 days must log in again. Changing that login's password changes the fingerprint, which
+// signs every phone using the old password out.
+var TOKEN_DAYS = 30;
+var DAY_MS = 24 * 60 * 60 * 1000;
+var LOGIN_ACTIONS = { verifyRetailStore: 1, getOrders: 1, verifyOwner: 1 };  // getOrders is Palladium's login
+
+function passwordOf(login) {
+  return login === 'Palladium' ? EMPLOYEE_PASS : login === 'Owner' ? OWNER_PASS : (RETAIL_PASSWORDS[login] || null);
+}
+var tokenSecret_ = null;
+function tokenSecret() {
+  if (tokenSecret_) return tokenSecret_;
+  tokenSecret_ = PASSWORD_PROPS.TOKEN_SECRET || null;
+  if (!tokenSecret_) {
+    var lock = LockService.getScriptLock();
+    lock.waitLock(25000);
+    try {
+      var props = PropertiesService.getScriptProperties();
+      tokenSecret_ = props.getProperty('TOKEN_SECRET');
+      if (!tokenSecret_) {
+        tokenSecret_ = Utilities.getUuid() + Utilities.getUuid();
+        props.setProperty('TOKEN_SECRET', tokenSecret_);
+      }
+    } finally { lock.releaseLock(); }
+  }
+  return tokenSecret_;
+}
+function tokenSign(text) {
+  return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(text, tokenSecret()));
+}
+function passwordFingerprint(password) { return tokenSign('pw|' + password).slice(0, 16); }
+
+function issueToken(login) {
+  var password = passwordOf(login);
+  if (!password) return null;
+  var head = 'v1.' + Utilities.base64EncodeWebSafe(JSON.stringify({ l: login, t: Date.now(), f: passwordFingerprint(password) }));
+  return head + '.' + tokenSign(head);
+}
+// {l, t} for a valid token, otherwise null
+function readToken(token) {
+  var parts = String(token || '').split('.');
+  if (parts.length !== 3 || parts[0] !== 'v1') return null;
+  if (tokenSign(parts[0] + '.' + parts[1]) !== parts[2]) return null;
+  var s;
+  try { s = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString()); } catch (e) { return null; }
+  if (!s || !s.l || !(s.t > 0) || Date.now() - s.t > TOKEN_DAYS * DAY_MS) return null;
+  var password = passwordOf(s.l);
+  if (!password || passwordFingerprint(password) !== s.f) return null;
+  return { l: s.l, t: s.t };
+}
+// The login a successful login action was for
+function loginOfAction(action, body) {
+  return action === 'getOrders' ? 'Palladium' : action === 'verifyOwner' ? 'Owner' : (body && body.storeName);
+}
+
 // Central API router — maps an action name to the existing functions
 function handleApi(action, params, body) {
+  // A token stands in for the password: the functions below still receive auth/password as before
+  var renewFor = null;
+  if (body && body.token) {
+    var who = readToken(body.token);
+    if (!who) return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
+    var password = passwordOf(who.l);
+    body.auth = password; body.authStore = who.l;
+    if (body.password == null) body.password = password;
+    if (Date.now() - who.t > DAY_MS) renewFor = who.l;
+  } else if (body && body.auth && body.authStore && passwordOf(body.authStore) === body.auth) {
+    renewFor = body.authStore;   // a phone still saving the password: switch it to a token
+  }
   if (READ_ACTIONS[action] && !isLoggedIn(body)) {
     return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
   }
@@ -161,6 +233,12 @@ function handleApi(action, params, body) {
     case 'adminSaveShop':        out = adminSaveShop(body, body.shop); break;
     case 'adminSaveSettings':    out = adminSaveSettings(body, body.settings); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
+  }
+  // Hand the phone a (new) token after a password login, a switch-over, or a renewal
+  if (!renewFor && !(body && body.token) && LOGIN_ACTIONS[action]) renewFor = loginOfAction(action, body);
+  if (renewFor && out && typeof out === 'object' && out.success === true) {
+    var token = issueToken(renewFor);
+    if (token) out._token = token;
   }
   return jsonOut(out);
 }

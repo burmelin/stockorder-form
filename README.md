@@ -90,6 +90,19 @@ Notes:
 - The **Logins** tab and its **Reset Password** column are optional. Without them, logins work
   as before.
 
+## Staying signed in, and opening fast
+
+- **30-day sign-in:** after logging in, a phone keeps a signed token instead of the password. The
+  server renews it when it's over a day old, so a phone used daily stays signed in; a phone unused
+  for 30 days logs in again. Changing a login's password (Logins tab) signs out every phone using
+  the old one. The signing key is the Script property `TOKEN_SECRET`, created automatically.
+  Deleting it signs every phone out.
+- **Wake-up:** the app sends a tiny request as soon as it opens (and when it comes back after a
+  few minutes), so Google's sleeping server is awake by the time someone logs in or taps.
+- **Opens instantly:** `sw.js` keeps the app on the phone. The saved copy opens straight away and
+  a fresh copy loads in the background; after a release the app offers **Reload**, and the next
+  open uses the new version anyway. Stock and orders are never served from this copy.
+
 ## Admin page (owner)
 
 On the login screen choose **Owner (Admin)**. The owner password is the Script property
