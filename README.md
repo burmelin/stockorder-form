@@ -112,8 +112,7 @@ On the login screen choose **Owner (Admin)**. The owner password is the Script p
 - **Staff:** name, the places each person can check in at, their day-off rule (flexible days
   per month, or the same weekday every week), and their password. Passwords are saved as a
   salted hash in the **Staff** tab, so nobody can read them back.
-- **Shops:** opening hours, and the location used for check-in. Stand inside the shop and tap
-  **Use my location here**. Saved in the **Shops** tab.
+- **Shops:** opening hours. Saved in the **Shops** tab.
 - **Rules:** minutes of grace before a check-in counts as late. Saved in the **Settings** tab.
 
 Edit these from the Admin page, not in the sheet. Never edit the password hash or salt
