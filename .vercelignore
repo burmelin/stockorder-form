@@ -1,0 +1,3 @@
+# Not part of the website: keep the Apps Script server code and CI files off Vercel
+apps-script
+.github

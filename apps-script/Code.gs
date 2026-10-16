@@ -1,6 +1,7 @@
 // ============================================================
 //  ORDER MANAGEMENT SYSTEM — Code.gs
-//  Paste this into your Google Apps Script editor
+//  Deployed automatically by GitHub Actions when merged into main
+//  (see README → "Automatic Apps Script deploys"); don't edit it in the Apps Script editor
 // ============================================================
 
 // ─── CONFIGURATION ──────────────────────────────────────────
@@ -23,6 +24,47 @@ var RETAIL_PASSWORDS = {
 // A password only matches when it has actually been set (an unset password never lets anyone in)
 function isEmployee(p) { return !!EMPLOYEE_PASS && p === EMPLOYEE_PASS; }
 function isStorePass(store, p) { return !!RETAIL_PASSWORDS[store] && p === RETAIL_PASSWORDS[store]; }
+
+// ─── RESET A PASSWORD FROM THE SHEET ────────────────────────
+// Optional "Logins" tab: a "Login" column (Palladium, Bicasso 1, …) and a "Reset Password" column.
+// Type a new password in Reset Password, then log in with it: it becomes the real password
+// (saved in Script properties like the others) and the cell is cleared. Devices still using
+// the old password are asked to log in again on their next request.
+var LOGINS_SHEET = 'Logins';
+var PASSWORD_PROP_OF = { 'Palladium': 'EMPLOYEE_PASS', 'Bicasso 1': 'PASS_BICASSO_1',
+                         'Bicasso 2': 'PASS_BICASSO_2', 'Bicasso Nana': 'PASS_BICASSO_NANA' };
+var RESET_MIN_LENGTH = 6;
+
+// null = no reset for this login and password; {ok:true} = applied; {error} = refused
+function applyResetPassword(login, typed) {
+  if (!typed || !PASSWORD_PROP_OF[login]) return null;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LOGINS_SHEET);
+  if (!sheet || sheet.getLastRow() < 2) return null;
+  var data = sheet.getDataRange().getValues();
+  var head = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  var loginCol = head.indexOf('login'), resetCol = head.indexOf('reset password');
+  if (loginCol < 0 || resetCol < 0) return null;            // column is optional
+  for (var r = 1; r < data.length; r++) {
+    if (String(data[r][loginCol]).trim() !== login) continue;
+    var wanted = String(data[r][resetCol]);
+    if (!wanted || typed !== wanted) return null;
+    if (wanted.length < RESET_MIN_LENGTH) {
+      return { error: 'The new password typed in the sheet needs at least ' + RESET_MIN_LENGTH + ' characters' };
+    }
+    var lock = LockService.getScriptLock();
+    try { lock.waitLock(25000); } catch (e) { return { error: 'Server busy — please try again.' }; }
+    try {
+      PropertiesService.getScriptProperties().setProperty(PASSWORD_PROP_OF[login], wanted);
+      if (login === 'Palladium') EMPLOYEE_PASS = wanted; else RETAIL_PASSWORDS[login] = wanted;
+      sheet.getRange(r + 1, resetCol + 1).clearContent();
+      SpreadsheetApp.flush();
+    } finally {
+      lock.releaseLock();
+    }
+    return { ok: true };
+  }
+  return null;
+}
 // ────────────────────────────────────────────────────────────
 
 // Palladium's stock tab, by its current name or the old one (names compared without stray spaces)
@@ -264,7 +306,9 @@ function submitOrder(orderData) {
 // ─── GET ALL ORDERS (called from Employee dashboard) ──────────
 function getOrders(password) {
   if (!isEmployee(password)) {
-    return { success: false, error: 'Wrong password. Please try again.' };
+    var reset = applyResetPassword('Palladium', password);
+    if (reset && reset.error) return { success: false, error: reset.error, showError: true };
+    if (!reset) return { success: false, error: 'Wrong password. Please try again.' };
   }
   try {
     var ss    = SpreadsheetApp.getActiveSpreadsheet();
@@ -898,8 +942,14 @@ function getSalesToday(storeName) {
 // withData: also return the store's stock + Palladium's inventory, so login needs one request
 function verifyRetailStore(storeName, password, withData) {
   if (RETAIL_STORES.indexOf(storeName) === -1) return { success: false, error: 'Unknown store.' };
-  if (!RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Password not set up for ' + storeName + ' (Script properties).' };
-  if (!isStorePass(storeName, password)) return { success: false, error: 'Wrong password.' };
+  if (!isStorePass(storeName, password)) {
+    var reset = applyResetPassword(storeName, password);
+    if (reset && reset.error) return { success: false, error: reset.error, showError: true };
+    if (!reset) {
+      if (!RETAIL_PASSWORDS[storeName]) return { success: false, error: 'Password not set up for ' + storeName + ' (Script properties).' };
+      return { success: false, error: 'Wrong password.' };
+    }
+  }
   if (!withData) return { success: true };
   var bundle = getStoreBundle(storeName);
   bundle.success = true;
