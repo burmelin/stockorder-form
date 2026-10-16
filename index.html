@@ -640,6 +640,50 @@ tbody tr:last-child td{border-bottom:none}
 <script>
 // ── API SHIM ─────────────────────────────────────────────────────
 var API_URL = 'https://script.google.com/macros/s/AKfycby-5YfvPpePbg1ni36sL5AI-DelH_I5qHgm1mkmAKqBSsopJPn-YWi24kXDMPMFkD-v/exec';
+
+// ── SIGN-IN SESSION ──────────────────────────────────────────────
+// After login the phone keeps a 30-day signed token from the server instead of the password.
+// The server renews it while the app is in use, so a phone used daily stays signed in.
+function saveSession() {
+  try { localStorage.setItem('burmelin_session', JSON.stringify(SESSION_STORE)); } catch (e) {}
+}
+function keepToken(token) {
+  SESSION_STORE.token = token;
+  delete SESSION_STORE.pass;
+  saveSession();
+}
+// The session to keep after a successful login reply (an older server sends no token: keep the password)
+function startSession(session, password, reply) {
+  if (reply && reply._token) session.token = reply._token; else session.pass = password;
+  SESSION_STORE = session;
+  saveSession();
+}
+
+// ── WAKE THE SERVER EARLY ────────────────────────────────────────
+// Google lets an unused server fall asleep, and the first request then waits ~10 s. A tiny request
+// as soon as the app opens (or comes back after a while) wakes it while the person is still typing.
+var LAST_WAKE = 0;
+function wakeServer() {
+  if (Date.now() - LAST_WAKE < 4 * 60 * 1000) return;
+  LAST_WAKE = Date.now();
+  try { fetch(API_URL + '?action=getBusinessName').catch(function() {}); } catch (e) {}
+}
+wakeServer();
+document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible') wakeServer(); });
+
+// ── OPEN INSTANTLY (sw.js keeps the app on the phone) ─────────────
+// A newer version is picked up on the next open by itself; this offers it right away too.
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/sw.js').catch(function() {});
+    // Ask whether a newer version was saved while this page was opening
+    setTimeout(function() { if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('hello'); }, 3000);
+  });
+  navigator.serviceWorker.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'update-ready') showToast('A new version of the app is ready', function(){ location.reload(); }, 'Reload', 15000);
+  });
+}
+
 (function(){
   if (typeof google !== 'undefined' && google.script && google.script.run) return;
   var GET_ACTIONS = { getBusinessName:1 };
@@ -648,7 +692,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycby-5YfvPpePbg1ni36sL5AI-D
   var WRITES = { adminSaveStaff:1, adminDeleteStaff:1, adminSaveShop:1, adminSaveSettings:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
   var RETRY_OK = { verifyOwner:1, adminGet:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
   var POST_ARGS = { verifyOwner:['password'], adminGet:[], adminSaveStaff:['staff'], adminDeleteStaff:['id'], adminSaveShop:['shop'], adminSaveSettings:['settings'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
-  function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
+  function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
 
@@ -752,13 +796,13 @@ function orderDateText(order) {
 
 // ── TOAST ─────────────────────────────────────────────────────────
 var _toastTimer = null;
-function showToast(msg, retryFn) {
+function showToast(msg, retryFn, buttonLabel, ms) {
   var el = document.getElementById('app-toast');
   if (!el) return;
-  el.innerHTML = '<span>' + msg + '</span>' + (retryFn ? '<button onclick="(' + retryFn.toString() + ')()">Retry</button>' : '');
+  el.innerHTML = '<span>' + msg + '</span>' + (retryFn ? '<button onclick="(' + retryFn.toString() + ')()">' + (buttonLabel || 'Retry') + '</button>' : '');
   el.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(function(){ el.classList.remove('show'); }, retryFn ? 6000 : 3000);
+  _toastTimer = setTimeout(function(){ el.classList.remove('show'); }, ms || (retryFn ? 6000 : 3000));
 }
 
 // ── STATE ─────────────────────────────────────────────────────────
@@ -800,8 +844,7 @@ function doStoreLogin() {
       .withSuccessHandler(function(result) {
         btn.textContent = 'Enter Store'; btn.disabled = false;
         if (result && result.success) {
-          SESSION_STORE = { name: 'Owner', pass: pass, isOwner: true };
-          try { localStorage.setItem('burmelin_session', JSON.stringify(SESSION_STORE)); } catch(e){}
+          startSession({ name: 'Owner', isOwner: true }, pass, result);
           showAdmin();
         } else {
           errEl.textContent = '❌ ' + (result && result.showError ? result.error : 'Wrong password. Please try again.');
@@ -819,9 +862,8 @@ function doStoreLogin() {
       .withSuccessHandler(function(result) {
         btn.textContent = 'Enter Store'; btn.disabled = false;
         if (result.success) {
-          SESSION_STORE = { name: 'Palladium', pass: pass, isPalladium: true };
+          startSession({ name: 'Palladium', isPalladium: true }, pass, result);
           ALL_ORDERS = result.orders || [];
-          try { localStorage.setItem('burmelin_session', JSON.stringify(SESSION_STORE)); } catch(e){}
           showApp();
         } else {
           errEl.textContent = '❌ ' + (result.showError ? result.error : 'Wrong password. Please try again.');
@@ -837,8 +879,7 @@ function doStoreLogin() {
       .withSuccessHandler(function(result) {
         btn.textContent = 'Enter Store'; btn.disabled = false;
         if (result.success) {
-          SESSION_STORE = { name: storeName, pass: pass };
-          try { localStorage.setItem('burmelin_session', JSON.stringify(SESSION_STORE)); } catch(e){}
+          startSession({ name: storeName }, pass, result);
           if (result.stores) { applyStoreBundle(result); cacheSet('bundle_' + storeName, result); }
           showApp();
         } else {
@@ -2526,7 +2567,7 @@ function adminSaveRules() {
     var saved = localStorage.getItem('burmelin_session');
     if (!saved) return;
     var s = JSON.parse(saved);
-    if (!s || !s.name || !s.pass) return;
+    if (!s || !s.name || !(s.token || s.pass)) return;
     SESSION_STORE = s;
     if (s.isOwner) showAdmin(); else showApp();
   } catch(e) {}
