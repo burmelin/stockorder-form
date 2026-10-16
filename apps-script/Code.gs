@@ -1505,7 +1505,7 @@ function setupDailyBackup() {
 var STAFF_SHEET    = 'Staff';
 var STAFF_HEADERS  = ['ID', 'Name', 'Works at', 'Day off rule', 'Days off per month', 'Fixed day off', 'Password hash', 'Password salt', 'Updated'];
 var SHOPS_SHEET    = 'Shops';
-var SHOPS_HEADERS  = ['Shop', 'Opens', 'Closes', 'Latitude', 'Longitude', 'Radius (m)', 'Location accuracy (m)', 'Location set'];
+var SHOPS_HEADERS  = ['Shop', 'Opens', 'Closes'];
 var SETTINGS_SHEET = 'Settings';
 var WORK_PLACES    = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
 var WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -1568,11 +1568,7 @@ function readShops(ss) {
   }
   return WORK_PLACES.map(function(name) {
     var r = byName[name] || [];
-    var lat = parseFloat(r[3]), lng = parseFloat(r[4]);
-    return { name: name, opens: hhmm(r[1]), closes: hhmm(r[2]),
-             lat: isNaN(lat) ? null : lat, lng: isNaN(lng) ? null : lng,
-             radius: parseInt(r[5]) || 150, accuracy: parseInt(r[6]) || null,
-             locationSet: r[7] instanceof Date ? cellDateText(r[7]) : String(r[7] || '') };
+    return { name: name, opens: hhmm(r[1]), closes: hhmm(r[2]) };
   });
 }
 function readSettings(ss) {
@@ -1651,7 +1647,7 @@ function adminDeleteStaff(b, id) {
   });
 }
 
-// shop: {name, opens?, closes?, radius?, lat?, lng?, accuracy?} — only the fields given are changed
+// shop: {name, opens?, closes?} — only the fields given are changed
 function adminSaveShop(b, shop) {
   if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
   shop = shop || {};
@@ -1659,23 +1655,15 @@ function adminSaveShop(b, shop) {
   var timeOk = function(t) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(t); };
   if (shop.opens != null && !timeOk(shop.opens)) return { success: false, error: 'Opening time must look like 10:00.' };
   if (shop.closes != null && !timeOk(shop.closes)) return { success: false, error: 'Closing time must look like 22:00.' };
-  if (shop.radius != null && !(shop.radius >= 50 && shop.radius <= 1000)) return { success: false, error: 'Distance must be between 50 and 1000 metres.' };
-  if (shop.lat != null && !(typeof shop.lat === 'number' && typeof shop.lng === 'number' && Math.abs(shop.lat) <= 90 && Math.abs(shop.lng) <= 180)) return { success: false, error: 'That location is not valid.' };
   return withAdminLock(function(ss) {
     var sh = adminSheet(ss, SHOPS_SHEET, SHOPS_HEADERS);
     var names = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]).trim(); }) : [];
     var row = names.indexOf(shop.name);
     var at = row < 0 ? sh.getLastRow() + 1 : row + 2;
-    if (row < 0) sh.getRange(at, 1, 1, 6).setValues([[shop.name, '', '', '', '', 150]]);
+    if (row < 0) sh.getRange(at, 1, 1, 3).setValues([[shop.name, '', '']]);
     sh.getRange(at, 2, 1, 2).setNumberFormat('@');
     if (shop.opens != null) sh.getRange(at, 2).setValue(shop.opens);
     if (shop.closes != null) sh.getRange(at, 3).setValue(shop.closes);
-    if (shop.radius != null) sh.getRange(at, 6).setValue(Math.round(shop.radius));
-    if (shop.lat != null) {
-      sh.getRange(at, 4, 1, 2).setValues([[shop.lat, shop.lng]]);
-      sh.getRange(at, 7).setValue(shop.accuracy != null ? Math.round(shop.accuracy) : '');
-      writeStamp(sh.getRange(at, 8), new Date());
-    }
     SpreadsheetApp.flush();
     return { success: true, shops: readShops(ss) };
   });
