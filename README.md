@@ -103,21 +103,6 @@ Notes:
   a fresh copy loads in the background; after a release the app offers **Reload**, and the next
   open uses the new version anyway. Stock and orders are never served from this copy.
 
-## Admin page (owner)
-
-On the login screen choose **Owner (Admin)**. The owner password is the Script property
-`OWNER_PASS`. To set it the first time, or to change it, type it in the **Logins** tab, row
-**Owner**, and log in with it (same rules as any reset).
-
-- **Staff:** name, the places each person can check in at, their day-off rule (flexible days
-  per month, or the same weekday every week), and their password. Passwords are saved as a
-  salted hash in the **Staff** tab, so nobody can read them back.
-- **Shops:** opening hours. Saved in the **Shops** tab.
-- **Rules:** minutes of grace before a check-in counts as late. Saved in the **Settings** tab.
-
-Edit these from the Admin page, not in the sheet. Never edit the password hash or salt
-columns.
-
 ## Other features
 
 - **Stock History** tab: every stock change (sale, transfer, count, Palladium edit, Mark Done,
