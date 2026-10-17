@@ -13,11 +13,10 @@ var OLD_INVENTORY_SHEET_NAMES = ['Size Chart'];     // earlier name, still accep
 var RETAIL_STORES        = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana'];
 
 // Passwords are NOT stored in this file (it's on GitHub). Set them in the Apps Script editor:
-// Project Settings (⚙) → Script properties → EMPLOYEE_PASS, PASS_BICASSO_1, PASS_BICASSO_2, PASS_BICASSO_NANA, OWNER_PASS
+// Project Settings (⚙) → Script properties → EMPLOYEE_PASS, PASS_BICASSO_1, PASS_BICASSO_2, PASS_BICASSO_NANA
 // (or set/reset any of them from the sheet's Logins tab — see applyResetPassword)
 var PASSWORD_PROPS   = PropertiesService.getScriptProperties().getProperties();
 var EMPLOYEE_PASS    = PASSWORD_PROPS.EMPLOYEE_PASS || null;
-var OWNER_PASS       = PASSWORD_PROPS.OWNER_PASS || null;   // opens the Admin page
 var RETAIL_PASSWORDS = {
   'Bicasso 1':    PASSWORD_PROPS.PASS_BICASSO_1 || null,
   'Bicasso 2':    PASSWORD_PROPS.PASS_BICASSO_2 || null,
@@ -34,7 +33,7 @@ function isStorePass(store, p) { return !!RETAIL_PASSWORDS[store] && p === RETAI
 // the old password are asked to log in again on their next request.
 var LOGINS_SHEET = 'Logins';
 var PASSWORD_PROP_OF = { 'Palladium': 'EMPLOYEE_PASS', 'Bicasso 1': 'PASS_BICASSO_1',
-                         'Bicasso 2': 'PASS_BICASSO_2', 'Bicasso Nana': 'PASS_BICASSO_NANA', 'Owner': 'OWNER_PASS' };
+                         'Bicasso 2': 'PASS_BICASSO_2', 'Bicasso Nana': 'PASS_BICASSO_NANA' };
 var RESET_MIN_LENGTH = 6;
 
 // null = no reset for this login and password; {ok:true} = applied; {error} = refused
@@ -58,7 +57,6 @@ function applyResetPassword(login, typed) {
     try {
       PropertiesService.getScriptProperties().setProperty(PASSWORD_PROP_OF[login], wanted);
       if (login === 'Palladium') EMPLOYEE_PASS = wanted;
-      else if (login === 'Owner') OWNER_PASS = wanted;
       else RETAIL_PASSWORDS[login] = wanted;
       sheet.getRange(r + 1, resetCol + 1).clearContent();
       SpreadsheetApp.flush();
@@ -124,7 +122,7 @@ function jsonOut(value) {
 // login with every request as auth/authStore (in the request body, never in a link).
 var READ_ACTIONS = { getInventory: 1, getAllRetailStock: 1, getStoreStock: 1, getStoreBundle: 1,
                      getSalesToday: 1, getStockHistory: 1, getSalesReport: 1 };
-function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isOwner(b.auth) || isStorePass(b.authStore, b.auth)); }
+function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isStorePass(b.authStore, b.auth)); }
 
 // ─── 30-DAY SIGN-IN TOKENS ───────────────────────────────────
 // After logging in, a phone keeps a signed token instead of the password:
@@ -135,10 +133,10 @@ function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isOwner(b.auth) ||
 // signs every phone using the old password out.
 var TOKEN_DAYS = 30;
 var DAY_MS = 24 * 60 * 60 * 1000;
-var LOGIN_ACTIONS = { verifyRetailStore: 1, getOrders: 1, verifyOwner: 1 };  // getOrders is Palladium's login
+var LOGIN_ACTIONS = { verifyRetailStore: 1, getOrders: 1 };  // getOrders is Palladium's login
 
 function passwordOf(login) {
-  return login === 'Palladium' ? EMPLOYEE_PASS : login === 'Owner' ? OWNER_PASS : (RETAIL_PASSWORDS[login] || null);
+  return login === 'Palladium' ? EMPLOYEE_PASS : (RETAIL_PASSWORDS[login] || null);
 }
 var tokenSecret_ = null;
 function tokenSecret() {
@@ -183,7 +181,7 @@ function readToken(token) {
 }
 // The login a successful login action was for
 function loginOfAction(action, body) {
-  return action === 'getOrders' ? 'Palladium' : action === 'verifyOwner' ? 'Owner' : (body && body.storeName);
+  return action === 'getOrders' ? 'Palladium' : (body && body.storeName);
 }
 
 // Central API router — maps an action name to the existing functions
@@ -226,12 +224,6 @@ function handleApi(action, params, body) {
     case 'generateMasterSheet':  out = generateMasterSheet(body.password, body.targets); break;
     case 'getStockHistory':      out = getStockHistory(body, body.store, body.productId); break;
     case 'getSalesReport':       out = getSalesReport(body, body.days); break;
-    case 'verifyOwner':          out = verifyOwner(body.password); break;
-    case 'adminGet':             out = adminGet(body); break;
-    case 'adminSaveStaff':       out = adminSaveStaff(body, body.staff); break;
-    case 'adminDeleteStaff':     out = adminDeleteStaff(body, body.id); break;
-    case 'adminSaveShop':        out = adminSaveShop(body, body.shop); break;
-    case 'adminSaveSettings':    out = adminSaveSettings(body, body.settings); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
   }
   // Hand the phone a (new) token after a password login, a switch-over, or a renewal
@@ -1497,200 +1489,4 @@ function setupDailyBackup() {
   });
   ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(23).create();
   dailyBackup();
-}
-
-// ─── ADMIN: STAFF, SHOPS AND RULES (owner only) ───────────────
-// Set up in the app's Admin page; kept in three tabs so it's also readable in the sheet.
-// Staff passwords are stored as a salted SHA-256 hash, never as the password itself.
-var STAFF_SHEET    = 'Staff';
-var STAFF_HEADERS  = ['ID', 'Name', 'Works at', 'Day off rule', 'Days off per month', 'Fixed day off', 'Password hash', 'Password salt', 'Updated'];
-var SHOPS_SHEET    = 'Shops';
-var SHOPS_HEADERS  = ['Shop', 'Opens', 'Closes', 'Latitude', 'Longitude', 'Radius (m)', 'Location accuracy (m)', 'Location set'];
-var SETTINGS_SHEET = 'Settings';
-var WORK_PLACES    = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
-var WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-var STAFF_PASS_MIN = 4;
-
-function isOwner(p) { return !!OWNER_PASS && p === OWNER_PASS; }
-
-// Owner login. A first owner password can be set from the Logins tab (row "Owner").
-function verifyOwner(password) {
-  if (!isOwner(password)) {
-    var reset = applyResetPassword('Owner', password);
-    if (reset && reset.error) return { success: false, error: reset.error, showError: true };
-    if (!reset) {
-      if (!OWNER_PASS) return { success: false, error: 'No owner password yet. Type one in the Logins tab, row "Owner", then log in with it.', showError: true };
-      return { success: false, error: 'Wrong password.' };
-    }
-  }
-  return { success: true };
-}
-
-function adminSheet(ss, name, headers) {
-  var sh = ss.getSheetByName(name);
-  if (!sh) {
-    sh = ss.insertSheet(name);
-    sh.getRange(1, 1, 1, headers.length).setValues([headers])
-      .setFontWeight('bold').setBackground('#0054A5').setFontColor('#ffffff');
-    sh.setFrozenRows(1);
-  }
-  return sh;
-}
-function hashPassword(salt, password) {
-  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + '|' + password)
-    .map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
-}
-function hhmm(v) {
-  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'HH:mm');
-  var m = /^(\d{1,2}):(\d{2})/.exec(String(v || '').trim());
-  return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : '';
-}
-
-function readStaff(ss) {
-  var sh = ss.getSheetByName(STAFF_SHEET);
-  if (!sh || sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 1, sh.getLastRow() - 1, STAFF_HEADERS.length).getValues()
-    .filter(function(r) { return String(r[0]).trim() && String(r[1]).trim(); })
-    .map(function(r) {
-      return { id: String(r[0]), name: String(r[1]).trim(),
-               places: String(r[2]).split(',').map(function(s) { return s.trim(); }).filter(function(s) { return WORK_PLACES.indexOf(s) > -1; }),
-               dayOffRule: String(r[3]) === 'fixed' ? 'fixed' : 'flexible',
-               daysOffPerMonth: parseInt(r[4]) || 0, fixedDayOff: String(r[5]),
-               hasPassword: !!String(r[6]) };
-    });
-}
-function readShops(ss) {
-  var sh = ss.getSheetByName(SHOPS_SHEET), byName = {};
-  if (sh && sh.getLastRow() > 1) {
-    sh.getRange(2, 1, sh.getLastRow() - 1, SHOPS_HEADERS.length).getValues().forEach(function(r) {
-      byName[String(r[0]).trim()] = r;
-    });
-  }
-  return WORK_PLACES.map(function(name) {
-    var r = byName[name] || [];
-    var lat = parseFloat(r[3]), lng = parseFloat(r[4]);
-    return { name: name, opens: hhmm(r[1]), closes: hhmm(r[2]),
-             lat: isNaN(lat) ? null : lat, lng: isNaN(lng) ? null : lng,
-             radius: parseInt(r[5]) || 150, accuracy: parseInt(r[6]) || null,
-             locationSet: r[7] instanceof Date ? cellDateText(r[7]) : String(r[7] || '') };
-  });
-}
-function readSettings(ss) {
-  var out = { graceMinutes: 5 }, sh = ss.getSheetByName(SETTINGS_SHEET);
-  if (sh && sh.getLastRow() > 1) {
-    sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues().forEach(function(r) {
-      if (String(r[0]).trim() === 'Late grace (minutes)') out.graceMinutes = parseInt(r[1]) || 0;
-    });
-  }
-  return out;
-}
-
-function adminGet(b) {
-  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  return { success: true, staff: readStaff(ss), shops: readShops(ss), settings: readSettings(ss),
-           places: WORK_PLACES, weekdays: WEEKDAYS };
-}
-
-function withAdminLock(fn) {
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
-  try { return fn(SpreadsheetApp.getActiveSpreadsheet()); }
-  catch (e) { return { success: false, error: e.toString() }; }
-  finally { lock.releaseLock(); }
-}
-
-// s: {id?, name, places[], dayOffRule, daysOffPerMonth, fixedDayOff, password?}
-function adminSaveStaff(b, s) {
-  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
-  s = s || {};
-  var name = String(s.name || '').trim().replace(/\s+/g, ' ');
-  var places = (s.places || []).filter(function(p) { return WORK_PLACES.indexOf(p) > -1; });
-  var rule = s.dayOffRule === 'fixed' ? 'fixed' : 'flexible';
-  var perMonth = parseInt(s.daysOffPerMonth); if (isNaN(perMonth)) perMonth = 2;
-  var fixedDay = String(s.fixedDayOff || '');
-  var password = s.password == null ? '' : String(s.password);
-  if (!name) return { success: false, error: 'Enter a name.' };
-  if (name.length > 40) return { success: false, error: 'That name is too long.' };
-  if (!places.length) return { success: false, error: 'Choose at least one place this person works.' };
-  if (rule === 'flexible' && (perMonth < 0 || perMonth > 15)) return { success: false, error: 'Days off per month must be between 0 and 15.' };
-  if (rule === 'fixed' && WEEKDAYS.indexOf(fixedDay) === -1) return { success: false, error: 'Choose the fixed day off.' };
-  if (password && password.length < STAFF_PASS_MIN) return { success: false, error: 'The password needs at least ' + STAFF_PASS_MIN + ' characters.' };
-  return withAdminLock(function(ss) {
-    var sh = adminSheet(ss, STAFF_SHEET, STAFF_HEADERS);
-    var data = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, STAFF_HEADERS.length).getValues() : [];
-    var row = -1;
-    for (var i = 0; i < data.length; i++) {
-      if (s.id && String(data[i][0]) === String(s.id)) row = i;
-      else if (String(data[i][1]).trim().toLowerCase() === name.toLowerCase()) return { success: false, error: 'There is already someone called ' + name + '.' };
-    }
-    if (s.id && row < 0) return { success: false, error: 'That employee no longer exists. Reload Admin.' };
-    if (row < 0 && !password) return { success: false, error: 'Set a password for the new employee.' };
-    var id = row < 0 ? 'E' + Utilities.getUuid().replace(/-/g, '').slice(0, 10) : String(data[row][0]);
-    var hash = row < 0 ? '' : String(data[row][6]), salt = row < 0 ? '' : String(data[row][7]);
-    if (password) { salt = Utilities.getUuid(); hash = hashPassword(salt, password); }
-    var values = [id, name, places.join(', '), rule, rule === 'flexible' ? perMonth : '', rule === 'fixed' ? fixedDay : '', hash, salt, new Date()];
-    var at = row < 0 ? sh.getLastRow() + 1 : row + 2;
-    sh.getRange(at, 1, 1, values.length).setValues([values]);
-    sh.getRange(at, 9).setNumberFormat(DATE_FMT);
-    SpreadsheetApp.flush();
-    return { success: true, staff: readStaff(ss) };
-  });
-}
-
-function adminDeleteStaff(b, id) {
-  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
-  return withAdminLock(function(ss) {
-    var sh = ss.getSheetByName(STAFF_SHEET);
-    if (!sh || sh.getLastRow() < 2) return { success: false, error: 'Employee not found.' };
-    var ids = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
-    for (var i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]) === String(id)) { sh.deleteRow(i + 2); return { success: true, staff: readStaff(ss) }; }
-    }
-    return { success: false, error: 'Employee not found.' };
-  });
-}
-
-// shop: {name, opens?, closes?, radius?, lat?, lng?, accuracy?} — only the fields given are changed
-function adminSaveShop(b, shop) {
-  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
-  shop = shop || {};
-  if (WORK_PLACES.indexOf(shop.name) === -1) return { success: false, error: 'Unknown shop.' };
-  var timeOk = function(t) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(t); };
-  if (shop.opens != null && !timeOk(shop.opens)) return { success: false, error: 'Opening time must look like 10:00.' };
-  if (shop.closes != null && !timeOk(shop.closes)) return { success: false, error: 'Closing time must look like 22:00.' };
-  if (shop.radius != null && !(shop.radius >= 50 && shop.radius <= 1000)) return { success: false, error: 'Distance must be between 50 and 1000 metres.' };
-  if (shop.lat != null && !(typeof shop.lat === 'number' && typeof shop.lng === 'number' && Math.abs(shop.lat) <= 90 && Math.abs(shop.lng) <= 180)) return { success: false, error: 'That location is not valid.' };
-  return withAdminLock(function(ss) {
-    var sh = adminSheet(ss, SHOPS_SHEET, SHOPS_HEADERS);
-    var names = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]).trim(); }) : [];
-    var row = names.indexOf(shop.name);
-    var at = row < 0 ? sh.getLastRow() + 1 : row + 2;
-    if (row < 0) sh.getRange(at, 1, 1, 6).setValues([[shop.name, '', '', '', '', 150]]);
-    sh.getRange(at, 2, 1, 2).setNumberFormat('@');
-    if (shop.opens != null) sh.getRange(at, 2).setValue(shop.opens);
-    if (shop.closes != null) sh.getRange(at, 3).setValue(shop.closes);
-    if (shop.radius != null) sh.getRange(at, 6).setValue(Math.round(shop.radius));
-    if (shop.lat != null) {
-      sh.getRange(at, 4, 1, 2).setValues([[shop.lat, shop.lng]]);
-      sh.getRange(at, 7).setValue(shop.accuracy != null ? Math.round(shop.accuracy) : '');
-      writeStamp(sh.getRange(at, 8), new Date());
-    }
-    SpreadsheetApp.flush();
-    return { success: true, shops: readShops(ss) };
-  });
-}
-
-function adminSaveSettings(b, settings) {
-  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
-  var grace = parseInt(settings && settings.graceMinutes);
-  if (isNaN(grace) || grace < 0 || grace > 60) return { success: false, error: 'Grace must be between 0 and 60 minutes.' };
-  return withAdminLock(function(ss) {
-    var sh = adminSheet(ss, SETTINGS_SHEET, ['Setting', 'Value']);
-    var keys = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues().map(function(r) { return String(r[0]).trim(); }) : [];
-    var row = keys.indexOf('Late grace (minutes)');
-    sh.getRange(row < 0 ? sh.getLastRow() + 1 : row + 2, 1, 1, 2).setValues([['Late grace (minutes)', grace]]);
-    SpreadsheetApp.flush();
-    return { success: true, settings: readSettings(ss) };
-  });
 }
