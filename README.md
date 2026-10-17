@@ -106,7 +106,8 @@ Notes:
 ## Other features
 
 - **Stock History** tab: every stock change (sale, transfer, count, Palladium edit, Mark Done,
-  hand edits in the sheet) with before → after, reason and who.
+  hand edits in the sheet) with before → after, reason and who. Don't edit or sort this tab:
+  the app reads it from the bottom up.
 - **Daily backup:** `setupDailyBackup` (run once) copies the sheet every night to the Drive
-  folder **Burmelin Backups**, keeping the newest 30 copies.
-- Full setup and day-to-day use: [SETUP_GUIDE.md](SETUP_GUIDE.md).
+  folder **Burmelin Backups**, keeping the newest 30 copies. To restore, open a backup copy and
+  copy the tab you need back into the main sheet.
