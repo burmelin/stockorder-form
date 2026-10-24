@@ -106,7 +106,7 @@ Notes:
 ## Leave requests
 
 Staff ask for a **day off** or **sick leave** from the **Leave** button in the shop app; the
-owner approves or declines on the **Owner** login (login screen → Owner). Clock-in and clock-out
+owner approves or declines in **Settings** (login screen → Settings; it uses the Owner password). Clock-in and clock-out
 stay in Loyverse.
 
 - **Each shop login lists only its own staff** (people whose "Works at" includes that shop).

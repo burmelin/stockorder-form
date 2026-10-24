@@ -1511,7 +1511,7 @@ function verifyOwner(password) {
     var reset = applyResetPassword('Owner', password);
     if (reset && reset.error) return { success: false, error: reset.error, showError: true };
     if (!reset) {
-      if (!OWNER_PASS) return { success: false, error: 'No owner password yet. Type one in the Logins tab, row "Owner", then log in with it.', showError: true };
+      if (!OWNER_PASS) return { success: false, error: 'No Settings password yet. Type one in the Logins tab, row "Owner", then log in with it.', showError: true };
       return { success: false, error: 'Wrong password.' };
     }
   }
@@ -1801,7 +1801,7 @@ function leaveRequest(b, type, dates, reason) {
     if (to) GmailApp.sendEmail(to, 'Leave request: ' + s.name + ', ' + LEAVE_TYPES[type] + ', ' + dates.map(prettyDay).join(', '),
       s.name + ' asked for ' + LEAVE_TYPES[type].toLowerCase() + ' on ' + dates.map(prettyDay).join(', ') + '.\n'
       + (reason ? 'Reason: ' + reason + '\n' : '') + (warning ? '\nNote: ' + warning + '.\n' : '')
-      + '\nApprove or decline it in the app: log in as Owner. https://stockorder-form.vercel.app',
+      + '\nApprove or decline it in the app: on the login screen choose Settings. https://stockorder-form.vercel.app',
       { name: BUSINESS_NAME + ' – Leave' });
   } catch (e) {}
   var out = leaveMine(b);
