@@ -13,10 +13,11 @@ var OLD_INVENTORY_SHEET_NAMES = ['Size Chart'];     // earlier name, still accep
 var RETAIL_STORES        = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana'];
 
 // Passwords are NOT stored in this file (it's on GitHub). Set them in the Apps Script editor:
-// Project Settings (⚙) → Script properties → EMPLOYEE_PASS, PASS_BICASSO_1, PASS_BICASSO_2, PASS_BICASSO_NANA
+// Project Settings (⚙) → Script properties → EMPLOYEE_PASS, PASS_BICASSO_1, PASS_BICASSO_2, PASS_BICASSO_NANA, OWNER_PASS
 // (or set/reset any of them from the sheet's Logins tab — see applyResetPassword)
 var PASSWORD_PROPS   = PropertiesService.getScriptProperties().getProperties();
 var EMPLOYEE_PASS    = PASSWORD_PROPS.EMPLOYEE_PASS || null;
+var OWNER_PASS       = PASSWORD_PROPS.OWNER_PASS || null;   // opens the owner's Leave screen
 var RETAIL_PASSWORDS = {
   'Bicasso 1':    PASSWORD_PROPS.PASS_BICASSO_1 || null,
   'Bicasso 2':    PASSWORD_PROPS.PASS_BICASSO_2 || null,
@@ -25,6 +26,7 @@ var RETAIL_PASSWORDS = {
 // A password only matches when it has actually been set (an unset password never lets anyone in)
 function isEmployee(p) { return !!EMPLOYEE_PASS && p === EMPLOYEE_PASS; }
 function isStorePass(store, p) { return !!RETAIL_PASSWORDS[store] && p === RETAIL_PASSWORDS[store]; }
+function isOwner(p) { return !!OWNER_PASS && p === OWNER_PASS; }
 
 // ─── RESET A PASSWORD FROM THE SHEET ────────────────────────
 // Optional "Logins" tab: a "Login" column (Palladium, Bicasso 1, …) and a "Reset Password" column.
@@ -33,7 +35,7 @@ function isStorePass(store, p) { return !!RETAIL_PASSWORDS[store] && p === RETAI
 // the old password are asked to log in again on their next request.
 var LOGINS_SHEET = 'Logins';
 var PASSWORD_PROP_OF = { 'Palladium': 'EMPLOYEE_PASS', 'Bicasso 1': 'PASS_BICASSO_1',
-                         'Bicasso 2': 'PASS_BICASSO_2', 'Bicasso Nana': 'PASS_BICASSO_NANA' };
+                         'Bicasso 2': 'PASS_BICASSO_2', 'Bicasso Nana': 'PASS_BICASSO_NANA', 'Owner': 'OWNER_PASS' };
 var RESET_MIN_LENGTH = 6;
 
 // null = no reset for this login and password; {ok:true} = applied; {error} = refused
@@ -57,6 +59,7 @@ function applyResetPassword(login, typed) {
     try {
       PropertiesService.getScriptProperties().setProperty(PASSWORD_PROP_OF[login], wanted);
       if (login === 'Palladium') EMPLOYEE_PASS = wanted;
+      else if (login === 'Owner') OWNER_PASS = wanted;
       else RETAIL_PASSWORDS[login] = wanted;
       sheet.getRange(r + 1, resetCol + 1).clearContent();
       SpreadsheetApp.flush();
@@ -133,10 +136,10 @@ function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isStorePass(b.auth
 // signs every phone using the old password out.
 var TOKEN_DAYS = 30;
 var DAY_MS = 24 * 60 * 60 * 1000;
-var LOGIN_ACTIONS = { verifyRetailStore: 1, getOrders: 1 };  // getOrders is Palladium's login
+var LOGIN_ACTIONS = { verifyRetailStore: 1, getOrders: 1, verifyOwner: 1 };  // getOrders is Palladium's login
 
 function passwordOf(login) {
-  return login === 'Palladium' ? EMPLOYEE_PASS : (RETAIL_PASSWORDS[login] || null);
+  return login === 'Palladium' ? EMPLOYEE_PASS : login === 'Owner' ? OWNER_PASS : (RETAIL_PASSWORDS[login] || null);
 }
 var tokenSecret_ = null;
 function tokenSecret() {
@@ -181,7 +184,7 @@ function readToken(token) {
 }
 // The login a successful login action was for
 function loginOfAction(action, body) {
-  return action === 'getOrders' ? 'Palladium' : (body && body.storeName);
+  return action === 'getOrders' ? 'Palladium' : action === 'verifyOwner' ? 'Owner' : (body && body.storeName);
 }
 
 // Central API router — maps an action name to the existing functions
@@ -224,6 +227,14 @@ function handleApi(action, params, body) {
     case 'generateMasterSheet':  out = generateMasterSheet(body.password, body.targets); break;
     case 'getStockHistory':      out = getStockHistory(body, body.store, body.productId); break;
     case 'getSalesReport':       out = getSalesReport(body, body.days); break;
+    case 'verifyOwner':          out = verifyOwner(body.password); break;
+    case 'leaveStaffList':       out = leaveStaffList(body); break;
+    case 'leaveSignIn':          out = leaveSignIn(body, body.staffId, body.pin); break;
+    case 'leaveMine':            out = leaveMine(body); break;
+    case 'leaveRequest':         out = leaveRequest(body, body.type, body.dates, body.reason); break;
+    case 'leaveCancel':          out = leaveCancel(body, body.requestId); break;
+    case 'ownerLeave':           out = ownerLeave(body); break;
+    case 'ownerDecideLeave':     out = ownerDecideLeave(body, body.requestId, body.decision, body.note); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
   }
   // Hand the phone a (new) token after a password login, a switch-over, or a renewal
@@ -1489,4 +1500,359 @@ function setupDailyBackup() {
   });
   ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(23).create();
   dailyBackup();
+}
+
+// ─── OWNER LOGIN ──────────────────────────────────────────────
+// Opens the owner's Leave screen. Set the first password (or change it) from the Logins tab, row "Owner".
+function verifyOwner(password) {
+  if (!isOwner(password)) {
+    var reset = applyResetPassword('Owner', password);
+    if (reset && reset.error) return { success: false, error: reset.error, showError: true };
+    if (!reset) {
+      if (!OWNER_PASS) return { success: false, error: 'No owner password yet. Type one in the Logins tab, row "Owner", then log in with it.', showError: true };
+      return { success: false, error: 'Wrong password.' };
+    }
+  }
+  return { success: true };
+}
+
+// ─── LEAVE REQUESTS ───────────────────────────────────────────
+// Staff (on a logged-in shop phone) choose their name, enter their PIN, and request a day off or
+// sick leave. The owner approves or declines on the Leave screen. Staff and their rules live in
+// the "Staff" tab, edited in the sheet: Name, Works at, Day off rule (flexible / fixed),
+// Days off per month, Fixed day off, and New PIN. A PIN typed in New PIN is turned into the
+// Password hash/salt the first time it's used, and the cell is cleared.
+var STAFF_SHEET    = 'Staff';
+var LEAVE_SHEET    = 'Leave';
+var LEAVE_HEADERS  = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note'];
+var LEAVE_TYPES    = { dayoff: 'Day off', sick: 'Sick leave' };
+var WORK_PLACES    = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
+var WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+var LEAVE_NOTICE_DAYS = 3;     // a day off must be asked at least this many days ahead
+var SICK_MAX_DAYS     = 7;     // one sick-leave request covers at most this many days
+var PIN_MIN           = 4;
+var PIN_TRIES         = 5;     // wrong PINs in a row before a 10-minute pause
+
+function hashPin(salt, pin) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + '|' + pin)
+    .map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+function todayKey() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
+function addDaysKey(key, n) { var d = new Date(key + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function weekdayOf(key) { return WEEKDAYS[new Date(key + 'T12:00:00Z').getUTCDay()]; }
+function prettyDay(key) {
+  var d = new Date(key + 'T12:00:00Z');
+  return WEEKDAYS[d.getUTCDay()].slice(0, 3) + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+}
+function dateKeyOf(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || '').trim());
+  return m ? m[0] : '';
+}
+
+// Staff rows, found by column name so the tab can have extra columns. Fills in missing IDs.
+function readStaffRows(ss, sh) {
+  sh = sh || ss.getSheetByName(STAFF_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  var data = sh.getDataRange().getValues();
+  var head = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  var col = function(name) { return head.indexOf(name); };
+  var c = { id: col('id'), name: col('name'), places: col('works at'), rule: col('day off rule'), perMonth: col('days off per month'),
+            fixed: col('fixed day off'), hash: col('password hash'), salt: col('password salt'), newPin: col('new pin') };
+  if (c.name < 0) return [];
+  var out = [];
+  for (var r = 1; r < data.length; r++) {
+    var row = data[r], name = String(row[c.name] || '').trim().replace(/\s+/g, ' ');
+    if (!name) continue;
+    var id = c.id > -1 ? String(row[c.id] || '').trim() : '';
+    if (!id && c.id > -1) {                              // a row added by hand in the sheet
+      id = 'E' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+      sh.getRange(r + 1, c.id + 1).setValue(id);
+    }
+    var cell = function(k) { return c[k] > -1 ? row[c[k]] : ''; };
+    var rule = String(cell('rule')).trim().toLowerCase() === 'fixed' ? 'fixed' : 'flexible';
+    var perMonth = parseInt(cell('perMonth')); if (isNaN(perMonth)) perMonth = 2;
+    var fixedDay = String(cell('fixed')).trim(); fixedDay = fixedDay.charAt(0).toUpperCase() + fixedDay.slice(1).toLowerCase();
+    out.push({ row: r + 1, id: id || ('row' + (r + 1)), name: name,
+               places: String(cell('places')).split(',').map(function(s) { return s.trim(); })
+                         .map(function(p) { return /^nana$/i.test(p) ? 'Bicasso Nana' : /^(warehouse)$/i.test(p) ? 'Palladium' : p; })
+                         .filter(function(p) { return WORK_PLACES.indexOf(p) > -1; }),
+               dayOffRule: rule, daysOffPerMonth: rule === 'flexible' ? perMonth : 0,
+               fixedDayOff: rule === 'fixed' ? fixedDay : '',
+               hash: String(cell('hash') || ''), salt: String(cell('salt') || ''), newPin: String(cell('newPin') || ''),
+               cols: c });
+  }
+  return out;
+}
+function staffOut(s) {
+  return { id: s.id, name: s.name, places: s.places, dayOffRule: s.dayOffRule, daysOffPerMonth: s.daysOffPerMonth, fixedDayOff: s.fixedDayOff };
+}
+
+function leaveSheet(ss) {
+  var sh = ss.getSheetByName(LEAVE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(LEAVE_SHEET);
+    sh.getRange(1, 1, 1, LEAVE_HEADERS.length).setValues([LEAVE_HEADERS])
+      .setFontWeight('bold').setBackground('#0054A5').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function readLeave(ss) {
+  var sh = ss.getSheetByName(LEAVE_SHEET);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, LEAVE_HEADERS.length).getValues().map(function(r, i) {
+    return { row: i + 2, id: String(r[0]), requested: r[1] instanceof Date ? cellDateText(r[1]) : String(r[1] || ''),
+             staffId: String(r[2]), name: String(r[3]), type: String(r[4]) === 'Sick leave' ? 'sick' : 'dayoff',
+             date: dateKeyOf(r[5]), reason: String(r[6] || ''), status: String(r[7] || 'Pending'),
+             decided: r[8] instanceof Date ? cellDateText(r[8]) : String(r[8] || ''), note: String(r[9] || '') };
+  }).filter(function(l) { return l.id && l.date; });
+}
+function isActiveLeave(l) { return l.status === 'Pending' || l.status === 'Approved'; }
+
+// One entry per request (a sick-leave request can cover several days)
+function groupLeave(rows) {
+  var by = {}, order = [];
+  rows.forEach(function(l) {
+    if (!by[l.id]) { by[l.id] = { id: l.id, staffId: l.staffId, name: l.name, type: l.type, dates: [], reason: l.reason,
+                                  status: l.status, requested: l.requested, decided: l.decided, note: l.note }; order.push(l.id); }
+    by[l.id].dates.push(l.date);
+  });
+  return order.map(function(id) { by[id].dates.sort(); return by[id]; });
+}
+
+// Who's covering each shop on a day. Returns a sentence describing the gap, or null.
+// extraOff: an employee id to treat as off as well (the request being checked).
+function coverageGap(date, staff, leave, extraOff) {
+  var off = function(s) {
+    return (s.dayOffRule === 'fixed' && s.fixedDayOff === weekdayOf(date)) || s.id === extraOff
+      || leave.some(function(l) { return l.staffId === s.id && l.date === date && isActiveLeave(l); });
+  };
+  var has = function(s, p) { return s.places.indexOf(p) > -1; };
+  var bicasso = staff.filter(function(s) { return (has(s, 'Bicasso 1') || has(s, 'Bicasso 2')) && !has(s, 'Palladium'); });
+  if (bicasso.length >= 2 && bicasso.filter(function(s) { return !off(s); }).length < 2) {
+    return 'only ' + bicasso.filter(function(s) { return !off(s); }).length + ' Bicasso staff would be working on ' + prettyDay(date) + ', and Bicasso 1 and Bicasso 2 need one each';
+  }
+  var nana = staff.filter(function(s) { return has(s, 'Bicasso Nana') && !has(s, 'Palladium'); });
+  var cover = staff.filter(function(s) { return has(s, 'Bicasso Nana') && has(s, 'Palladium'); });
+  if (nana.length && nana.every(off) && !cover.some(function(s) { return !off(s); })) {
+    return 'Nana would have nobody on ' + prettyDay(date) + (cover.length ? ': no warehouse employee who covers Nana is free' : ': no warehouse employee is set up to cover Nana');
+  }
+  return null;
+}
+
+// A staff member's pass on this phone: "v1s.<base64 {s: id, t, f}>.<signature>", where f is
+// a fingerprint of their PIN, so a new PIN signs old phones out. Lasts 30 days, renewed in use.
+function staffFingerprint(s) { return tokenSign('staff|' + s.hash).slice(0, 16); }
+function issueStaffToken(s) {
+  var head = 'v1s.' + Utilities.base64EncodeWebSafe(JSON.stringify({ s: s.id, t: Date.now(), f: staffFingerprint(s) }));
+  return head + '.' + tokenSign(head);
+}
+function readStaffToken(token, staff) {
+  var parts = String(token || '').split('.');
+  if (parts.length !== 3 || parts[0] !== 'v1s' || tokenSign(parts[0] + '.' + parts[1]) !== parts[2]) return null;
+  var p;
+  try { p = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString()); } catch (e) { return null; }
+  if (!p || !(p.t > 0) || Date.now() - p.t > TOKEN_DAYS * DAY_MS) return null;
+  var s = staff.filter(function(x) { return x.id === p.s; })[0];
+  if (!s || !s.hash || staffFingerprint(s) !== p.f) return null;
+  return { staff: s, t: p.t };
+}
+// The staff member behind b.staffToken, or an error reply
+function leaveWho(b, ss, staff) {
+  if (!isLoggedIn(b)) return { error: { success: false, error: 'Please log out and log in again.', needLogin: true } };
+  var who = readStaffToken(b.staffToken, staff || readStaffRows(ss));
+  if (!who) return { error: { success: false, error: 'Please choose your name and enter your PIN again.', needStaff: true } };
+  return who;
+}
+
+// Names for the "Who are you?" list (the shop phone must be logged in)
+function leaveStaffList(b) {
+  if (!isLoggedIn(b)) return { success: false, error: 'Please log out and log in again.', needLogin: true };
+  var staff = readStaffRows(SpreadsheetApp.getActiveSpreadsheet());
+  return { success: true, staff: staff.map(function(s) { return { id: s.id, name: s.name, hasPin: !!(s.hash || s.newPin) }; }) };
+}
+
+function leaveSignIn(b, staffId, pin) {
+  if (!isLoggedIn(b)) return { success: false, error: 'Please log out and log in again.', needLogin: true };
+  pin = String(pin == null ? '' : pin);
+  var cache = CacheService.getScriptCache(), failKey = 'leavepin:' + staffId;
+  var fails = parseInt(cache.get(failKey)) || 0;
+  if (fails >= PIN_TRIES) return { success: false, error: 'Too many wrong PINs. Wait 10 minutes, or ask the owner.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  var s;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(STAFF_SHEET);
+    s = readStaffRows(ss, sh).filter(function(x) { return x.id === staffId; })[0];
+    if (!s) return { success: false, error: 'Name not found. Ask the owner to check the Staff tab.' };
+    var ok = false;
+    if (s.newPin && pin === s.newPin) {                    // first use of a PIN typed in the sheet
+      if (pin.length < PIN_MIN) return { success: false, error: 'The PIN in the sheet needs at least ' + PIN_MIN + ' characters. Ask the owner.' };
+      if (s.cols.hash < 0 || s.cols.salt < 0) return { success: false, error: 'The Staff tab needs "Password hash" and "Password salt" columns.' };
+      s.salt = Utilities.getUuid(); s.hash = hashPin(s.salt, pin);
+      sh.getRange(s.row, s.cols.hash + 1).setValue(s.hash);
+      sh.getRange(s.row, s.cols.salt + 1).setValue(s.salt);
+      sh.getRange(s.row, s.cols.newPin + 1).clearContent();
+      SpreadsheetApp.flush();
+      ok = true;
+    } else if (s.hash && s.salt && hashPin(s.salt, pin) === s.hash) {
+      ok = true;
+    }
+    if (!ok) {
+      cache.put(failKey, String(fails + 1), 600);
+      return { success: false, error: s.hash || s.newPin ? 'Wrong PIN.' : 'You have no PIN yet. Ask the owner to type one in the Staff tab.' };
+    }
+  } finally { lock.releaseLock(); }
+  cache.remove(failKey);
+  var token = issueStaffToken(s);
+  var mine = leaveMine({ auth: b.auth, authStore: b.authStore, staffToken: token });
+  mine.staffToken = token;
+  return mine;
+}
+
+function leaveMine(b) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss);
+  var who = leaveWho(b, ss, staff);
+  if (who.error) return who.error;
+  var s = who.staff, today = todayKey(), from = addDaysKey(today, -90);
+  var rows = readLeave(ss).filter(function(l) { return l.staffId === s.id; });
+  var mine = groupLeave(rows.filter(function(l) { return l.date >= from; })).reverse();
+  var used = {};
+  rows.forEach(function(l) { if (l.type === 'dayoff' && isActiveLeave(l)) used[l.date.slice(0, 7)] = (used[l.date.slice(0, 7)] || 0) + 1; });
+  var out = { success: true, me: staffOut(s), requests: mine, daysOffUsed: used, today: today, earliestDayOff: addDaysKey(today, LEAVE_NOTICE_DAYS) };
+  if (Date.now() - who.t > DAY_MS) out.staffToken = issueStaffToken(s);
+  return out;
+}
+
+// type: 'dayoff' | 'sick'; dates: ['yyyy-MM-dd', …]
+function leaveRequest(b, type, dates, reason) {
+  if (!LEAVE_TYPES[type]) return { success: false, error: 'Choose day off or sick leave.' };
+  dates = (dates || []).map(String).filter(function(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
+    .filter(function(d, i, a) { return a.indexOf(d) === i; }).sort();
+  reason = String(reason || '').trim().slice(0, 300);
+  if (!dates.length) return { success: false, error: 'Choose the date.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  var s, id, warning = null;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss);
+    var who = leaveWho(b, ss, staff);
+    if (who.error) return who.error;
+    s = who.staff;
+    var today = todayKey(), leave = readLeave(ss);
+    if (type === 'dayoff') {
+      if (s.dayOffRule === 'fixed') return { success: false, error: 'Your day off is every ' + s.fixedDayOff + '. You can only request sick leave here.' };
+      var earliest = addDaysKey(today, LEAVE_NOTICE_DAYS);
+      for (var i = 0; i < dates.length; i++) {
+        if (dates[i] < earliest) return { success: false, error: 'A day off must be asked at least ' + LEAVE_NOTICE_DAYS + ' days ahead. The earliest you can choose is ' + prettyDay(earliest) + '.' };
+      }
+    } else {
+      if (dates[0] < today) return { success: false, error: 'Sick leave can start today at the earliest.' };
+      if (dates.length > SICK_MAX_DAYS) return { success: false, error: 'One sick-leave request can cover up to ' + SICK_MAX_DAYS + ' days.' };
+      // Someone off sick over their usual day off: just leave that day out
+      if (s.dayOffRule === 'fixed') dates = dates.filter(function(d) { return weekdayOf(d) !== s.fixedDayOff; });
+      if (!dates.length) return { success: false, error: 'That is already your day off.' };
+    }
+    for (var j = 0; j < dates.length; j++) {
+      var d = dates[j];
+      if (s.dayOffRule === 'fixed' && s.fixedDayOff === weekdayOf(d)) return { success: false, error: prettyDay(d) + ' is already your day off.' };
+      if (leave.some(function(l) { return l.staffId === s.id && l.date === d && isActiveLeave(l); })) {
+        return { success: false, error: 'You already have leave on ' + prettyDay(d) + '.' };
+      }
+    }
+    if (type === 'dayoff') {
+      var perMonth = {};
+      dates.forEach(function(d) { perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + 1; });
+      for (var month in perMonth) {
+        var used = leave.filter(function(l) { return l.staffId === s.id && l.type === 'dayoff' && isActiveLeave(l) && l.date.slice(0, 7) === month; }).length;
+        if (used + perMonth[month] > s.daysOffPerMonth) {
+          return { success: false, error: 'You can take ' + s.daysOffPerMonth + ' days off a month, and you already have ' + used + ' in that month.' };
+        }
+      }
+      // Staff choose the day only if the shops stay covered; check one day at a time, together
+      var planned = leave.slice();
+      for (var k = 0; k < dates.length; k++) {
+        var gap = coverageGap(dates[k], staff, planned, s.id);
+        if (gap) return { success: false, error: 'That day is taken: ' + gap + '. Choose another day.' };
+        planned.push({ staffId: s.id, date: dates[k], status: 'Pending' });
+      }
+    } else {
+      for (var m = 0; m < dates.length && !warning; m++) warning = coverageGap(dates[m], staff, leave, s.id);
+    }
+    var sh = leaveSheet(ss), now = new Date(), start = sh.getLastRow() + 1;
+    id = 'L' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4).toUpperCase();
+    var rows = dates.map(function(d) { return [id, now, s.id, s.name, LEAVE_TYPES[type], d, reason, 'Pending', '', '']; });
+    sh.getRange(start, 6, rows.length, 1).setNumberFormat('@');
+    sh.getRange(start, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
+    sh.getRange(start, 2, rows.length, 1).setNumberFormat(DATE_FMT);
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  // Tell the owner (after the lock, so email never holds up other requests)
+  try {
+    var to = Session.getEffectiveUser().getEmail();
+    if (to) GmailApp.sendEmail(to, 'Leave request: ' + s.name + ', ' + LEAVE_TYPES[type] + ', ' + dates.map(prettyDay).join(', '),
+      s.name + ' asked for ' + LEAVE_TYPES[type].toLowerCase() + ' on ' + dates.map(prettyDay).join(', ') + '.\n'
+      + (reason ? 'Reason: ' + reason + '\n' : '') + (warning ? '\nNote: ' + warning + '.\n' : '')
+      + '\nApprove or decline it in the app: log in as Owner. https://stockorder-form.vercel.app',
+      { name: BUSINESS_NAME + ' – Leave' });
+  } catch (e) {}
+  var out = leaveMine(b);
+  out.sent = id;
+  return out;
+}
+
+function leaveCancel(b, requestId) {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), who = leaveWho(b, ss);
+    if (who.error) return who.error;
+    var rows = readLeave(ss).filter(function(l) { return l.id === String(requestId) && l.staffId === who.staff.id; });
+    if (!rows.length) return { success: false, error: 'Request not found.' };
+    if (rows[0].status !== 'Pending') return { success: false, error: 'Only a request still waiting can be cancelled. Ask the owner.' };
+    var sh = ss.getSheetByName(LEAVE_SHEET);
+    rows.forEach(function(l) { sh.getRange(l.row, 8).setValue('Cancelled'); });
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  return leaveMine(b);
+}
+
+// Owner: every request from the last 60 days onwards, waiting ones first, with any coverage gap
+function ownerLeave(b) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss), leave = readLeave(ss);
+  var from = addDaysKey(todayKey(), -60);
+  var requests = groupLeave(leave.filter(function(l) { return l.date >= from; })).map(function(r) {
+    if (r.status === 'Pending' || r.status === 'Approved') {
+      for (var i = 0; i < r.dates.length && !r.warning; i++) r.warning = coverageGap(r.dates[i], staff, leave, null);
+    }
+    return r;
+  });
+  requests.sort(function(a, b) {
+    var pa = a.status === 'Pending' ? 0 : 1, pb = b.status === 'Pending' ? 0 : 1;
+    return pa !== pb ? pa - pb : (a.dates[0] < b.dates[0] ? (pa ? 1 : -1) : (pa ? -1 : 1));
+  });
+  return { success: true, today: todayKey(), requests: requests, staff: staff.map(staffOut),
+           pending: requests.filter(function(r) { return r.status === 'Pending'; }).length };
+}
+
+function ownerDecideLeave(b, requestId, decision, note) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  if (decision !== 'approve' && decision !== 'decline') return { success: false, error: 'Choose approve or decline.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var rows = readLeave(ss).filter(function(l) { return l.id === String(requestId); });
+    if (!rows.length) return { success: false, error: 'Request not found.' };
+    if (rows[0].status !== 'Pending') return { success: false, error: 'This request was already ' + rows[0].status.toLowerCase() + '.' };
+    var sh = ss.getSheetByName(LEAVE_SHEET), now = new Date();
+    rows.forEach(function(l) {
+      sh.getRange(l.row, 8, 1, 3).setValues([[decision === 'approve' ? 'Approved' : 'Declined', now, String(note || '').trim().slice(0, 300)]]);
+      sh.getRange(l.row, 9).setNumberFormat(DATE_FMT);
+    });
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  return ownerLeave(b);
 }

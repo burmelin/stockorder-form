@@ -103,6 +103,27 @@ Notes:
   a fresh copy loads in the background; after a release the app offers **Reload**, and the next
   open uses the new version anyway. Stock and orders are never served from this copy.
 
+## Leave requests
+
+Staff ask for a **day off** or **sick leave** from the **Leave** button in the shop app; the
+owner approves or declines on the **Owner** login (login screen → Owner). Clock-in and clock-out
+stay in Loyverse.
+
+- **Staff tab (edit in the sheet):** Name · Works at (`Bicasso 1, Bicasso 2`, `Bicasso Nana`,
+  `Palladium`; "Nana" and "Warehouse" are understood too) · Day off rule (`flexible` / `fixed`) ·
+  Days off per month · Fixed day off · **New PIN**. Add a person by filling a new row; an ID is
+  filled in automatically.
+- **PINs:** type a PIN (4+ characters) in **New PIN**. The first time the person uses it, it's
+  stored scrambled in Password hash / Password salt and the cell clears. To change a PIN, type a
+  new one; phones using the old one ask for it again. Never edit the hash or salt columns.
+- **Rules:** a day off needs 3 days' notice and comes from the monthly allowance. It's refused if
+  it would leave Bicasso 1 or 2 without one person each, or Nana without anyone (a warehouse
+  employee with Nana in "Works at" covers her). Sick leave can start today, up to 7 days, and is
+  never refused: a gap it causes shows as a warning on the Owner screen.
+- **Owner:** an email arrives for each request. The owner password is `OWNER_PASS`; set it from the
+  Logins tab, row **Owner**.
+- Requests and decisions are kept in the **Leave** tab.
+
 ## Other features
 
 - **Stock History** tab: every stock change (sale, transfer, count, Palladium edit, Mark Done,
