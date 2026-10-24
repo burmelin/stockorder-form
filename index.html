@@ -2370,12 +2370,12 @@ function leaveWho(message) {
     .withSuccessHandler(function(r) {
       if (!r || !r.success) { body.innerHTML = '<div class="sp-empty">⚠ ' + lvEsc((r && r.error) || 'Could not load names') + '</div>'; return; }
       body.innerHTML = (message ? '<div class="lv-warn" style="margin:0 0 12px">' + lvEsc(message) + '</div>' : '')
-        + '<div class="lv-title">Who are you?</div>'
+        + '<div class="lv-title">Who are you?' + (r.shop ? ' · ' + lvEsc(r.shop) + ' staff' : '') + '</div>'
         + (r.staff.length ? r.staff.map(function(s) {
             var ini = s.name.split(' ').map(function(w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
             return '<button class="lv-name" data-id="' + lvEsc(s.id) + '" data-name="' + lvEsc(s.name) + '" onclick="leavePick(this.dataset.id, this.dataset.name)">'
               + '<span class="lv-av">' + lvEsc(ini) + '</span><span>' + lvEsc(s.name) + '</span></button>';
-          }).join('') : '<div class="hist-empty">No staff yet. The owner adds names in the Staff tab of the Google Sheet.</div>');
+          }).join('') : '<div class="hist-empty">No staff for ' + lvEsc(r.shop || 'this shop') + ' yet. The owner adds names in the Staff tab of the Google Sheet, with ' + lvEsc(r.shop || 'the shop') + ' in "Works at".</div>');
     })
     .withFailureHandler(function() { body.innerHTML = '<div class="sp-empty">⚠ Could not load names. Check the connection.</div>'; })
     .leaveStaffList();

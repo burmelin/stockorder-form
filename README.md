@@ -109,6 +109,7 @@ Staff ask for a **day off** or **sick leave** from the **Leave** button in the s
 owner approves or declines on the **Owner** login (login screen → Owner). Clock-in and clock-out
 stay in Loyverse.
 
+- **Each shop login lists only its own staff** (people whose "Works at" includes that shop).
 - **Staff tab (edit in the sheet):** Name · Works at (`Bicasso 1, Bicasso 2`, `Bicasso Nana`,
   `Palladium`; "Nana" and "Warehouse" are understood too) · Day off rule (`flexible` / `fixed`) ·
   Days off per month · Fixed day off · **New PIN**. Add a person by filling a new row; an ID is

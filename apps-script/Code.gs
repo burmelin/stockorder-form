@@ -1658,19 +1658,23 @@ function readStaffToken(token, staff) {
   if (!s || !s.hash || staffFingerprint(s) !== p.f) return null;
   return { staff: s, t: p.t };
 }
+// Each shop login only serves the people who work there ("Works at" includes that shop)
+function worksAt(s, b) { return s.places.indexOf(b.authStore) > -1; }
+
 // The staff member behind b.staffToken, or an error reply
 function leaveWho(b, ss, staff) {
   if (!isLoggedIn(b)) return { error: { success: false, error: 'Please log out and log in again.', needLogin: true } };
   var who = readStaffToken(b.staffToken, staff || readStaffRows(ss));
   if (!who) return { error: { success: false, error: 'Please choose your name and enter your PIN again.', needStaff: true } };
+  if (!worksAt(who.staff, b)) return { error: { success: false, error: 'This phone is logged in to ' + b.authStore + '. Choose your name from its staff list.', needStaff: true } };
   return who;
 }
 
-// Names for the "Who are you?" list (the shop phone must be logged in)
+// Names for the "Who are you?" list: the staff of the shop this phone is logged in to
 function leaveStaffList(b) {
   if (!isLoggedIn(b)) return { success: false, error: 'Please log out and log in again.', needLogin: true };
-  var staff = readStaffRows(SpreadsheetApp.getActiveSpreadsheet());
-  return { success: true, staff: staff.map(function(s) { return { id: s.id, name: s.name, hasPin: !!(s.hash || s.newPin) }; }) };
+  var staff = readStaffRows(SpreadsheetApp.getActiveSpreadsheet()).filter(function(s) { return worksAt(s, b); });
+  return { success: true, shop: b.authStore, staff: staff.map(function(s) { return { id: s.id, name: s.name, hasPin: !!(s.hash || s.newPin) }; }) };
 }
 
 function leaveSignIn(b, staffId, pin) {
@@ -1686,6 +1690,7 @@ function leaveSignIn(b, staffId, pin) {
     var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(STAFF_SHEET);
     s = readStaffRows(ss, sh).filter(function(x) { return x.id === staffId; })[0];
     if (!s) return { success: false, error: 'Name not found. Ask the owner to check the Staff tab.' };
+    if (!worksAt(s, b)) return { success: false, error: s.name + ' is not on the ' + b.authStore + ' staff list. Ask the owner to check "Works at" in the Staff tab.' };
     var ok = false;
     if (s.newPin && pin === s.newPin) {                    // first use of a PIN typed in the sheet
       if (pin.length < PIN_MIN) return { success: false, error: 'The PIN in the sheet needs at least ' + PIN_MIN + ' characters. Ask the owner.' };
