@@ -235,6 +235,8 @@ function handleApi(action, params, body) {
     case 'leaveCancel':          out = leaveCancel(body, body.requestId); break;
     case 'ownerLeave':           out = ownerLeave(body); break;
     case 'ownerDecideLeave':     out = ownerDecideLeave(body, body.requestId, body.decision, body.note); break;
+    case 'ownerSaveStaff':       out = ownerSaveStaff(body, body.staff); break;
+    case 'ownerDeleteStaff':     out = ownerDeleteStaff(body, body.id); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
   }
   // Hand the phone a (new) token after a password login, a switch-over, or a renewal
@@ -1838,7 +1840,8 @@ function ownerLeave(b) {
     var pa = a.status === 'Pending' ? 0 : 1, pb = b.status === 'Pending' ? 0 : 1;
     return pa !== pb ? pa - pb : (a.dates[0] < b.dates[0] ? (pa ? 1 : -1) : (pa ? -1 : 1));
   });
-  return { success: true, today: todayKey(), requests: requests, staff: staff.map(staffOut),
+  return { success: true, today: todayKey(), requests: requests, staff: staff.map(ownerStaffOut),
+           places: WORK_PLACES, weekdays: WEEKDAYS,
            pending: requests.filter(function(r) { return r.status === 'Pending'; }).length };
 }
 
@@ -1860,4 +1863,103 @@ function ownerDecideLeave(b, requestId, decision, note) {
     SpreadsheetApp.flush();
   } finally { lock.releaseLock(); }
   return ownerLeave(b);
+}
+
+// ─── OWNER: STAFF SETTINGS ────────────────────────────────────
+// The Owner screen's Staff tab edits the same Staff tab the leave requests read. PINs set here
+// are stored only as a salted hash, like the ones typed in New PIN.
+var STAFF_HEADERS = ['ID', 'Name', 'Works at', 'Day off rule', 'Days off per month', 'Fixed day off', 'Password hash', 'Password salt', 'Updated', 'New PIN'];
+
+function ownerStaffOut(s) {
+  var o = staffOut(s);
+  o.hasPin = !!(s.hash || s.newPin);
+  return o;
+}
+// The Staff tab with every column this code writes (missing ones are added at the end)
+function staffSheetForWriting(ss) {
+  var sh = ss.getSheetByName(STAFF_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(STAFF_SHEET);
+    sh.getRange(1, 1, 1, STAFF_HEADERS.length).setValues([STAFF_HEADERS])
+      .setFontWeight('bold').setBackground('#0054A5').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+    return sh;
+  }
+  var lastCol = Math.max(sh.getLastColumn ? sh.getLastColumn() : 0, 1);
+  var head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  STAFF_HEADERS.forEach(function(h) {
+    if (head.indexOf(h.toLowerCase()) < 0) {
+      head.push(h.toLowerCase());
+      sh.getRange(1, head.length).setValue(h).setFontWeight('bold').setBackground('#0054A5').setFontColor('#ffffff');
+    }
+  });
+  return sh;
+}
+
+// s: {id?, name, places[], dayOffRule, daysOffPerMonth, fixedDayOff, pin?}
+function ownerSaveStaff(b, s) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  s = s || {};
+  var name = String(s.name || '').trim().replace(/\s+/g, ' ');
+  var places = (s.places || []).filter(function(p) { return WORK_PLACES.indexOf(p) > -1; });
+  var rule = s.dayOffRule === 'fixed' ? 'fixed' : 'flexible';
+  var perMonth = parseInt(s.daysOffPerMonth); if (isNaN(perMonth)) perMonth = 2;
+  var fixedDay = String(s.fixedDayOff || '');
+  var pin = s.pin == null ? '' : String(s.pin);
+  if (!name) return { success: false, error: 'Enter a name.' };
+  if (name.length > 40) return { success: false, error: 'That name is too long.' };
+  if (!places.length) return { success: false, error: 'Choose at least one place this person works.' };
+  if (rule === 'flexible' && (perMonth < 0 || perMonth > 15)) return { success: false, error: 'Days off per month must be between 0 and 15.' };
+  if (rule === 'fixed' && WEEKDAYS.indexOf(fixedDay) === -1) return { success: false, error: 'Choose the day off.' };
+  if (pin && pin.length < PIN_MIN) return { success: false, error: 'The PIN needs at least ' + PIN_MIN + ' characters.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = staffSheetForWriting(ss);
+    var staff = readStaffRows(ss, sh);
+    var me = s.id ? staff.filter(function(x) { return x.id === s.id; })[0] : null;
+    if (s.id && !me) return { success: false, error: 'That employee no longer exists. Reload the Staff list.' };
+    if (staff.some(function(x) { return x !== me && x.name.toLowerCase() === name.toLowerCase(); })) {
+      return { success: false, error: 'There is already someone called ' + name + '.' };
+    }
+    if (!me && !pin) return { success: false, error: 'Set a PIN for the new employee.' };
+    var lastCol = sh.getLastColumn(), row = me ? me.row : sh.getLastRow() + 1;
+    var head = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    var values = me ? sh.getRange(row, 1, 1, lastCol).getValues()[0] : head.map(function() { return ''; });
+    var put = function(h, v) { var i = head.indexOf(h); if (i > -1) values[i] = v; };
+    put('id', me ? me.id : 'E' + Utilities.getUuid().replace(/-/g, '').slice(0, 10));
+    put('name', name);
+    put('works at', places.join(', '));
+    put('day off rule', rule);
+    put('days off per month', rule === 'flexible' ? perMonth : '');
+    put('fixed day off', rule === 'fixed' ? fixedDay : '');
+    if (pin) {
+      var salt = Utilities.getUuid();
+      put('password hash', hashPin(salt, pin));
+      put('password salt', salt);
+      put('new pin', '');
+    }
+    put('updated', new Date());
+    sh.getRange(row, 1, 1, lastCol).setValues([values]);
+    var updatedCol = head.indexOf('updated');
+    if (updatedCol > -1) sh.getRange(row, updatedCol + 1).setNumberFormat(DATE_FMT);
+    SpreadsheetApp.flush();
+    return { success: true, staff: readStaffRows(ss, sh).map(ownerStaffOut) };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally { lock.releaseLock(); }
+}
+
+function ownerDeleteStaff(b, id) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(STAFF_SHEET);
+    var me = readStaffRows(ss, sh).filter(function(x) { return x.id === String(id); })[0];
+    if (!me) return { success: false, error: 'Employee not found.' };
+    sh.deleteRow(me.row);
+    SpreadsheetApp.flush();
+    return { success: true, staff: readStaffRows(ss, sh).map(ownerStaffOut) };
+  } finally { lock.releaseLock(); }
 }

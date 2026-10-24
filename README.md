@@ -110,7 +110,9 @@ owner approves or declines on the **Owner** login (login screen → Owner). Cloc
 stay in Loyverse.
 
 - **Each shop login lists only its own staff** (people whose "Works at" includes that shop).
-- **Staff tab (edit in the sheet):** Name · Works at (`Bicasso 1, Bicasso 2`, `Bicasso Nana`,
+- **Owner → Staff tab in the app:** add, edit or remove employees (name, where they work, day-off rule,
+  PIN). It edits the sheet's Staff tab, which can also be edited by hand:
+- **Staff tab (in the sheet):** Name · Works at (`Bicasso 1, Bicasso 2`, `Bicasso Nana`,
   `Palladium`; "Nana" and "Warehouse" are understood too) · Day off rule (`flexible` / `fixed`) ·
   Days off per month · Fixed day off · **New PIN**. Add a person by filling a new row; an ID is
   filled in automatically.
