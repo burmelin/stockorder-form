@@ -41,7 +41,7 @@ button,input,select,textarea{font-family:inherit}
 /* ── APP SHELL ── */
 #screen-app{position:fixed;inset:0;display:none;flex-direction:column;background:var(--linen)}
 #screen-app.active{display:flex}
-#app-topbar{flex-shrink:0;background:var(--deep);border-bottom:3px solid var(--brass);display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:calc(54px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)}
+#app-topbar,.lv-topbar{flex-shrink:0;background:var(--deep);border-bottom:3px solid var(--brass);display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:calc(54px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px)}
 .topbar-mark{width:13px;height:auto;color:#fff;margin-right:9px;flex-shrink:0}
 .app-store-label{color:#fff;font-family:var(--f-display);font-size:1.15rem;font-weight:700;letter-spacing:.005em}
 .app-store-tag{position:relative;border:1px dashed rgba(201,169,110,.8);color:var(--brass);font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:2px;margin-left:8px;text-transform:uppercase;letter-spacing:.18em;vertical-align:2px}
@@ -87,7 +87,7 @@ button,input,select,textarea{font-family:inherit}
 .card h2{font-size:.7rem;font-weight:700;color:var(--ink);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.2em}
 .form-group{margin-bottom:14px}
 label{display:block;font-size:.68rem;font-weight:700;color:var(--stone);margin-bottom:5px;text-transform:uppercase;letter-spacing:.14em}
-input[type=text],input[type=email],input[type=tel],input[type=number],input[type=time],select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:8px;font-size:.97rem;color:var(--ink);background:#FAF8F5;transition:border-color .2s,background .2s;font-family:inherit}
+input[type=text],input[type=email],input[type=tel],input[type=number],input[type=time],input[type=date],#lv-pin,select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:8px;font-size:.97rem;color:var(--ink);background:#FAF8F5;transition:border-color .2s,background .2s;font-family:inherit}
 input:focus,select:focus,textarea:focus{outline:none;border-color:#0054A5;background:#fff}
 select:disabled{opacity:.45;cursor:not-allowed}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -363,6 +363,49 @@ tbody tr:last-child td{border-bottom:none}
 .reorder-hd-low{background:#F5EAD3;color:#7A5A1F}
 .reorder-row{display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #ECE8E1;font-size:.85rem;gap:8px}
 .reorder-row:last-child{border-bottom:none}
+/* ── LEAVE (staff) and OWNER screens ── */
+#screen-leave,#screen-owner{position:fixed;inset:0;display:none;flex-direction:column;background:var(--linen);z-index:60}
+#screen-leave.active,#screen-owner.active{display:flex}
+.lv-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px calc(28px + env(safe-area-inset-bottom,0px))}
+.lv-title{font-size:.68rem;font-weight:700;color:var(--stone);text-transform:uppercase;letter-spacing:.2em;margin:6px 2px 10px}
+.lv-name{display:flex;align-items:center;gap:12px;width:100%;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;font:inherit;font-weight:600;font-size:.98rem;color:var(--ink);cursor:pointer;text-align:left}
+.lv-av{width:36px;height:36px;border-radius:50%;background:#EDF2F8;color:var(--deep);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}
+.lv-picked{font-family:var(--f-display);font-size:1.3rem;font-weight:700;color:var(--ink);margin-bottom:14px}
+.lv-hello{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 12px}
+.lv-hi{font-family:var(--f-display);font-size:1.4rem;font-weight:700;color:var(--ink)}
+.lv-link{background:none;border:none;color:var(--blue);font-weight:700;font-size:.82rem;cursor:pointer;padding:6px 0}
+.lv-allow{display:flex;padding:0;overflow:hidden}
+.lv-allow>div{flex:1;padding:12px 8px;text-align:center;border-left:1px solid var(--line)}
+.lv-allow>div:first-child{border-left:none}
+.lv-allow b{display:block;font-family:var(--f-display);font-size:1.4rem;color:var(--ink)}
+.lv-allow span{font-size:.62rem;font-weight:700;color:var(--stone);text-transform:uppercase;letter-spacing:.14em}
+.lv-hint{font-size:.76rem;color:var(--stone);margin-top:4px;line-height:1.45}
+.lv-err{color:var(--bad);font-size:.86rem;min-height:18px;margin:4px 0 8px}
+.lv-req{padding:11px 0;border-bottom:1px solid #ECE8E1}
+.lv-req:last-child{border-bottom:none}
+.lv-req-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lv-req-top b{font-size:.9rem;color:var(--ink)}
+.lv-req-days{font-size:.88rem;color:var(--ink);margin-top:3px}
+.lv-note{font-size:.78rem;color:var(--deep);margin-top:4px}
+.lv-st{font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.lv-st.Pending{background:#F5EAD3;color:#7A5A1F}
+.lv-st.Approved{background:#DCEBE1;color:var(--good)}
+.lv-st.Declined{background:#F6E3E0;color:var(--bad)}
+.lv-st.Cancelled{background:var(--sunk);color:var(--stone)}
+.lv-who{font-family:var(--f-display);font-size:1.2rem;font-weight:700;color:var(--ink)}
+.lv-type{font-size:.68rem;font-weight:700;padding:3px 10px;border-radius:999px;background:#EDF2F8;color:var(--deep)}
+.lv-type.sick{background:#F6E3E0;color:var(--bad)}
+.lv-warn{background:#FBF6EC;border:1px solid #EAD9B5;color:#7A5A1F;border-radius:8px;padding:8px 10px;font-size:.8rem;margin-top:10px;line-height:1.4}
+.lv-noteinp{margin-top:10px}
+.lv-actions{display:flex;gap:8px;margin-top:10px}
+.lv-actions button{flex:1;padding:12px;border-radius:8px;font-weight:700;font-size:.92rem;cursor:pointer}
+.lv-approve{background:var(--blue);color:#fff;border:none}
+.lv-decline{background:#fff;color:var(--bad);border:1.5px solid #EDCFCA}
+.lv-day{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #ECE8E1;font-size:.88rem;color:var(--ink)}
+.lv-day:last-child{border-bottom:none}
+.lv-day-date{width:92px;flex-shrink:0;font-weight:700}
+.lv-day i{color:var(--bad);font-style:normal;font-size:.78rem}
+.btn-leave{background:none;border:1px solid rgba(255,255,255,.28);color:rgba(255,255,255,.85);padding:6px 12px;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -390,6 +433,7 @@ tbody tr:last-child td{border-bottom:none}
       <option value="Bicasso 2">Bicasso 2</option>
       <option value="Bicasso Nana">Bicasso Nana</option>
       <option value="Palladium">Palladium (Wholesale)</option>
+      <option value="Owner">Owner</option>
     </select>
     <label class="login-label">Passcode</label>
     <input id="sli-pass" type="password" class="login-input" placeholder="Store passcode" onkeydown="if(event.key==='Enter')doStoreLogin()">
@@ -410,6 +454,7 @@ tbody tr:last-child td{border-bottom:none}
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn-leave" onclick="openLeave()">Leave</button>
       <button class="btn-logout" onclick="appLogout()">Logout</button>
     </div>
   </div>
@@ -571,6 +616,31 @@ tbody tr:last-child td{border-bottom:none}
   </nav>
 </div><!-- /screen-app -->
 
+<!-- ── LEAVE (staff: day off / sick leave) ── -->
+<div id="screen-leave">
+  <div class="lv-topbar">
+    <div style="display:flex;align-items:center">
+      <svg class="topbar-mark" viewBox="0 0 168 318" aria-hidden="true"><path fill="currentColor" d="M65.60 317.48 C68.03 316.76 69.70 315.76 71.52 313.93 C73.05 312.38 73.12 312.24 120.06 218.38 C145.91 166.67 167.33 123.67 167.66 122.81 C171.10 113.69 163.50 104.13 153.89 105.50 C150.97 105.91 149.86 106.51 142.38 111.67 C138.80 114.13 130.61 119.78 124.19 124.21 C109.99 134.01 110.24 133.88 105.86 133.88 C102.60 133.88 102.60 133.87 100.72 132.95 C95.92 130.58 94.26 127.86 92.89 120.12 C92.52 118.06 92.01 115.25 91.75 113.88 C91.49 112.50 91.04 110.03 90.74 108.38 C90.45 106.72 90.00 104.25 89.74 102.88 C89.49 101.50 89.04 99.03 88.74 97.38 C88.45 95.72 88.00 93.25 87.74 91.88 C87.49 90.50 87.04 88.03 86.74 86.38 C86.45 84.72 86.00 82.25 85.74 80.88 C85.49 79.50 85.04 77.03 84.74 75.38 C84.45 73.72 84.00 71.25 83.74 69.88 C83.49 68.50 83.04 66.03 82.74 64.38 C82.45 62.72 82.00 60.25 81.74 58.88 C81.49 57.50 81.04 55.02 80.74 53.38 C80.45 51.73 80.00 49.25 79.74 47.88 C79.49 46.50 79.04 44.02 78.74 42.38 C78.45 40.73 78.00 38.25 77.74 36.88 C77.49 35.50 77.04 33.02 76.74 31.38 C76.45 29.73 76.00 27.25 75.74 25.88 C75.49 24.50 75.03 22.02 74.74 20.38 C72.53 7.96 72.05 6.54 69.13 3.78 C64.20 -0.89 56.06 -0.80 51.27 3.97 C48.27 6.96 50.53 -1.38 23.86 105.27 C-2.49 210.64 -1.05 204.50 -0.25 208.38 C-0.02 209.50 6.51 222.76 25.66 261.07 L51.27 312.27 L52.95 313.98 C56.43 317.51 61.10 318.80 65.60 317.48 Z"/></svg>
+      <div><span class="app-store-label">Leave</span></div>
+    </div>
+    <button class="btn-logout" onclick="closeLeave()">Close</button>
+  </div>
+  <div class="lv-body" id="leave-body"></div>
+</div>
+
+<!-- ── OWNER (approve leave) ── -->
+<div id="screen-owner">
+  <div class="lv-topbar">
+    <div style="display:flex;align-items:center">
+      <svg class="topbar-mark" viewBox="0 0 168 318" aria-hidden="true"><path fill="currentColor" d="M65.60 317.48 C68.03 316.76 69.70 315.76 71.52 313.93 C73.05 312.38 73.12 312.24 120.06 218.38 C145.91 166.67 167.33 123.67 167.66 122.81 C171.10 113.69 163.50 104.13 153.89 105.50 C150.97 105.91 149.86 106.51 142.38 111.67 C138.80 114.13 130.61 119.78 124.19 124.21 C109.99 134.01 110.24 133.88 105.86 133.88 C102.60 133.88 102.60 133.87 100.72 132.95 C95.92 130.58 94.26 127.86 92.89 120.12 C92.52 118.06 92.01 115.25 91.75 113.88 C91.49 112.50 91.04 110.03 90.74 108.38 C90.45 106.72 90.00 104.25 89.74 102.88 C89.49 101.50 89.04 99.03 88.74 97.38 C88.45 95.72 88.00 93.25 87.74 91.88 C87.49 90.50 87.04 88.03 86.74 86.38 C86.45 84.72 86.00 82.25 85.74 80.88 C85.49 79.50 85.04 77.03 84.74 75.38 C84.45 73.72 84.00 71.25 83.74 69.88 C83.49 68.50 83.04 66.03 82.74 64.38 C82.45 62.72 82.00 60.25 81.74 58.88 C81.49 57.50 81.04 55.02 80.74 53.38 C80.45 51.73 80.00 49.25 79.74 47.88 C79.49 46.50 79.04 44.02 78.74 42.38 C78.45 40.73 78.00 38.25 77.74 36.88 C77.49 35.50 77.04 33.02 76.74 31.38 C76.45 29.73 76.00 27.25 75.74 25.88 C75.49 24.50 75.03 22.02 74.74 20.38 C72.53 7.96 72.05 6.54 69.13 3.78 C64.20 -0.89 56.06 -0.80 51.27 3.97 C48.27 6.96 50.53 -1.38 23.86 105.27 C-2.49 210.64 -1.05 204.50 -0.25 208.38 C-0.02 209.50 6.51 222.76 25.66 261.07 L51.27 312.27 L52.95 313.98 C56.43 317.51 61.10 318.80 65.60 317.48 Z"/></svg>
+      <div><span class="app-store-label">Leave</span><span class="app-store-tag" id="owner-count">Owner</span></div>
+    </div>
+    <button class="btn-logout" onclick="appLogout()">Logout</button>
+  </div>
+  <div class="lv-body" id="owner-body"></div>
+</div>
+
+
 <!-- Toast notification -->
 <div id="app-toast"></div>
 
@@ -638,9 +708,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
-  var RETRY_OK = { getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var WRITES = { leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
+  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
+  var POST_ARGS = { verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -788,6 +858,24 @@ function doStoreLogin() {
   if (!pass)      { errEl.textContent = '⚠ Please enter your passcode.'; return; }
   var btn = document.getElementById('btn-sli');
   btn.textContent = 'Verifying…'; btn.disabled = true;
+  if (storeName === 'Owner') {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        btn.textContent = 'Enter Store'; btn.disabled = false;
+        if (result && result.success) {
+          startSession({ name: 'Owner', isOwner: true }, pass, result);
+          showOwner();
+        } else {
+          errEl.textContent = '❌ ' + (result && result.showError ? result.error : 'Wrong password. Please try again.');
+        }
+      })
+      .withFailureHandler(function() {
+        btn.textContent = 'Enter Store'; btn.disabled = false;
+        errEl.textContent = '❌ Connection error. Please try again.';
+      })
+      .verifyOwner(pass);
+    return;
+  }
   if (storeName === 'Palladium') {
     google.script.run
       .withSuccessHandler(function(result) {
@@ -848,6 +936,9 @@ function showApp() {
 
 function appLogout() {
   try { localStorage.removeItem('burmelin_session'); } catch(e){}
+  document.getElementById('screen-leave').classList.remove('active');
+  document.getElementById('screen-owner').classList.remove('active');
+  OWNER_DATA = null; LEAVE_ME = null;
   cacheClear();
   INVENTORY_LOADED = false;
   SESSION_STORE    = null;
@@ -2229,15 +2320,266 @@ function hideAvail() { availBox.className='avail-box idle'; availTxt.textContent
 
 renderCart();
 
+// ════════════════════════════════════════════════════════════════
+//  LEAVE — staff ask for a day off or sick leave; the owner approves
+// ════════════════════════════════════════════════════════════════
+var LEAVE_KEY = 'burmelin_leave_staff';   // { token, name } of the person using this phone
+var LEAVE_ME = null;                       // leaveMine reply
+var LEAVE_TYPE = 'dayoff';
+var LEAVE_PICK = null;                     // { id, name } chosen on "Who are you?"
+var LEAVE_STATUS = { Pending: 'Waiting', Approved: 'Approved', Declined: 'Declined', Cancelled: 'Cancelled' };
+var LEAVE_TYPE_LABEL = { dayoff: 'Day off', sick: 'Sick leave' };
+
+function lvEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function lvDay(k) { var d = new Date(k + 'T12:00:00Z'); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]; }
+function lvDays(list) {
+  return list.length > 2 ? lvDay(list[0]) + ' – ' + lvDay(list[list.length - 1]) + ' (' + list.length + ' days)' : list.map(lvDay).join(', ');
+}
+function lvAddDays(k, n) { var d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function lvStatus(st) { return '<span class="lv-st ' + lvEsc(st) + '">' + (LEAVE_STATUS[st] || lvEsc(st)) + '</span>'; }
+function leaveSaved() { try { return JSON.parse(localStorage.getItem(LEAVE_KEY) || 'null'); } catch (e) { return null; } }
+function leaveKeep(token, name) { try { localStorage.setItem(LEAVE_KEY, JSON.stringify({ token: token, name: name })); } catch (e) {} }
+function leaveForget() { try { localStorage.removeItem(LEAVE_KEY); } catch (e) {} LEAVE_ME = null; }
+
+function openLeave() {
+  document.getElementById('screen-leave').classList.add('active');
+  if (leaveSaved()) leaveLoad(); else leaveWho();
+}
+function closeLeave() { document.getElementById('screen-leave').classList.remove('active'); }
+
+// Every leave reply goes through here: keeps a renewed pass, or asks for the name again
+function leaveReply(r, errId) {
+  if (r && r.needStaff) { leaveForget(); leaveWho('Please choose your name and enter your PIN again.'); return false; }
+  if (!r || !r.success) {
+    var el = errId && document.getElementById(errId);
+    if (el) el.textContent = (r && r.error) || 'Something went wrong. Try again.';
+    else showToast((r && r.error) || 'Something went wrong');
+    return false;
+  }
+  if (r.staffToken) leaveKeep(r.staffToken, r.me.name);
+  LEAVE_ME = r;
+  return true;
+}
+
+// ── Who are you? ─────────────────────────────────────────────────
+function leaveWho(message) {
+  LEAVE_PICK = null;
+  var body = document.getElementById('leave-body');
+  body.innerHTML = loaderHtml('search', 'Loading names…');
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) { body.innerHTML = '<div class="sp-empty">⚠ ' + lvEsc((r && r.error) || 'Could not load names') + '</div>'; return; }
+      body.innerHTML = (message ? '<div class="lv-warn" style="margin:0 0 12px">' + lvEsc(message) + '</div>' : '')
+        + '<div class="lv-title">Who are you?' + (r.shop ? ' · ' + lvEsc(r.shop) + ' staff' : '') + '</div>'
+        + (r.staff.length ? r.staff.map(function(s) {
+            var ini = s.name.split(' ').map(function(w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+            return '<button class="lv-name" data-id="' + lvEsc(s.id) + '" data-name="' + lvEsc(s.name) + '" onclick="leavePick(this.dataset.id, this.dataset.name)">'
+              + '<span class="lv-av">' + lvEsc(ini) + '</span><span>' + lvEsc(s.name) + '</span></button>';
+          }).join('') : '<div class="hist-empty">No staff for ' + lvEsc(r.shop || 'this shop') + ' yet. The owner adds names in the Staff tab of the Google Sheet, with ' + lvEsc(r.shop || 'the shop') + ' in "Works at".</div>');
+    })
+    .withFailureHandler(function() { body.innerHTML = '<div class="sp-empty">⚠ Could not load names. Check the connection.</div>'; })
+    .leaveStaffList();
+}
+function leavePick(id, name) {
+  LEAVE_PICK = { id: id, name: name };
+  document.getElementById('leave-body').innerHTML =
+    '<div class="card"><label>Your name</label><div class="lv-picked">' + lvEsc(name) + '</div>'
+    + '<div class="form-group"><label for="lv-pin">Your PIN</label>'
+    + '<input type="password" id="lv-pin" autocomplete="off" inputmode="numeric" onkeydown="if(event.key===\'Enter\')leaveSignIn()"></div>'
+    + '<div id="lv-err" class="lv-err"></div>'
+    + '<button class="btn-submit" id="lv-signin" onclick="leaveSignIn()">Continue</button>'
+    + '<button class="lv-link" style="margin-top:12px" onclick="leaveWho()">Not you? Choose another name</button></div>';
+  setTimeout(function() { var p = document.getElementById('lv-pin'); if (p) p.focus(); }, 50);
+}
+function leaveSignIn() {
+  var pin = document.getElementById('lv-pin').value, btn = document.getElementById('lv-signin');
+  if (!pin) { document.getElementById('lv-err').textContent = 'Enter your PIN.'; return; }
+  btn.disabled = true; btn.textContent = 'Checking…';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Continue';
+      if (leaveReply(r, 'lv-err')) leaveRender();
+    })
+    .withFailureHandler(function() { btn.disabled = false; btn.textContent = 'Continue'; document.getElementById('lv-err').textContent = 'Connection error. Try again.'; })
+    .leaveSignIn(LEAVE_PICK.id, pin);
+}
+
+// ── My leave ─────────────────────────────────────────────────────
+function leaveLoad() {
+  var body = document.getElementById('leave-body'), saved = leaveSaved();
+  if (!LEAVE_ME) body.innerHTML = loaderHtml('search', 'Loading your leave…');
+  else leaveRender();
+  google.script.run
+    .withSuccessHandler(function(r) { if (leaveReply(r)) leaveRender(); })
+    .withFailureHandler(function() { if (!LEAVE_ME) body.innerHTML = '<div class="sp-empty">⚠ Could not load. Check the connection.</div>'; })
+    .leaveMine(saved && saved.token);
+}
+function leaveSetType(t) { LEAVE_TYPE = t; leaveRender(); }
+
+function leaveRender() {
+  var r = LEAVE_ME; if (!r) return;
+  var me = r.me, fixed = me.dayOffRule === 'fixed';
+  if (fixed) LEAVE_TYPE = 'sick';
+  var month = r.today.slice(0, 7), next = lvAddDays(month + '-28', 7).slice(0, 7);
+  var monthName = function(m) { return MONTHS[parseInt(m.slice(5, 7), 10) - 1]; };
+  var used = function(m) { return r.daysOffUsed[m] || 0; };
+  var h = '<div class="lv-hello"><div><span class="lv-hi">Hi, ' + lvEsc(me.name) + '</span></div>'
+    + '<button class="lv-link" onclick="leaveForget();leaveWho()">Not you?</button></div>';
+  h += fixed
+    ? '<div class="card lv-allow"><div><b>' + lvEsc(me.fixedDayOff) + '</b><span>Your day off every week</span></div></div>'
+    : '<div class="card lv-allow"><div><b>' + used(month) + ' of ' + me.daysOffPerMonth + '</b><span>Days off in ' + monthName(month) + '</span></div>'
+      + '<div><b>' + used(next) + ' of ' + me.daysOffPerMonth + '</b><span>Days off in ' + monthName(next) + '</span></div></div>';
+  // New request
+  h += '<div class="card"><label>New request</label>';
+  if (!fixed) {
+    h += '<div class="ms-tabs rp-tabs">'
+      + '<button class="mstab' + (LEAVE_TYPE === 'dayoff' ? ' active' : '') + '" onclick="leaveSetType(\'dayoff\')">Day off</button>'
+      + '<button class="mstab' + (LEAVE_TYPE === 'sick' ? ' active' : '') + '" onclick="leaveSetType(\'sick\')">Sick leave</button></div>';
+  }
+  if (LEAVE_TYPE === 'dayoff') {
+    h += '<div class="form-group"><label for="lv-date">Date</label><input type="date" id="lv-date" min="' + r.earliestDayOff + '" value="' + r.earliestDayOff + '"></div>'
+      + '<div class="lv-hint">Ask at least 3 days ahead. Only one Bicasso person can be off on the same day.</div>';
+  } else {
+    h += '<div class="row2"><div class="form-group"><label for="lv-from">From</label><input type="date" id="lv-from" min="' + r.today + '" value="' + r.today + '" onchange="var t=document.getElementById(\'lv-to\');t.min=this.value;if(t.value<this.value)t.value=this.value"></div>'
+      + '<div class="form-group"><label for="lv-to">To</label><input type="date" id="lv-to" min="' + r.today + '" value="' + r.today + '"></div></div>'
+      + '<div class="lv-hint">Sick leave can start today. Up to 7 days in one request.</div>';
+  }
+  h += '<div class="form-group" style="margin-top:12px"><label for="lv-reason">Reason (optional)</label><textarea id="lv-reason" rows="2" maxlength="300"></textarea></div>'
+    + '<div id="lv-err" class="lv-err"></div>'
+    + '<button class="btn-submit" id="lv-send" onclick="leaveSend()">Send request</button></div>';
+  // My requests
+  h += '<div class="card"><label>My requests</label>'
+    + (r.requests.length ? r.requests.map(function(q) {
+        return '<div class="lv-req"><div class="lv-req-top"><b>' + LEAVE_TYPE_LABEL[q.type] + '</b>' + lvStatus(q.status) + '</div>'
+          + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>'
+          + (q.reason ? '<div class="lv-hint">' + lvEsc(q.reason) + '</div>' : '')
+          + (q.note ? '<div class="lv-note">Owner: ' + lvEsc(q.note) + '</div>' : '')
+          + (q.status === 'Pending' ? '<button class="lv-link" onclick="leaveCancel(\'' + lvEsc(q.id) + '\')">Cancel request</button>' : '')
+          + '</div>';
+      }).join('') : '<div class="hist-empty">No requests yet.</div>')
+    + '</div>';
+  document.getElementById('leave-body').innerHTML = h;
+}
+
+function leaveSend() {
+  var dates = [], reason = document.getElementById('lv-reason').value, err = document.getElementById('lv-err'), btn = document.getElementById('lv-send');
+  err.textContent = '';
+  if (LEAVE_TYPE === 'dayoff') {
+    var d = document.getElementById('lv-date').value;
+    if (!d) { err.textContent = 'Choose the date.'; return; }
+    dates = [d];
+  } else {
+    var from = document.getElementById('lv-from').value, to = document.getElementById('lv-to').value || from;
+    if (!from) { err.textContent = 'Choose the first day.'; return; }
+    if (to < from) to = from;
+    for (var k = from; k <= to && dates.length < 8; k = lvAddDays(k, 1)) dates.push(k);
+  }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Send request';
+      if (leaveReply(r, 'lv-err')) { leaveRender(); showToast('Request sent. The owner has been told.'); }
+    })
+    .withFailureHandler(function() { btn.disabled = false; btn.textContent = 'Send request'; err.textContent = 'Connection error. Check My requests before sending again.'; leaveLoad(); })
+    .leaveRequest((leaveSaved() || {}).token, LEAVE_TYPE, dates, reason);
+}
+function leaveCancel(id) {
+  if (!confirm('Cancel this request?')) return;
+  google.script.run
+    .withSuccessHandler(function(r) { if (leaveReply(r)) { leaveRender(); showToast('Request cancelled'); } })
+    .withFailureHandler(function() { showToast('Connection error — try again'); })
+    .leaveCancel((leaveSaved() || {}).token, id);
+}
+
+// ════════════════════════════════════════════════════════════════
+//  OWNER — approve or decline leave
+// ════════════════════════════════════════════════════════════════
+var OWNER_DATA = null, OWNER_LOADED_AT = 0;
+
+function showOwner() {
+  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-app').classList.remove('active');
+  document.getElementById('screen-owner').classList.add('active');
+  document.title = 'Burmelin Owner';
+  ownerLoad();
+}
+function ownerLoad() {
+  var body = document.getElementById('owner-body');
+  if (!OWNER_DATA) body.innerHTML = loaderHtml('search', 'Loading leave requests…');
+  OWNER_LOADED_AT = Date.now();
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) { if (!OWNER_DATA) body.innerHTML = '<div class="sp-empty">⚠ ' + lvEsc((r && r.error) || 'Could not load') + '</div>'; return; }
+      OWNER_DATA = r; ownerRender();
+    })
+    .withFailureHandler(function() {
+      if (!OWNER_DATA) body.innerHTML = '<div class="sp-empty">⚠ Could not load. Check the connection.</div>';
+      showToast('Connection error — tap Retry', ownerLoad);
+    })
+    .ownerLeave();
+}
+// Coming back to the app after a while brings the list up to date
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && document.getElementById('screen-owner').classList.contains('active') && Date.now() - OWNER_LOADED_AT > 60000) ownerLoad();
+});
+
+function ownerRender() {
+  var r = OWNER_DATA, today = r.today;
+  var pending = r.requests.filter(function(q) { return q.status === 'Pending'; });
+  var upcoming = r.requests.filter(function(q) { return q.status === 'Approved' && q.dates[q.dates.length - 1] >= today; });
+  var past = r.requests.filter(function(q) { return q.status !== 'Pending' && upcoming.indexOf(q) < 0; });
+  document.getElementById('owner-count').textContent = pending.length ? pending.length + ' waiting' : 'Owner';
+  var h = '<div class="lv-title">Waiting for you' + (pending.length ? ' · ' + pending.length : '') + '</div>';
+  h += pending.length ? pending.map(function(q) {
+    return '<div class="card lv-ask"><div class="lv-req-top"><span class="lv-who">' + lvEsc(q.name) + '</span><span class="lv-type ' + q.type + '">' + LEAVE_TYPE_LABEL[q.type] + '</span></div>'
+      + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>'
+      + (q.reason ? '<div class="lv-hint">“' + lvEsc(q.reason) + '”</div>' : '')
+      + (q.warning ? '<div class="lv-warn">⚠ ' + lvEsc(q.warning.charAt(0).toUpperCase() + q.warning.slice(1)) + '.</div>' : '')
+      + '<input type="text" id="on-' + lvEsc(q.id) + '" class="lv-noteinp" placeholder="Note for ' + lvEsc(q.name.split(' ')[0]) + ' (optional)" maxlength="300">'
+      + '<div class="lv-actions"><button class="lv-decline" onclick="ownerDecide(\'' + lvEsc(q.id) + '\', \'decline\', this)">Decline</button>'
+      + '<button class="lv-approve" onclick="ownerDecide(\'' + lvEsc(q.id) + '\', \'approve\', this)">Approve</button></div></div>';
+  }).join('') : '<div class="card"><div class="hist-empty" style="padding:4px 0">Nothing waiting. New requests also arrive by email.</div></div>';
+  // Who's off, day by day
+  var days = {};
+  upcoming.forEach(function(q) { q.dates.forEach(function(d) { if (d >= today) (days[d] = days[d] || []).push(q); }); });
+  var dayKeys = Object.keys(days).sort();
+  h += '<div class="lv-title">Coming up</div><div class="card">'
+    + (dayKeys.length ? dayKeys.map(function(d) {
+        return '<div class="lv-day"><span class="lv-day-date">' + lvDay(d) + '</span><span>'
+          + days[d].map(function(q) { return lvEsc(q.name) + (q.type === 'sick' ? ' <i>(sick)</i>' : ''); }).join(', ') + '</span></div>';
+      }).join('') : '<div class="hist-empty" style="padding:4px 0">Nobody is off in the coming days.</div>')
+    + '</div>';
+  h += '<div class="lv-title">Recent</div><div class="card">'
+    + (past.length ? past.slice(0, 30).map(function(q) {
+        return '<div class="lv-req"><div class="lv-req-top"><b>' + lvEsc(q.name) + ' · ' + LEAVE_TYPE_LABEL[q.type] + '</b>' + lvStatus(q.status) + '</div>'
+          + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>' + (q.note ? '<div class="lv-note">Your note: ' + lvEsc(q.note) + '</div>' : '') + '</div>';
+      }).join('') : '<div class="hist-empty" style="padding:4px 0">No decided requests yet.</div>')
+    + '</div>';
+  document.getElementById('owner-body').innerHTML = h;
+}
+function ownerDecide(id, decision, btn) {
+  var note = (document.getElementById('on-' + id) || {}).value || '';
+  var card = btn.closest('.lv-ask'), buttons = card.querySelectorAll('button');
+  buttons.forEach(function(b) { b.disabled = true; });
+  btn.textContent = decision === 'approve' ? 'Approving…' : 'Declining…';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) { buttons.forEach(function(b) { b.disabled = false; }); ownerRender(); showToast((r && r.error) || 'Could not save'); return; }
+      OWNER_DATA = r; ownerRender(); showToast(decision === 'approve' ? 'Approved' : 'Declined');
+    })
+    .withFailureHandler(function() { buttons.forEach(function(b) { b.disabled = false; }); ownerRender(); showToast('Connection error — try again'); })
+    .ownerDecideLeave(id, decision, note);
+}
+
 // ── RESTORE SESSION ON PAGE LOAD ─────────────────────────────────
 (function() {
   try {
     var saved = localStorage.getItem('burmelin_session');
     if (!saved) return;
     var s = JSON.parse(saved);
-    if (!s || !s.name || !(s.token || s.pass) || s.isOwner) return;   // isOwner: the Admin login was removed
+    if (!s || !s.name || !(s.token || s.pass)) return;
     SESSION_STORE = s;
-    showApp();
+    if (s.isOwner) showOwner(); else showApp();
   } catch(e) {}
 })();
 
