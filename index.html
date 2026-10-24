@@ -406,6 +406,23 @@ tbody tr:last-child td{border-bottom:none}
 .lv-day-date{width:92px;flex-shrink:0;font-weight:700}
 .lv-day i{color:var(--bad);font-style:normal;font-size:.78rem}
 .btn-leave{background:none;border:1px solid rgba(255,255,255,.28);color:rgba(255,255,255,.85);padding:6px 12px;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer}
+.ad-card>label:first-child{margin-bottom:10px}
+.ad-row{display:flex;align-items:center;gap:11px;width:100%;background:none;border:none;border-bottom:1px solid #ECE8E1;padding:11px 0;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.ad-row:last-child{border-bottom:none}
+.ad-av{width:36px;height:36px;border-radius:50%;background:#EDF2F8;color:var(--deep);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}
+.ad-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ad-row-main b{font-size:.96rem;color:var(--ink)}
+.ad-row-main span{font-size:.75rem;color:var(--stone)}
+.ad-row-main b .lv-st{font-size:.62rem;vertical-align:2px;margin-left:4px}
+.ad-chev{width:7px;height:7px;border-right:1.6px solid #AEA9A1;border-bottom:1.6px solid #AEA9A1;transform:rotate(-45deg);margin-right:4px;flex-shrink:0}
+.ad-chips{display:flex;flex-wrap:wrap;gap:8px}
+.ad-chip{padding:9px 15px;border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--stone);font-weight:700;font-size:.86rem;cursor:pointer}
+.ad-chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.ad-inline{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:.86rem;color:var(--stone)}
+.ad-inline input{width:84px;flex-shrink:0}
+.ad-actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
+.ad-actions .btn-new{margin-top:0}
+.ad-remove{background:none;border:none;color:var(--bad);font-weight:700;font-size:.86rem;cursor:pointer;padding:9px 4px}
 </style>
 </head>
 <body>
@@ -708,9 +725,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
+  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
   var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -938,7 +955,7 @@ function appLogout() {
   try { localStorage.removeItem('burmelin_session'); } catch(e){}
   document.getElementById('screen-leave').classList.remove('active');
   document.getElementById('screen-owner').classList.remove('active');
-  OWNER_DATA = null; LEAVE_ME = null;
+  OWNER_DATA = null; LEAVE_ME = null; OWNER_TAB = 'leave'; OWNER_EDIT = null;
   cacheClear();
   INVENTORY_LOADED = false;
   SESSION_STORE    = null;
@@ -2523,13 +2540,128 @@ document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && document.getElementById('screen-owner').classList.contains('active') && Date.now() - OWNER_LOADED_AT > 60000) ownerLoad();
 });
 
+// ── Owner: Staff settings (same Staff tab the leave requests use) ──
+var OWNER_TAB = 'leave';
+var OWNER_EDIT = null;     // employee being edited ({} for a new one), or null for the list
+var PLACE_LABEL = { 'Bicasso 1': 'Bicasso 1', 'Bicasso 2': 'Bicasso 2', 'Bicasso Nana': 'Nana', 'Palladium': 'Warehouse' };
+
+function ownerTab(tab) { OWNER_TAB = tab; OWNER_EDIT = null; ownerRender(); document.getElementById('owner-body').scrollTop = 0; }
+function ownerTabsHtml(pending) {
+  return '<div class="ms-tabs rp-tabs">'
+    + '<button class="mstab' + (OWNER_TAB === 'leave' ? ' active' : '') + '" onclick="ownerTab(\'leave\')">Leave' + (pending ? ' · ' + pending : '') + '</button>'
+    + '<button class="mstab' + (OWNER_TAB === 'staff' ? ' active' : '') + '" onclick="ownerTab(\'staff\')">Staff</button></div>';
+}
+function ownerDayOffText(s) {
+  return s.dayOffRule === 'fixed' ? 'Off every ' + s.fixedDayOff : s.daysOffPerMonth + ' days off a month';
+}
+function ownerStaffHtml() {
+  if (OWNER_EDIT) return ownerStaffFormHtml();
+  var staff = OWNER_DATA.staff;
+  var list = staff.length ? staff.map(function(s) {
+    var initials = s.name.split(' ').map(function(w) { return w.charAt(0); }).join('').slice(0, 2).toUpperCase();
+    return '<button class="ad-row" data-id="' + lvEsc(s.id) + '" onclick="ownerEditStaff(this.dataset.id)">'
+      + '<span class="ad-av">' + lvEsc(initials) + '</span>'
+      + '<span class="ad-row-main"><b>' + lvEsc(s.name) + (s.hasPin ? '' : ' <span class="lv-st Declined">No PIN</span>') + '</b>'
+      + '<span>' + s.places.map(function(p) { return PLACE_LABEL[p]; }).join(' · ') + ' — ' + lvEsc(ownerDayOffText(s)) + '</span></span>'
+      + '<span class="ad-chev"></span></button>';
+  }).join('') : '<div class="hist-empty">No employees yet. Add the first one below.</div>';
+  return '<div class="card ad-card"><label>Employees · ' + staff.length + '</label>' + list + '</div>'
+    + '<button class="btn-submit" onclick="ownerEditStaff(null)">Add employee</button>';
+}
+function ownerEditStaff(id) {
+  var s = id ? OWNER_DATA.staff.filter(function(x) { return x.id === id; })[0] : null;
+  OWNER_EDIT = s ? JSON.parse(JSON.stringify(s)) : { name: '', places: [], dayOffRule: 'flexible', daysOffPerMonth: 2, fixedDayOff: 'Sunday' };
+  ownerRender();
+  document.getElementById('owner-body').scrollTop = 0;
+}
+function ownerStaffFormHtml() {
+  var s = OWNER_EDIT, isNew = !s.id;
+  var places = OWNER_DATA.places.map(function(p) {
+    return '<button type="button" class="ad-chip' + (s.places.indexOf(p) > -1 ? ' on' : '') + '" onclick="ownerTogglePlace(\'' + p + '\')">' + PLACE_LABEL[p] + '</button>';
+  }).join('');
+  var days = OWNER_DATA.weekdays.map(function(d) { return '<option' + (s.fixedDayOff === d ? ' selected' : '') + '>' + d + '</option>'; }).join('');
+  return '<div class="card ad-card">'
+    + '<label>' + (isNew ? 'New employee' : 'Edit employee') + '</label>'
+    + '<div class="form-group"><label for="os-name">Name</label><input type="text" id="os-name" value="' + lvEsc(s.name) + '" maxlength="40" autocomplete="off"></div>'
+    + '<div class="form-group"><label>Works at</label><div class="ad-chips">' + places + '</div>'
+    + '<div class="lv-hint">They appear on the Leave list of every place ticked. Tick Nana for warehouse staff who cover Nana.</div></div>'
+    + '<div class="form-group"><label>Day off</label><div class="ms-tabs rp-tabs">'
+    + '<button type="button" class="mstab' + (s.dayOffRule === 'flexible' ? ' active' : '') + '" onclick="ownerSetRule(\'flexible\')">Flexible</button>'
+    + '<button type="button" class="mstab' + (s.dayOffRule === 'fixed' ? ' active' : '') + '" onclick="ownerSetRule(\'fixed\')">Same day every week</button></div>'
+    + (s.dayOffRule === 'flexible'
+        ? '<div class="ad-inline"><input type="number" id="os-perMonth" min="0" max="15" value="' + (s.daysOffPerMonth || 0) + '"><span>days off per month, requested in the app</span></div>'
+        : '<select id="os-fixedDay">' + days + '</select>')
+    + '</div>'
+    + '<div class="form-group"><label for="os-pin">' + (isNew ? 'PIN' : 'New PIN') + '</label>'
+    + '<input type="text" id="os-pin" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="numeric" placeholder="' + (isNew ? 'At least 4 characters' : (s.hasPin ? 'Leave empty to keep the current one' : 'No PIN yet: set one')) + '">'
+    + '<div class="lv-hint">Tell the employee their PIN yourself. It\'s saved scrambled, so nobody can read it back later, you included.</div></div>'
+    + '<div id="os-err" class="lv-err"></div>'
+    + '<button class="btn-submit" id="os-save" onclick="ownerSaveStaffForm()">' + (isNew ? 'Add employee' : 'Save changes') + '</button>'
+    + '<div class="ad-actions"><button class="btn-new" onclick="ownerCancelEdit()">Cancel</button>'
+    + (isNew ? '' : '<button class="ad-remove" onclick="ownerRemoveStaff()">Remove employee</button>') + '</div>'
+    + '</div>';
+}
+// Keep what's been typed when the form redraws (place chips and day-off toggles redraw it)
+function ownerReadForm() {
+  var s = OWNER_EDIT;
+  var n = document.getElementById('os-name'); if (n) s.name = n.value;
+  var pm = document.getElementById('os-perMonth'); if (pm) s.daysOffPerMonth = parseInt(pm.value);
+  var fd = document.getElementById('os-fixedDay'); if (fd) s.fixedDayOff = fd.value;
+  var pin = document.getElementById('os-pin'); if (pin) s._pin = pin.value;
+}
+function ownerRedrawForm() {
+  var pin = OWNER_EDIT._pin; ownerRender();
+  if (pin) document.getElementById('os-pin').value = pin;
+}
+function ownerTogglePlace(p) {
+  ownerReadForm();
+  var i = OWNER_EDIT.places.indexOf(p);
+  if (i > -1) OWNER_EDIT.places.splice(i, 1); else OWNER_EDIT.places.push(p);
+  ownerRedrawForm();
+}
+function ownerSetRule(rule) { ownerReadForm(); OWNER_EDIT.dayOffRule = rule; ownerRedrawForm(); }
+function ownerCancelEdit() { OWNER_EDIT = null; ownerRender(); }
+function ownerSaveStaffForm() {
+  ownerReadForm();
+  var s = OWNER_EDIT, err = document.getElementById('os-err'), btn = document.getElementById('os-save');
+  err.textContent = '';
+  var payload = { id: s.id, name: s.name, places: s.places, dayOffRule: s.dayOffRule,
+                  daysOffPerMonth: s.daysOffPerMonth, fixedDayOff: s.fixedDayOff, pin: s._pin || '' };
+  btn.disabled = true; btn.textContent = 'Saving…';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = s.id ? 'Save changes' : 'Add employee';
+      if (!r || !r.success) { err.textContent = (r && r.error) || 'Could not save.'; return; }
+      OWNER_DATA.staff = r.staff; OWNER_EDIT = null; ownerRender();
+      showToast(s.id ? 'Saved' : s.name.trim() + ' added');
+    })
+    .withFailureHandler(function() {
+      btn.disabled = false; btn.textContent = s.id ? 'Save changes' : 'Add employee';
+      err.textContent = 'Connection error — try again.';
+    })
+    .ownerSaveStaff(payload);
+}
+function ownerRemoveStaff() {
+  var s = OWNER_EDIT;
+  if (!confirm('Remove ' + s.name + '? They will no longer be able to request leave. Their past requests stay in the sheet.')) return;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!r || !r.success) { document.getElementById('os-err').textContent = (r && r.error) || 'Could not remove.'; return; }
+      OWNER_DATA.staff = r.staff; OWNER_EDIT = null; ownerRender(); showToast(s.name + ' removed');
+    })
+    .withFailureHandler(function() { document.getElementById('os-err').textContent = 'Connection error — try again.'; })
+    .ownerDeleteStaff(s.id);
+}
+
 function ownerRender() {
   var r = OWNER_DATA, today = r.today;
   var pending = r.requests.filter(function(q) { return q.status === 'Pending'; });
   var upcoming = r.requests.filter(function(q) { return q.status === 'Approved' && q.dates[q.dates.length - 1] >= today; });
   var past = r.requests.filter(function(q) { return q.status !== 'Pending' && upcoming.indexOf(q) < 0; });
   document.getElementById('owner-count').textContent = pending.length ? pending.length + ' waiting' : 'Owner';
-  var h = '<div class="lv-title">Waiting for you' + (pending.length ? ' · ' + pending.length : '') + '</div>';
+  var h = ownerTabsHtml(pending.length);
+  if (OWNER_TAB === 'staff') { document.getElementById('owner-body').innerHTML = h + ownerStaffHtml(); return; }
+  h += '<div class="lv-title">Waiting for you' + (pending.length ? ' · ' + pending.length : '') + '</div>';
   h += pending.length ? pending.map(function(q) {
     return '<div class="card lv-ask"><div class="lv-req-top"><span class="lv-who">' + lvEsc(q.name) + '</span><span class="lv-type ' + q.type + '">' + LEAVE_TYPE_LABEL[q.type] + '</span></div>'
       + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>'
