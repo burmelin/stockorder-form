@@ -15,3 +15,9 @@ Thumbs.db
 # Local dev helpers / harness
 .claude/
 _apitest.mjs
+
+# Finance app: local secrets
+.env
+.vercel/
+*.json.key
+service-account*.json

@@ -131,6 +131,23 @@ stay in Loyverse.
   Logins tab, row **Owner**.
 - Requests and decisions are kept in the **Leave** tab.
 
+## Finance app (`/finance`)
+
+The finance app (cash and bank dashboard, entries, Loyverse sales import, staff commission) lives
+in this project too, moved from `burmelinco-hash/burmelinfinance-`:
+
+- `finance/` is its page, served at **stockorder-form.vercel.app/finance**.
+- `api/` holds its Vercel server functions (Google Sheets via a service account, Loyverse).
+- `vercel.json` runs the daily Loyverse sync (`/api/loyverse-sync`, 06:00 Bangkok).
+- Setup, PIN and Loyverse details: [finance/README.md](finance/README.md).
+- Its settings live in this Vercel project's **Environment Variables**: `SHEET_ID`,
+  `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `APP_PIN`, `LOYVERSE_TOKEN`, `CRON_SECRET`,
+  `LOYVERSE_STORE_MAP` (and optionally `LOYVERSE_TIMEZONE`, `LOYVERSE_PAYMENT_MAP`, `STOCK_SHEET_ID`).
+  Without them the finance page runs on sample data and saves nothing.
+- Commission staff come from the Stock sheet's **Staff** tab; the finance robot account has Viewer
+  access to that sheet.
+- Run both apps locally: `npm install`, then `node dev-server.js` (http://localhost:3000 and /finance).
+
 ## Other features
 
 - **Stock History** tab: every stock change (sale, transfer, count, Palladium edit, Mark Done,

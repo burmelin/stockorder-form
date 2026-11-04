@@ -1,0 +1,15 @@
+{
+  "name": "burmelin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Burmelin: staff app (stock, orders, leave) and finance app (/finance)",
+  "scripts": {
+    "dev": "node dev-server.js"
+  },
+  "dependencies": {
+    "googleapis": "^140.0.0"
+  },
+  "devDependencies": {
+    "express": "^4.19.2"
+  }
+}
