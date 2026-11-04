@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#003D7A">
 <meta name="apple-mobile-web-app-title" content="Burmelin">
@@ -425,6 +425,75 @@ tbody tr:last-child td{border-bottom:none}
 .ad-actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
 .ad-actions .btn-new{margin-top:0}
 .ad-remove{background:none;border:none;color:var(--bad);font-weight:700;font-size:.86rem;cursor:pointer;padding:9px 4px}
+/* ── ADD TO HOME SCREEN guide ── */
+#install-guide{position:fixed;inset:0;z-index:10000;background:var(--linen);overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:calc(18px + env(safe-area-inset-top,0px)) 18px calc(22px + env(safe-area-inset-bottom,0px));animation:ldIn .2s ease-out}
+.ig-box{max-width:420px;margin:0 auto;display:flex;flex-direction:column;align-items:stretch}
+#ig-title{font-family:var(--f-display);font-size:1.5rem;line-height:1.15;color:var(--ink);text-align:center;margin-top:6px}
+.ig-why{text-align:center;color:var(--stone);font-size:.92rem;margin:6px 0 16px}
+.ig-phone{position:relative;width:184px;height:300px;margin:0 auto 16px;border-radius:30px;background:#111118;padding:9px;box-shadow:0 18px 34px -18px rgba(17,17,24,.55)}
+.ig-notch{position:absolute;top:12px;left:50%;width:56px;height:14px;margin-left:-28px;border-radius:8px;background:#111118;z-index:2}
+.ig-screen{position:relative;width:100%;height:100%;border-radius:22px;overflow:hidden;background:#fff;font-size:9px;color:var(--ink);display:flex;flex-direction:column}
+.ig-page{flex:1;padding:24px 10px 8px;background:var(--linen);display:flex;flex-direction:column;gap:6px}
+.ig-page-bar{height:16px;border-radius:4px;background:var(--deep)}
+.ig-page-line{height:6px;border-radius:3px;background:#E4DFD6;width:80%}
+.ig-page-line.s{width:55%}
+.ig-page-card{height:34px;border-radius:6px;background:#fff;border:1px solid #E4DFD6}
+.ig-safari-bar{display:flex;justify-content:space-around;align-items:center;height:34px;background:#F2F2F4;border-top:1px solid #DDD;color:#0A84FF;font-size:13px}
+.ig-addr,.ig-inapp-bar{display:flex;align-items:center;gap:6px;height:30px;margin-top:20px;padding:0 8px;background:#F2F2F4;border-bottom:1px solid #DDD;font-size:12px;color:#444}
+.ig-url{flex:1;background:#fff;border-radius:8px;padding:3px 6px;font-size:8px;color:#666;overflow:hidden;white-space:nowrap}
+.ig-sheet{position:absolute;left:0;right:0;bottom:0;background:#F2F2F4;border-radius:12px 12px 0 0;padding:6px;display:flex;flex-direction:column;gap:3px;box-shadow:0 -6px 14px rgba(0,0,0,.12)}
+.ig-sheet-row{background:#fff;border-radius:7px;padding:7px 8px;display:flex;justify-content:space-between;align-items:center}
+.ig-dialog-top{display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding:8px;border-bottom:1px solid #E4DFD6;color:#0A84FF}
+.ig-dialog-top b{color:var(--ink);font-size:8.5px}
+.ig-addcard{display:flex;gap:8px;align-items:center;padding:12px 10px}
+.ig-addcard img{width:34px;height:34px;border-radius:8px}
+.ig-addcard b{display:block;font-size:10px}
+.ig-addcard span{font-size:8px;color:#888}
+.ig-menu{position:absolute;top:46px;right:6px;width:118px;background:#fff;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.18);padding:4px 0}
+.ig-menu div{padding:7px 10px}
+.ig-onebtn{position:absolute;left:14px;right:14px;bottom:18px;background:var(--blue);color:#fff;border-radius:8px;text-align:center;padding:9px;font-weight:700;font-size:10px}
+.ig-install{position:absolute;left:10px;right:10px;bottom:16px;background:#fff;border-radius:12px;padding:12px;box-shadow:0 8px 20px rgba(0,0,0,.2);display:flex;flex-direction:column;align-items:center;gap:3px}
+.ig-install img{width:30px;height:30px;border-radius:7px}
+.ig-install div{display:flex;gap:18px;margin-top:6px;color:#1A73E8;font-weight:700}
+/* The button to tap: a pulsing ring */
+.ig-hot{position:relative;border-radius:8px;outline:2px solid var(--brass);outline-offset:2px;animation:igPulse 1.4s ease-out infinite}
+.ig-phone.still .ig-hot,.ig-phone.still .ig-hot *{animation:none}
+@keyframes igPulse{0%{box-shadow:0 0 0 0 rgba(201,169,110,.85)}100%{box-shadow:0 0 0 10px rgba(201,169,110,0)}}
+.ig-steps{list-style:none;display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.ig-step{display:flex;gap:10px;align-items:flex-start;width:100%;min-height:44px;text-align:left;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:.92rem;color:var(--ink);cursor:pointer;line-height:1.4}
+.ig-step.on{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.ig-num{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--sunk);color:var(--ink);font-weight:700;font-size:.78rem;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.ig-step.on .ig-num{background:var(--blue);color:#fff}
+.ig-i{width:1.05em;height:1.05em;vertical-align:-.15em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ig-glyph{font-weight:700}
+.ig-after{text-align:center;color:var(--stone);font-size:.84rem;margin:0 0 12px}
+.ig-actions{display:flex;flex-direction:column;gap:8px}
+.ig-primary,.ig-secondary{min-height:48px;border-radius:8px;border:none;background:var(--blue);color:#fff;font:inherit;font-weight:700;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;text-decoration:none}
+.ig-secondary{background:#fff;color:var(--blue);border:1.5px solid var(--blue)}
+.ig-later{min-height:44px;background:none;border:none;color:var(--stone);font:inherit;font-weight:600;font-size:.92rem;cursor:pointer}
+.ig-link{display:none;width:100%;padding:11px;border:1.5px solid var(--line);border-radius:8px;font:inherit;font-size:.85rem}
+.ig-link.show{display:block}
+.ig-switch{text-align:center;color:var(--stone);font-size:.8rem;margin-top:6px}
+.ig-switch button{min-height:44px;min-width:44px;padding:0 6px;background:none;border:none;color:var(--blue);font:inherit;font-weight:700;cursor:pointer}
+/* Ways back: entry on the login screen and in Settings, banner in the app */
+.ig-entry{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;font:inherit;color:var(--ink);cursor:pointer}
+.ig-entry>.ig-i{width:26px;height:26px;color:var(--blue);flex-shrink:0}
+.ig-entry b{display:block;font-size:.92rem}
+.ig-entry span span{font-size:.78rem;color:var(--stone)}
+.ig-card{display:flex;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--ink);text-align:left}
+.ig-card b{display:block;font-size:.95rem;margin-bottom:2px}
+.ig-card span{display:block;font-size:.8rem;color:var(--stone);line-height:1.4}
+.ig-qr{width:112px;height:112px;flex-shrink:0;background:#fff}
+.ig-qr svg{width:100%;height:100%}
+.ig-qr-url{font-weight:700;color:var(--ink)!important;margin-top:4px}
+.ig-login-entry{width:100%;max-width:340px;margin-top:14px}
+#ig-banner{flex-shrink:0;display:flex;align-items:center;gap:8px;background:var(--ink);color:#fff;padding:0 6px 0 14px;min-height:44px}
+#ig-banner[hidden]{display:none}
+#ig-banner .ig-banner-open{flex:1;min-height:44px;background:none;border:none;color:#fff;font:inherit;font-weight:700;font-size:.86rem;text-align:left;cursor:pointer;display:flex;align-items:center;gap:8px}
+#ig-banner .ig-banner-open .ig-i{color:var(--brass)}
+#ig-banner .ig-banner-x{width:44px;height:44px;background:none;border:none;color:rgba(255,255,255,.7);font-size:1.1rem;cursor:pointer}
+@media (prefers-reduced-motion:reduce){#install-guide{animation:none}.ig-hot{animation:none}}
 </style>
 </head>
 <body>
@@ -459,6 +528,7 @@ tbody tr:last-child td{border-bottom:none}
     <button id="btn-sli" class="login-btn" onclick="doStoreLogin()">Enter Store</button>
     <div id="sli-err" class="login-err"></div>
   </div>
+  <div class="ig-login-entry" data-ig-entry></div>
 </div>
 
 <!-- ── MAIN APP ── -->
@@ -616,6 +686,7 @@ tbody tr:last-child td{border-bottom:none}
 
   </div><!-- /app-body -->
 
+  <div id="ig-banner" hidden><button class="ig-banner-open" onclick="openInstallGuide()"><svg class="ig-i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg><span class="ig-banner-text">Get the app</span></button><button class="ig-banner-x" onclick="igHideBanner()" aria-label="Hide this">✕</button></div>
   <nav id="app-nav">
     <button class="nav-btn active" id="nav-mystore" onclick="navTap('mystore')">
       <span class="nav-icon"><svg><use href="#i-box"/></svg></span><span>My Store</span>
@@ -696,6 +767,304 @@ function startSession(session, password, reply) {
   SESSION_STORE = session;
   saveSession();
 }
+
+// ════════════════════════════════════════════════════════════════
+//  ADD TO HOME SCREEN — one guide, showing the one path that works
+//  on this phone and browser
+// ════════════════════════════════════════════════════════════════
+var IG_APP = 'Burmelin';
+// In-app browsers can't add to the Home Screen. Add a marker here to recognise another app.
+var IG_IN_APP = [
+  { mark: 'Instagram', app: 'Instagram', menu: 'Open in external browser' },
+  { mark: 'Barcelona', app: 'Threads' },
+  { mark: 'FB_IAB/MESSENGER', app: 'Messenger' }, { mark: 'Messenger', app: 'Messenger' },
+  { mark: 'FBAN', app: 'Facebook' }, { mark: 'FBAV', app: 'Facebook' }, { mark: 'FB_IAB', app: 'Facebook' },
+  { mark: 'musical_ly', app: 'TikTok' }, { mark: 'Bytedance', app: 'TikTok' },
+  { mark: 'Snapchat', app: 'Snapchat' }, { mark: 'Line/', app: 'LINE' },
+  { mark: 'Twitter', app: 'X' }, { mark: 'LinkedInApp', app: 'LinkedIn' }
+];
+var IG_KEYS = { done: 'bm_install_done', snooze: 'bm_install_snooze', banner: 'bm_install_banner_off' };
+var IG_EVENT = null;          // the saved beforeinstallprompt event (Android)
+var IG_OPEN = null;           // { situation, step, timer, returnFocus } while the guide is showing
+
+function igGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function igSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+// Exactly one of: installed, in-app, android-one-tap, android-menu, iphone-safari, iphone-other, desktop.
+// `env` is only passed by tests; normally it reads this browser.
+function installSituation(env) {
+  env = env || {
+    ua: navigator.userAgent || '',
+    touch: navigator.maxTouchPoints || 0,
+    standalone: (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true,
+    canPrompt: !!IG_EVENT
+  };
+  var ua = env.ua;
+  if (env.standalone) return 'installed';
+  if (igInAppOf(ua)) return 'in-app';
+  if (/Android/i.test(ua)) return env.canPrompt ? 'android-one-tap' : 'android-menu';
+  var ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && env.touch > 1);
+  if (ios) return /CriOS|EdgiOS|FxiOS/.test(ua) ? 'iphone-other' : 'iphone-safari';
+  return 'desktop';
+}
+function igInAppOf(ua) {
+  ua = ua || navigator.userAgent || '';
+  for (var i = 0; i < IG_IN_APP.length; i++) if (ua.indexOf(IG_IN_APP[i].mark) > -1) return IG_IN_APP[i];
+  return null;
+}
+function igIsPhone(s) { return s !== 'desktop' && s !== 'installed'; }
+function igInstalled() { return installSituation() === 'installed' || igGet(IG_KEYS.done) === '1'; }
+
+// Android: keep the browser's install offer for our own button
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  IG_EVENT = e;
+  if (IG_OPEN && /^android/.test(IG_OPEN.situation)) { IG_OPEN.situation = 'android-one-tap'; IG_OPEN.step = 0; igRender(); }
+  igRefreshEntries();
+});
+window.addEventListener('appinstalled', function() { igMarkDone(); igClose(); });
+
+function igMarkDone() { igSet(IG_KEYS.done, '1'); igRefreshEntries(); }
+
+// ── Icons used in steps and drawings ──────────────────────────────
+var IG_ICON = {
+  share: '<svg class="ig-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M7 10H6v10h12V10h-1"/></svg>',
+  add: '<svg class="ig-i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>',
+  dots: '<span class="ig-glyph" aria-hidden="true">⋮</span>',
+  hdots: '<span class="ig-glyph" aria-hidden="true">⋯</span>',
+  burger: '<span class="ig-glyph" aria-hidden="true">☰</span>'
+};
+
+// ── Steps and drawings for each situation ─────────────────────────
+// Each step: { text, screen } where screen is the phone drawing with the button to tap marked .ig-hot
+function igBrowserOf(ua) { return /EdgiOS/.test(ua) ? 'Edge' : /FxiOS/.test(ua) ? 'Firefox' : 'Chrome'; }
+function igPage() {
+  return '<div class="ig-page"><div class="ig-page-bar"></div><div class="ig-page-line"></div><div class="ig-page-line s"></div><div class="ig-page-card"></div><div class="ig-page-card"></div></div>';
+}
+function igShareSheet() {
+  return '<div class="ig-sheet"><div class="ig-sheet-row">Copy</div><div class="ig-sheet-row">Add to Reading List</div>'
+    + '<div class="ig-sheet-row ig-hot">Add to Home Screen ' + IG_ICON.add + '</div><div class="ig-sheet-row">Find on Page</div></div>';
+}
+function igAddDialog() {
+  return '<div class="ig-dialog-top"><span>Cancel</span><b>Add to Home Screen</b><span class="ig-hot">Add</span></div>'
+    + '<div class="ig-addcard"><img src="/icons/apple-touch-icon.png" alt=""><div><b>' + IG_APP + '</b><span>' + location.host + '</span></div></div>';
+}
+function igSteps(situation) {
+  var ua = navigator.userAgent || '', iosEnd = [
+    { text: 'Scroll down and tap <b>Add to Home Screen</b> ' + IG_ICON.add + '.', screen: igPage() + igShareSheet() },
+    { text: 'Tap <b>Add</b> at the top right.', screen: igAddDialog() }
+  ];
+  if (situation === 'iphone-safari') {
+    return [{ text: 'Tap <b>Share</b> ' + IG_ICON.share + ' in the bar at the bottom. On newer iPhones, tap <b>⋯</b> first.',
+              screen: igPage() + '<div class="ig-safari-bar"><span>‹</span><span>›</span><span class="ig-hot">' + IG_ICON.share + '</span><span>📖</span><span>⧉</span></div>' }].concat(iosEnd);
+  }
+  if (situation === 'iphone-other') {
+    var b = igBrowserOf(ua);
+    if (b === 'Chrome') {
+      return [{ text: 'Tap <b>Share</b> ' + IG_ICON.share + ' at the right of the address bar.',
+                screen: '<div class="ig-addr"><span class="ig-url">' + location.host + '</span><span class="ig-hot">' + IG_ICON.share + '</span></div>' + igPage() }].concat(iosEnd);
+    }
+    var menu = b === 'Edge' ? IG_ICON.hdots : IG_ICON.burger;
+    return [{ text: 'Tap ' + menu + ' at the bottom, then <b>Share</b> ' + IG_ICON.share + '.',
+              screen: igPage() + '<div class="ig-safari-bar"><span>‹</span><span>›</span><span>＋</span><span>⧉</span><span class="ig-hot">' + menu + '</span></div>' }].concat(iosEnd);
+  }
+  if (situation === 'android-menu') {
+    return [
+      { text: 'Tap ' + IG_ICON.dots + ' at the top right.', screen: '<div class="ig-addr"><span class="ig-url">' + location.host + '</span><span class="ig-hot">' + IG_ICON.dots + '</span></div>' + igPage() },
+      { text: 'Tap <b>Add to Home screen</b> or <b>Install app</b>, then confirm.',
+        screen: '<div class="ig-addr"><span class="ig-url">' + location.host + '</span><span>' + IG_ICON.dots + '</span></div>' + igPage()
+          + '<div class="ig-menu"><div>New tab</div><div>Bookmarks</div><div class="ig-hot">Add to Home screen</div><div>Settings</div></div>' }
+    ];
+  }
+  if (situation === 'android-one-tap') {
+    return [
+      { text: 'Tap <b>Install app</b> below.', screen: igPage() + '<div class="ig-onebtn ig-hot">Install app</div>' },
+      { text: 'Tap <b>Install</b> in the box that opens. Done.',
+        screen: igPage() + '<div class="ig-install"><img src="/icons/icon-192.png" alt=""><b>Install app?</b><span>' + IG_APP + '</span><div><span>Cancel</span><span class="ig-hot">Install</span></div></div>' }
+    ];
+  }
+  if (situation === 'in-app') {
+    var a = igInAppOf(ua) || { app: 'this app' }, label = a.menu || 'Open in browser';
+    var dots = /Android/i.test(ua) ? IG_ICON.dots : IG_ICON.hdots;
+    return [
+      { text: 'Tap ' + dots + ' at the top right of ' + a.app + '.', screen: '<div class="ig-inapp-bar"><span>✕</span><span class="ig-url">' + location.host + '</span><span class="ig-hot">' + dots + '</span></div>' + igPage() },
+      { text: 'Tap <b>' + label + '</b>. Or copy the link below and paste it into your browser.',
+        screen: '<div class="ig-inapp-bar"><span>✕</span><span class="ig-url">' + location.host + '</span><span>' + dots + '</span></div>' + igPage()
+          + '<div class="ig-menu"><div>Copy link</div><div class="ig-hot">' + label + '</div><div>Share</div></div>' }
+    ];
+  }
+  return [];
+}
+
+// ── Open / close ──────────────────────────────────────────────────
+function openInstallGuide(force) {
+  var situation = force || installSituation();
+  if (situation === 'installed') return;
+  if (situation === 'desktop') { igShowQrDialog(); return; }
+  if (IG_OPEN) { IG_OPEN.situation = situation; IG_OPEN.step = 0; igRender(); return; }
+  var root = document.createElement('div');
+  root.id = 'install-guide';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.setAttribute('aria-labelledby', 'ig-title');
+  document.body.appendChild(root);
+  IG_OPEN = { situation: situation, step: 0, timer: null, returnFocus: document.activeElement };
+  document.addEventListener('keydown', igKeys);
+  igRender();
+  var first = root.querySelector('.ig-primary') || root.querySelector('button');
+  if (first) first.focus();
+}
+window.openInstallGuide = openInstallGuide;
+
+function igClose() {
+  if (!IG_OPEN) return;
+  clearInterval(IG_OPEN.timer);
+  document.removeEventListener('keydown', igKeys);
+  var root = document.getElementById('install-guide'); if (root) root.remove();
+  var back = IG_OPEN.returnFocus; IG_OPEN = null;
+  if (back && back.focus && document.contains(back)) back.focus();
+}
+function igLater() { igSet(IG_KEYS.snooze, String(Date.now() + 3 * 24 * 3600 * 1000)); igClose(); }
+function igAdded() { igMarkDone(); igClose(); }
+function igKeys(e) {
+  if (e.key === 'Escape') { igLater(); return; }
+  if (e.key !== 'Tab') return;
+  var root = document.getElementById('install-guide'); if (!root) return;
+  var f = root.querySelectorAll('button, a[href], input');
+  if (!f.length) return;
+  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+  else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+}
+function igReducedMotion() { return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; }
+
+function igRender() {
+  var root = document.getElementById('install-guide'); if (!root || !IG_OPEN) return;
+  var s = IG_OPEN.situation, steps = igSteps(s), inApp = s === 'in-app', ios = /^iphone/.test(s);
+  if (IG_OPEN.step >= steps.length) IG_OPEN.step = 0;
+  var stepList = steps.map(function(st, i) {
+    return '<li><button class="ig-step' + (i === IG_OPEN.step ? ' on' : '') + '" onclick="igGo(' + i + ')"><span class="ig-num">' + (i + 1) + '</span><span>' + st.text + '</span></button></li>';
+  }).join('');
+  var actions;
+  if (s === 'android-one-tap') actions = '<button class="ig-primary" onclick="igInstall()">Install app</button>';
+  else if (inApp) {
+    actions = '<button class="ig-primary" onclick="igCopy(this)">Copy link</button>'
+      + (/Android/i.test(navigator.userAgent) ? '<a class="ig-secondary" href="intent://' + location.host + location.pathname + location.search + '#Intent;scheme=https;package=com.android.chrome;end">Open in Chrome</a>' : '')
+      + '<input class="ig-link" id="ig-link" readonly value="' + location.href.replace(/"/g, '&quot;') + '" aria-label="Link to this app">';
+  } else actions = '<button class="ig-primary" onclick="igAdded()">I\'ve added it</button>';
+  root.innerHTML = '<div class="ig-box">'
+    + '<h2 id="ig-title">' + (inApp ? 'Open this in your browser first' : 'Add ' + IG_APP + ' to your Home Screen') + '</h2>'
+    + '<p class="ig-why">' + (inApp ? 'Apps like this one can\'t add ' + IG_APP + ' to your Home Screen. Your phone\'s browser can.' : 'Open it in one tap, full screen, like a real app.') + '</p>'
+    + '<div class="ig-phone' + (igReducedMotion() ? ' still' : '') + '" aria-hidden="true"><div class="ig-notch"></div><div class="ig-screen">' + steps[IG_OPEN.step].screen + '</div></div>'
+    + '<ol class="ig-steps">' + stepList + '</ol>'
+    + (ios ? '<p class="ig-after">Open it from your Home Screen and sign in once.</p>' : '')
+    + '<div class="ig-actions">' + actions + '<button class="ig-later" onclick="igLater()">Maybe later</button></div>'
+    + (inApp ? '' : '<p class="ig-switch">Wrong phone? <button onclick="openInstallGuide(\'iphone-safari\')">iPhone</button> | <button onclick="openInstallGuide(IG_EVENT ? \'android-one-tap\' : \'android-menu\')">Android</button></p>')
+    + '</div>';
+  igStartTimer();
+}
+// Steps move on by themselves every 3 seconds and loop (not when the phone asks for less motion)
+function igStartTimer() {
+  clearInterval(IG_OPEN.timer); IG_OPEN.timer = null;
+  var n = igSteps(IG_OPEN.situation).length;
+  if (!igReducedMotion() && n > 1) {
+    IG_OPEN.timer = setInterval(function() { IG_OPEN.step = (IG_OPEN.step + 1) % n; igPaintStep(); }, 3000);
+  }
+}
+// Moving to another step only redraws the phone and the highlight (focus stays where it is)
+function igPaintStep() {
+  var root = document.getElementById('install-guide'); if (!root || !IG_OPEN) return;
+  var steps = igSteps(IG_OPEN.situation);
+  root.querySelector('.ig-screen').innerHTML = steps[IG_OPEN.step].screen;
+  root.querySelectorAll('.ig-step').forEach(function(b, i) { b.classList.toggle('on', i === IG_OPEN.step); });
+}
+function igGo(i) { IG_OPEN.step = i; igPaintStep(); igStartTimer(); }
+function igInstall() {
+  if (!IG_EVENT) { openInstallGuide('android-menu'); return; }
+  var e = IG_EVENT;
+  e.prompt();
+  e.userChoice.then(function(c) {
+    IG_EVENT = null;
+    if (c && c.outcome === 'accepted') { igMarkDone(); igClose(); }
+    else if (IG_OPEN) { IG_OPEN.situation = 'android-menu'; IG_OPEN.step = 0; igRender(); }
+  });
+}
+function igCopy(btn) {
+  var done = function() { btn.textContent = 'Link copied'; };
+  var fallback = function() { var i = document.getElementById('ig-link'); i.classList.add('show'); i.focus(); i.select(); try { document.execCommand('copy'); done(); } catch (e) {} };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href).then(done, fallback);
+  else fallback();
+}
+
+// ── Desktop: "Get it on your phone" with a QR code ────────────────
+var IG_QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+function igQrInto(el) {
+  var draw = function() {
+    var q = qrcode(0, 'M'); q.addData(location.origin + '/'); q.make();
+    el.innerHTML = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  };
+  if (window.qrcode) { draw(); return; }
+  var s = document.createElement('script'); s.src = IG_QR_LIB; s.onload = draw;
+  s.onerror = function() { el.innerHTML = '<span class="ig-qr-url">' + location.host + '</span>'; };
+  document.head.appendChild(s);
+}
+function igQrCardHtml() {
+  return '<div class="ig-card"><div class="ig-qr" data-ig-qr></div><div><b>Get it on your phone</b>'
+    + '<span>Scan with your phone\'s camera, then add it to your Home Screen.</span><span class="ig-qr-url">' + location.host + '</span></div></div>';
+}
+function igShowQrDialog() {
+  var root = document.createElement('div');
+  root.id = 'install-guide'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-labelledby', 'ig-title');
+  root.innerHTML = '<div class="ig-box"><h2 id="ig-title">Get ' + IG_APP + ' on your phone</h2>' + igQrCardHtml()
+    + '<div class="ig-actions"><button class="ig-later" onclick="igClose()">Close</button></div></div>';
+  document.body.appendChild(root);
+  IG_OPEN = { situation: 'desktop', step: 0, timer: null, returnFocus: document.activeElement };
+  document.addEventListener('keydown', igKeys);
+  igQrInto(root.querySelector('[data-ig-qr]'));
+  root.querySelector('button').focus();
+}
+
+// ── Ways back: login screen and Settings card, and the banner in the app ──
+function igEntryHtml() {
+  var s = installSituation();
+  if (s === 'installed' || igGet(IG_KEYS.done) === '1') return '';
+  if (s === 'desktop') return igQrCardHtml();
+  return '<button class="ig-entry" onclick="openInstallGuide()">' + IG_ICON.add + '<span><b>Add ' + IG_APP + ' to your Home Screen</b>'
+    + '<span>' + (s === 'android-one-tap' ? 'One tap to install' : 'Open it in one tap, like a real app') + '</span></span></button>';
+}
+function igRefreshEntries() {
+  document.querySelectorAll('[data-ig-entry]').forEach(function(el) {
+    el.innerHTML = igEntryHtml();
+    var qr = el.querySelector('[data-ig-qr]'); if (qr) igQrInto(qr);
+  });
+  var banner = document.getElementById('ig-banner');
+  if (banner) {
+    var s = installSituation();
+    var show = igIsPhone(s) && igGet(IG_KEYS.done) !== '1' && igGet(IG_KEYS.banner) !== '1';
+    banner.hidden = !show;
+    if (show) banner.querySelector('.ig-banner-text').textContent = s === 'android-one-tap' ? 'Get the app · 1 tap' : 'Get the app on your Home Screen';
+  }
+}
+function igHideBanner() { igSet(IG_KEYS.banner, '1'); igRefreshEntries(); }
+
+// ── Opening by itself: once, on phones, a second after the page has drawn ──
+function igAutoOpen(tries) {
+  var s = installSituation();
+  if (!igIsPhone(s) || igGet(IG_KEYS.done) === '1' || IG_OPEN) return;
+  if ((parseInt(igGet(IG_KEYS.snooze)) || 0) > Date.now()) return;
+  // Never on a page opened from an email link (sign-in or reset links carry a token)
+  if (/[?&#](token|reset|code|oobCode|mode)=/i.test(location.search + location.hash)) return;
+  // Never on top of a form someone is typing in: wait until they've left the field
+  var a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable)) {
+    if ((tries || 0) < 40) setTimeout(function() { igAutoOpen((tries || 0) + 1); }, 3000);
+    return;
+  }
+  openInstallGuide();
+}
+window.addEventListener('load', function() {
+  igRefreshEntries();
+  requestAnimationFrame(function() { setTimeout(igAutoOpen, 1000); });
+});
 
 // ── WAKE THE SERVER EARLY ────────────────────────────────────────
 // Google lets an unused server fall asleep, and the first request then waits ~10 s. A tiny request
@@ -2662,7 +3031,11 @@ function ownerRender() {
   var past = r.requests.filter(function(q) { return q.status !== 'Pending' && upcoming.indexOf(q) < 0; });
   document.getElementById('owner-count').textContent = pending.length ? pending.length + ' waiting' : '';
   var h = ownerTabsHtml(pending.length);
-  if (OWNER_TAB === 'staff') { document.getElementById('owner-body').innerHTML = h + ownerStaffHtml(); return; }
+  if (OWNER_TAB === 'staff') {
+    document.getElementById('owner-body').innerHTML = h + ownerStaffHtml() + '<div class="lv-title" style="margin-top:18px">Get the app</div><div data-ig-entry></div>';
+    igRefreshEntries();
+    return;
+  }
   h += '<div class="lv-title">Waiting for you' + (pending.length ? ' · ' + pending.length : '') + '</div>';
   h += pending.length ? pending.map(function(q) {
     return '<div class="card lv-ask"><div class="lv-req-top"><span class="lv-who">' + lvEsc(q.name) + '</span><span class="lv-type ' + q.type + '">' + LEAVE_TYPE_LABEL[q.type] + '</span></div>'
