@@ -1637,8 +1637,15 @@ function coverageGap(date, staff, leave, extraOff) {
   }
   var nana = staff.filter(function(s) { return has(s, 'Bicasso Nana') && !has(s, 'Palladium'); });
   var cover = staff.filter(function(s) { return has(s, 'Bicasso Nana') && has(s, 'Palladium'); });
-  if (nana.length && nana.every(off) && !cover.some(function(s) { return !off(s); })) {
-    return 'Nana would have nobody on ' + prettyDay(date) + (cover.length ? ': no warehouse employee who covers Nana is free' : ': no warehouse employee is set up to cover Nana');
+  var warehouse = staff.filter(function(s) { return has(s, 'Palladium'); });
+  if (nana.length && nana.every(off)) {
+    // One warehouse employee goes to Nana and another stays at the warehouse
+    if (!cover.some(function(s) { return !off(s); })) {
+      return 'Nana would have nobody on ' + prettyDay(date) + (cover.length ? ': no warehouse employee who covers Nana is free' : ': no warehouse employee is set up to cover Nana');
+    }
+    if (warehouse.filter(function(s) { return !off(s); }).length < 2) {
+      return 'Nana would have nobody on ' + prettyDay(date) + ': covering her would leave the warehouse empty';
+    }
   }
   return null;
 }
@@ -1660,8 +1667,9 @@ function readStaffToken(token, staff) {
   if (!s || !s.hash || staffFingerprint(s) !== p.f) return null;
   return { staff: s, t: p.t };
 }
-// Each shop login only serves the people who work there ("Works at" includes that shop)
-function worksAt(s, b) { return s.places.indexOf(b.authStore) > -1; }
+// Each shop login only serves the people who work there ("Works at" includes that shop).
+// Warehouse (Palladium) staff don't take leave: they cover Nana, so they're never listed.
+function worksAt(s, b) { return s.places.indexOf('Palladium') < 0 && s.places.indexOf(b.authStore) > -1; }
 
 // The staff member behind b.staffToken, or an error reply
 function leaveWho(b, ss, staff) {
