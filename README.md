@@ -120,9 +120,13 @@ stay in Loyverse.
   stored scrambled in Password hash / Password salt and the cell clears. To change a PIN, type a
   new one; phones using the old one ask for it again. Never edit the hash or salt columns.
 - **Rules:** a day off needs 3 days' notice and comes from the monthly allowance. It's refused if
-  it would leave Bicasso 1 or 2 without one person each, or Nana without anyone (a warehouse
-  employee with Nana in "Works at" covers her). Sick leave can start today, up to 7 days, and is
-  never refused: a gap it causes shows as a warning on the Owner screen.
+  it would leave Bicasso 1 or 2 without one person each, or Nana without anyone. Nana is covered by
+  a warehouse employee with Nana in "Works at", and another warehouse employee must stay at the
+  warehouse, so Nana's day off needs two warehouse staff working that day (never a Sunday).
+  Sick leave can start today, up to 7 days, and is never refused: a gap it causes shows as a
+  warning on the Settings screen.
+- **Warehouse (Palladium) staff don't take leave:** they're off every Sunday and cover Nana. The
+  Palladium login has no Leave button, and warehouse staff aren't on any leave list.
 - **Owner:** an email arrives for each request. The owner password is `OWNER_PASS`; set it from the
   Logins tab, row **Owner**.
 - Requests and decisions are kept in the **Leave** tab.
