@@ -2,26 +2,42 @@
 const { google } = require('googleapis');
 
 const SHEET_ID = process.env.SHEET_ID || '1UG4WQG3vOiytArJT1U03CdQPwjPlMb9-3wy1OGzoLmw';
-const MOCK = !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY;
+const MOCK = !process.env.GOOGLE_PRIVATE_KEY || !(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || /client_email/.test(process.env.GOOGLE_PRIVATE_KEY));
 
 // Tolerate the common ways a private key gets mangled when pasted into a host's
-// env-var UI: wrapping quotes, escaped "\n" instead of real newlines, stray CRs.
+// env-var UI: wrapping quotes, escaped "\n" instead of real newlines, stray CRs,
+// extra text around the key. The whole service-account JSON file can also be pasted
+// as GOOGLE_PRIVATE_KEY (open the file, Ctrl+A, Ctrl+C): its private_key is used.
+function parseServiceAccountJson(raw) {
+  const t = (raw || '').trim();
+  if (!t.startsWith('{')) return null;
+  try { return JSON.parse(t); } catch (e) { return null; }
+}
+
 function normalizePrivateKey(raw) {
-  let k = (raw || '').trim();
+  const json = parseServiceAccountJson(raw);
+  let k = (json && json.private_key ? json.private_key : raw || '').trim();
   if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
     k = k.slice(1, -1).trim();
   }
   k = k.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
-  return k;
+  const pem = k.match(/-----BEGIN PRIVATE KEY-----[\s\S]*?-----END PRIVATE KEY-----/);
+  return pem ? pem[0] + '\n' : k;
+}
+
+// The service account email: GOOGLE_SERVICE_ACCOUNT_EMAIL, or client_email from a pasted JSON file
+function serviceAccountEmail() {
+  const json = parseServiceAccountJson(process.env.GOOGLE_PRIVATE_KEY);
+  return (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || (json && json.client_email) || '').trim();
 }
 
 function getSheetsClient() {
   const key = normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
   if (!key.includes('BEGIN PRIVATE KEY')) {
-    throw new Error('GOOGLE_PRIVATE_KEY looks malformed — paste the full key from the JSON, including the BEGIN/END lines.');
+    throw new Error('GOOGLE_PRIVATE_KEY looks malformed. Easiest fix: open the key .json file, select all (Ctrl+A), copy, and paste the whole file as GOOGLE_PRIVATE_KEY.');
   }
   const auth = new google.auth.JWT(
-    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    serviceAccountEmail(),
     null,
     key,
     ['https://www.googleapis.com/auth/spreadsheets']
