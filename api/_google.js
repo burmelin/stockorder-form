@@ -1,0 +1,134 @@
+// Shared helpers for the Sheets API. Files starting with "_" are not exposed as routes on Vercel.
+const { google } = require('googleapis');
+
+const SHEET_ID = process.env.SHEET_ID || '1UG4WQG3vOiytArJT1U03CdQPwjPlMb9-3wy1OGzoLmw';
+const MOCK = !process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY;
+
+// Tolerate the common ways a private key gets mangled when pasted into a host's
+// env-var UI: wrapping quotes, escaped "\n" instead of real newlines, stray CRs.
+function normalizePrivateKey(raw) {
+  let k = (raw || '').trim();
+  if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
+    k = k.slice(1, -1).trim();
+  }
+  k = k.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
+  return k;
+}
+
+function getSheetsClient() {
+  const key = normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
+  if (!key.includes('BEGIN PRIVATE KEY')) {
+    throw new Error('GOOGLE_PRIVATE_KEY looks malformed — paste the full key from the JSON, including the BEGIN/END lines.');
+  }
+  const auth = new google.auth.JWT(
+    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    null,
+    key,
+    ['https://www.googleapis.com/auth/spreadsheets']
+  );
+  return google.sheets({ version: 'v4', auth });
+}
+
+// The app PIN lives in the finance sheet (Lists tab, cell K2) so the owner can see and
+// change it there. If that cell is empty the APP_PIN env var is used instead, so clearing
+// it never leaves the app open by accident; with neither set, there is no PIN.
+async function currentPin() {
+  if (!MOCK) {
+    const resp = await getSheetsClient().spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "'Lists'!K2" });
+    const fromSheet = String(((resp.data.values || [])[0] || [])[0] ?? '').trim();
+    if (fromSheet) return fromSheet;
+  }
+  return String(process.env.APP_PIN || '').trim();
+}
+
+// PIN gate: every request must send the current PIN in the x-app-pin header.
+async function checkPin(req, res) {
+  let pin;
+  try {
+    pin = await currentPin();
+  } catch (err) {
+    res.status(500).json({ error: 'Could not check the PIN: ' + err.message });
+    return false;
+  }
+  if (!pin) return true;
+  if (String(req.headers['x-app-pin'] || '').trim() === pin) return true;
+  res.status(401).json({ error: 'PIN required' });
+  return false;
+}
+
+// Google Sheets serial date -> JS Date (sheet epoch is 1899-12-30)
+function serialToDate(serial) {
+  return new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+}
+
+function num(v) {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
+  return isFinite(n) ? n : 0;
+}
+
+// Reads Master Entry once and returns the parsed rows, the first empty row (after the
+// last used one, judged by column A) and the sheet's last row — enough to append and
+// to check for duplicates without a second request.
+async function readMasterEntry(sheets) {
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: "'Master Entry'!A2:L",
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
+  });
+  // An open-ended range comes back as e.g. 'Master Entry'!A2:L5000 — the sheet's size.
+  const lastRow = parseInt(String(resp.data.range || '').match(/(\d+)$/)?.[1], 10) || Infinity;
+  const rows = [];
+  let lastUsed = 0;
+  (resp.data.values || []).forEach((r, i) => {
+    if (r[0] === undefined || r[0] === '') return;
+    lastUsed = i + 1;
+    rows.push({
+      row: i + 2,
+      date: typeof r[0] === 'number' ? serialToDate(r[0]).toISOString().slice(0, 10) : String(r[0]),
+      shop: String(r[1] || ''),
+      customer: String(r[2] || ''),
+      category: String(r[3] || ''),
+      cashIn: num(r[5]),
+      bankIn: num(r[6]),
+      cashOut: num(r[7]),
+      bankOut: num(r[8]),
+      credit: num(r[9]),
+      enteredBy: String(r[10] || ''),
+      notes: String(r[11] || ''),
+    });
+  });
+  return { rows, nextRow: 2 + lastUsed, lastRow };
+}
+
+// Credit rows belong to the customer's shop: Palladium, unless Lists column F names
+// another one. "Nana Card (Neighbour)" is Nana's — card sales rung up on the neighbour
+// shop's machine, which the neighbour later pays back in cash at Nana.
+const MOCK_CUSTOMER_SHOPS = { 'Nana Card (Neighbour)': 'Nana' };
+
+function customerShopMap(listRows) {
+  const map = {};
+  for (const r of listRows) if (r[0]) map[String(r[0])] = String(r[1] || '').trim() || 'Palladium';
+  return map;
+}
+
+// Checks each { customer, shop } credit entry against its customer's shop.
+// Returns an error message, or null when they all match.
+async function creditShopError(entries) {
+  if (!entries.length) return null;
+  let shops = MOCK_CUSTOMER_SHOPS;
+  if (!MOCK) {
+    const resp = await getSheetsClient().spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "'Lists'!E2:F30" });
+    shops = customerShopMap(resp.data.values || []);
+  }
+  for (const e of entries) {
+    const home = shops[e.customer] || 'Palladium';
+    if (e.shop !== home) return `Credit rows for ${e.customer} must use Shop = ${home}`;
+  }
+  return null;
+}
+
+// Shown when a save would go past the bottom of Master Entry.
+const sheetFullError = (lastRow) => `Master Entry is full (row ${lastRow}). Add more rows at the bottom of the sheet, copying the last row's formulas.`;
+
+module.exports = { SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
