@@ -260,6 +260,65 @@ body {
 }
 .cancel-edit-btn:active { background: rgba(26,86,219,.1); }
 
+
+/* ---------- daily statement ---------- */
+.office-link { color: #fff; text-decoration: none; margin-right: 10px; font-weight: 700; }
+.stmt-controls .lv-range { margin-bottom: 10px; }
+.stmt-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip {
+  border: 1.5px solid var(--border); background: #fff; color: var(--text);
+  padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.chip.on, .chip:active { border-color: var(--blue); color: var(--blue); background: #eff6ff; }
+.stmt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stmt-actions .save-btn, .stmt-actions .add-line-btn { padding: 12px; font-size: 15px; }
+.stmt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px 6px; }
+
+/* The statement itself: the same markup on screen, in print and in the PDF */
+.stmt {
+  background: #fff; color: #111; border-radius: 12px; padding: 18px 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 12px; line-height: 1.35;
+  min-width: 340px;
+}
+.stmt .st-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end;
+  border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 12px; }
+.stmt .st-brand { font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; color: #555; }
+.stmt h2 { font-size: 19px; margin: 1px 0; }
+.stmt .st-period { font-size: 13px; font-weight: 600; }
+.stmt .st-made { font-size: 10px; color: #666; text-align: right; }
+.stmt h3 { font-size: 13px; margin: 16px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #111;
+  text-transform: uppercase; letter-spacing: .05em; break-after: avoid; page-break-after: avoid; }
+.stmt h3 span { font-weight: 400; text-transform: none; letter-spacing: 0; color: #666; font-size: 11px; }
+.stmt table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.stmt th, .stmt td { padding: 4px 5px; text-align: left; vertical-align: top; border-bottom: 1px solid #e3e3e3; }
+.stmt th { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #555; border-bottom: 1px solid #999; }
+.stmt .num { text-align: right; white-space: nowrap; }
+.stmt .nowrap { white-space: nowrap; }
+.stmt .tot { font-weight: 700; background: #f5f5f5; }
+.stmt tr.strong td { font-weight: 800; }
+.stmt tr.rule td { border-top: 1.5px solid #111; }
+.stmt tr.muted td { color: #666; }
+.stmt tr.sect td { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+  color: #1a56db; padding-top: 9px; border-bottom: none; }
+.stmt tfoot td { font-weight: 800; border-top: 1.5px solid #111; border-bottom: none; }
+.stmt .st-summary td:first-child { width: 40%; }
+.stmt .st-summary tr.strong td { font-size: 13px; border-top: 1.5px solid #111; }
+.stmt .st-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.stmt .st-kpis div { border: 1px solid #ddd; border-radius: 8px; padding: 7px 9px; }
+.stmt .st-kpis span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #555; font-weight: 700; }
+.stmt .st-kpis b { display: block; font-size: 17px; }
+.stmt .st-kpis small { color: #666; font-size: 10px; }
+.stmt .st-wide { overflow-x: auto; }
+.stmt .st-list .note { color: #666; font-size: 11px; }
+.stmt .st-none { color: #666; }
+.stmt .st-cats { font-size: 11px; color: #444; margin-top: 6px; }
+.stmt .st-foot { margin-top: 16px; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 6px; }
+.stmt tr { break-inside: avoid; page-break-inside: avoid; }
+
+/* the PDF is drawn off-screen at A4 width (190 mm of content ≈ 718 px) */
+.pdf-stage { position: fixed; left: -10000px; top: 0; width: 718px; }
+.stmt.pdf { box-shadow: none; border-radius: 0; padding: 0; min-width: 0; font-size: 11.5px; }
+
 /* ---------- print statement ---------- */
 .print-only { display: none; }
 @media print {
@@ -275,7 +334,16 @@ body {
   #printArea td.num, #printArea th.num { text-align: right; font-variant-numeric: tabular-nums; }
   #printArea tr.total-line td { border-top: 2px solid #000; border-bottom: none; font-weight: 800; font-size: 15px; padding-top: 12px; }
   #printArea .ph-foot { margin-top: 24px; font-size: 11px; color: #555; }
+  /* the daily statement: A4, its own layout rules (the customer-statement rules above don't apply) */
+  #printArea .stmt { box-shadow: none; border-radius: 0; padding: 0; min-width: 0; font-size: 10.5px; }
+  #printArea .stmt table { margin-top: 0; }
+  #printArea .stmt th, #printArea .stmt td { padding: 3px 5px; border-bottom: 1px solid #e3e3e3; }
+  #printArea .stmt th { border-bottom: 1px solid #999; font-size: 9px; }
+  #printArea .stmt h1, #printArea .stmt h2 { margin-bottom: 1px; }
+  #printArea:has(.stmt) { padding: 0; }
+  .stmt .tot, .stmt tr.sect td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+@page { size: A4; margin: 12mm 11mm; }
 
 /* ---------- tab bar ---------- */
 .tabbar {
@@ -308,3 +376,7 @@ body {
 .bank-daily { margin-top: 10px; }
 .bank-daily summary { cursor: pointer; color: var(--blue); font-size: 14px; padding: 6px 0; }
 .bank-daily .row { font-size: 14px; }
+@media (max-width: 480px) {
+  .stmt .st-shops, .stmt .st-days { font-size: 11px; }
+  .stmt .st-shops td:first-child { min-width: 104px; }
+}

@@ -40,10 +40,21 @@ function neighbourAccount(shop) {
   return (LISTS.customers || []).find((c) => customerShop(c) === shop) || null;
 }
 
-// ---- PIN handling (the PIN is in the finance sheet: Lists tab, cell K2) ----
+// ---- Who may open Finance ----
+// Signed in to the staff app through its admin login ("Settings")? Its token, kept by the
+// staff app on this same site, lets Finance in with no PIN. Shop logins don't count.
+function ownerToken() {
+  try {
+    const s = JSON.parse(localStorage.getItem('burmelin_session') || 'null');
+    return s && s.isOwner && s.token ? String(s.token) : '';
+  } catch (e) { return ''; }
+}
+// Otherwise the finance PIN (in the finance sheet: Lists tab, cell K2)
 function getPin() { return localStorage.getItem('appPin') || ''; }
 async function api(path, opts = {}) {
   opts.headers = Object.assign({ 'Content-Type': 'application/json', 'x-app-pin': getPin() }, opts.headers);
+  const owner = ownerToken();
+  if (owner) opts.headers['x-owner-token'] = owner;
   let resp = await fetch(path, opts);
   if (resp.status === 401) {
     const pin = prompt('Enter your PIN (it is in your finance Google Sheet: Lists tab, cell K2)');
@@ -94,6 +105,8 @@ document.querySelectorAll('.tab').forEach((btn) => {
     $('page-dashboard').hidden = btn.dataset.page !== 'dashboard';
     $('page-daily').hidden = btn.dataset.page !== 'daily';
     $('page-record').hidden = btn.dataset.page !== 'record';
+    $('page-statement').hidden = btn.dataset.page !== 'statement';
+    if (btn.dataset.page === 'statement') openStatement();
     $('page-detail').hidden = true;
     $('page-commission').hidden = true;
   });
@@ -981,6 +994,242 @@ function onDaysOff(e) {
 }
 $('commStaff').addEventListener('change', onDaysOff);
 $('commNanaStaff').addEventListener('change', onDaysOff);
+
+// ================= daily statement =================
+// Opening balance, each shop's drawer cash and bank, sales, every expense and pay-out, and
+// the closing balance, for the dates picked (one day by default). The numbers come from
+// finance/statement.js; this part only draws them, prints them and shares them as a PDF.
+let ST = null;   // the last statement drawn
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function longDate(iso, withDay) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const day = WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  return `${withDay ? day + ' ' : ''}${d} ${MONTH_NAMES[m - 1]} ${y}`;
+}
+const shortDate = (iso) => { const [, m, d] = iso.split('-').map(Number); return `${d} ${MONTH_NAMES[m - 1]}`; };
+// Table figures: no ฿ (the heading says so), a dash for nothing, a minus sign for less than zero
+const n0 = (v) => { const r = Math.round(v); return r === 0 ? '–' : (r < 0 ? '−' : '') + Math.abs(r).toLocaleString('en-US'); };
+const baht = (v) => { const r = Math.round(v); return (r < 0 ? '−฿' : '฿') + Math.abs(r).toLocaleString('en-US'); };
+const daysBetween = (a, b) => Math.round((Date.UTC(...b.split('-').map((x, i) => (i === 1 ? x - 1 : +x))) - Date.UTC(...a.split('-').map((x, i) => (i === 1 ? x - 1 : +x)))) / 86400000) + 1;
+
+function setStRange(kind) {
+  const now = new Date();
+  let from = now, to = now;
+  if (kind === 'yesterday') { from = to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1); }
+  if (kind === 'week') { from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6); }
+  if (kind === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1); }
+  $('stFrom').value = isoOf(from); $('stTo').value = isoOf(to);
+  renderStatement();
+}
+
+async function openStatement() {
+  if (!$('stFrom').value) { $('stFrom').value = $('stTo').value = todayLocalISO(); }
+  TX = null;   // always fresh numbers on opening the tab
+  renderStatement();
+}
+
+async function renderStatement() {
+  const from = $('stFrom').value, to = $('stTo').value;
+  document.querySelectorAll('.stmt-quick .chip').forEach((c) => c.classList.remove('on'));
+  const state = $('stState');
+  if (!from || !to) return;
+  if (from > to) { state.hidden = false; state.classList.add('error'); state.textContent = 'The first date must be before the second.'; $('stDoc').innerHTML = ''; return; }
+  state.hidden = false; state.classList.remove('error'); state.textContent = 'Loading…';
+  try {
+    const tx = await loadTx();
+    if (!LISTS) {
+      const resp = await api('/api/dashboard');
+      if (!resp.ok) throw new Error((await resp.json()).error || 'Server error');
+      LISTS = (await resp.json()).lists;
+    }
+    ST = Statement.build(tx, LISTS, from, to);
+    ST.madeAt = new Date();
+    $('stDoc').innerHTML = statementHtml(ST);
+    state.hidden = true;
+  } catch (err) {
+    state.classList.add('error'); state.textContent = 'Could not load: ' + err.message;
+  }
+}
+
+function statementHtml(s) {
+  const one = s.from === s.to;
+  const nDays = daysBetween(s.from, s.to);
+  const period = one ? longDate(s.from, true) : `${longDate(s.from, true)} – ${longDate(s.to, true)} · ${nDays} days`;
+  const cols = s.shops.concat(s.other ? ['Other'] : []);
+  const colOf = (name) => (name === 'Other' ? s.other : s.per[name]);
+  const head = `<tr><th></th>${cols.map((c) => `<th class="num">${esc(c)}</th>`).join('')}<th class="num tot">Total</th></tr>`;
+  // one line of the shop table; skipped when every shop has nothing (unless keep)
+  const line = (label, key, sign, cls = '', keep = false) => {
+    const vals = cols.map((c) => colOf(c)[key] || 0);
+    const total = key === 'open' ? s.shops.reduce((n, c) => n + s.open.shop[c], 0) : s.totals[key] ?? vals.reduce((a, b) => a + b, 0);
+    if (!keep && !vals.some((v) => Math.round(v)) && !Math.round(total)) return '';
+    const fmtv = (v) => (sign && Math.round(v) ? sign + ' ' : '') + n0(v);
+    return `<tr class="${cls}"><td>${label}</td>${vals.map((v) => `<td class="num">${fmtv(v)}</td>`).join('')}<td class="num tot">${fmtv(total)}</td></tr>`;
+  };
+  const shopSales = (c) => { const p = colOf(c); return p.cashSales + p.bankSales + p.credit; };
+  const shopTable = `
+    <table class="st-shops">
+      <thead>${head}</thead>
+      <tbody>
+        <tr class="sect"><td colspan="${cols.length + 2}">Drawer cash (counter)</td></tr>
+        ${line('Opening cash', 'open', '', 'strong', true)}
+        ${line('Cash sales', 'cashSales', '+', '', true)}
+        ${line('Customer payments (cash)', 'payIn', '+')}
+        ${line('Collected from shops', 'collIn', '+')}
+        ${line('Other cash in', 'otherIn', '+')}
+        ${line('Expenses paid from drawer', 'expCash', '−', '', true)}
+        ${line('Collection sent to Palladium', 'collOut', '−')}
+        ${line('Deposited to bank', 'toBank', '−')}
+        ${line('Adjustments / other out', 'otherOut', '−')}
+        ${line('Closing cash', 'cash', '', 'strong rule', true)}
+        <tr class="sect"><td colspan="${cols.length + 2}">Bank (card / QR / transfer)</td></tr>
+        ${line('Card / QR sales', 'bankSales', '+', '', true)}
+        ${line('Other money into bank', 'bankOtherIn', '+')}
+        ${line('Paid from bank', 'bankOut', '−')}
+        <tr class="sect"><td colspan="${cols.length + 2}">Sales</td></tr>
+        ${line('Credit sales', 'credit', '')}
+        <tr class="strong rule"><td>Total sales</td>${cols.map((c) => `<td class="num">${n0(shopSales(c))}</td>`).join('')}<td class="num tot">${n0(s.sales.total)}</td></tr>
+      </tbody>
+    </table>`;
+
+  const daily = one || !s.days.length ? '' : `
+    <h3>Daily sales <span>cash + card/QR + credit</span></h3>
+    <table class="st-days">
+      <thead><tr><th>Date</th>${s.shops.map((c) => `<th class="num">${esc(c)}</th>`).join('')}<th class="num tot">Total</th></tr></thead>
+      <tbody>${s.days.map((d) => `<tr><td>${WEEKDAYS[new Date(d.date + 'T00:00').getDay()]} ${shortDate(d.date)}</td>${s.shops.map((c) => `<td class="num">${n0(d.byShop[c] || 0)}</td>`).join('')}<td class="num tot">${n0(d.total)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td>Total</td>${s.shops.map((c) => `<td class="num">${n0(shopSales(c))}</td>`).join('')}<td class="num tot">${n0(s.sales.total)}</td></tr></tfoot>
+    </table>`;
+
+  const listTable = (rows, title, sub, empty) => {
+    const cash = rows.reduce((n, r) => n + r.cash, 0), bank = rows.reduce((n, r) => n + r.bank, 0);
+    if (!rows.length) return empty ? `<h3>${title}</h3><p class="st-none">${empty}</p>` : '';
+    return `
+    <h3>${title} <span>${sub}</span></h3>
+    <table class="st-list">
+      <thead><tr>${one ? '' : '<th>Date</th>'}<th>Shop</th><th>What</th><th class="num">Cash</th><th class="num">Bank</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>${one ? '' : `<td class="nowrap">${shortDate(r.date)}</td>`}<td class="nowrap">${esc(r.shop)}</td>
+        <td><b>${esc(r.category)}</b>${r.customer ? ' · ' + esc(r.customer) : ''}${r.notes ? `<br><span class="note">${esc(r.notes)}</span>` : ''}</td>
+        <td class="num">${n0(r.cash)}</td><td class="num">${n0(r.bank)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><td colspan="${one ? 2 : 3}">Total · ${rows.length} item${rows.length === 1 ? '' : 's'}</td><td class="num">${n0(cash)}</td><td class="num">${n0(bank)}</td></tr></tfoot>
+    </table>`;
+  };
+  const byCat = Object.entries(s.expByCat).sort((a, b) => b[1] - a[1]);
+  const catLine = byCat.length > 1 ? `<p class="st-cats">${byCat.map(([c, v]) => `${esc(c)} <b>${baht(v)}</b>`).join(' · ')}</p>` : '';
+
+  const expTotal = s.expenseTotal.cash + s.expenseTotal.bank;
+  return `
+    <header class="st-head">
+      <div><div class="st-brand">Burmelin</div><h2>${one ? 'Daily statement' : 'Statement'}</h2><div class="st-period">${period}</div></div>
+      <div class="st-made">Made ${longDate(isoOf(s.madeAt))}, ${s.madeAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}<br>Amounts in Thai baht</div>
+    </header>
+
+    <table class="st-summary">
+      <thead><tr><th></th><th class="num">Opening</th><th class="num">Change</th><th class="num">Closing</th></tr></thead>
+      <tbody>
+        <tr><td>Cash in all drawers</td><td class="num">${baht(s.open.cash)}</td><td class="num">${n0(s.close.cash - s.open.cash)}</td><td class="num">${baht(s.close.cash)}</td></tr>
+        <tr><td>Bank (one shared account)</td><td class="num">${baht(s.open.bank)}</td><td class="num">${n0(s.close.bank - s.open.bank)}</td><td class="num">${baht(s.close.bank)}</td></tr>
+        <tr class="strong"><td>Total cash + bank</td><td class="num">${baht(s.open.total)}</td><td class="num">${n0(s.close.total - s.open.total)}</td><td class="num">${baht(s.close.total)}</td></tr>
+        <tr class="muted"><td>Credit customers owe</td><td class="num">${baht(s.open.credit)}</td><td class="num">${n0(s.close.credit - s.open.credit)}</td><td class="num">${baht(s.close.credit)}</td></tr>
+      </tbody>
+    </table>
+
+    <div class="st-kpis">
+      <div><span>Sales</span><b>${baht(s.sales.total)}</b><small>cash ${n0(s.sales.cash)} · bank ${n0(s.sales.bank)}${s.sales.credit ? ' · credit ' + n0(s.sales.credit) : ''}</small></div>
+      <div><span>Expenses</span><b>${baht(expTotal)}</b><small>cash ${n0(s.expenseTotal.cash)} · bank ${n0(s.expenseTotal.bank)}</small></div>
+    </div>
+
+    <h3>By shop</h3>
+    <div class="st-wide">${shopTable}</div>
+    ${daily}
+    ${listTable(s.expenses, 'Expenses and pay-outs', 'salary, rent, stock, small costs', 'No expenses in these dates.')}
+    ${catLine}
+    ${listTable(s.moves, 'Collections, deposits and adjustments', 'money moved, not spent')}
+    ${listTable(s.incomes, 'Other money in', 'customer payments, adjustments')}
+    <p class="st-foot">Opening = everything recorded before ${longDate(s.from)}. Closing = opening + this period. Drawer and bank figures match the Finance dashboard. The bank is one account shared by all shops, so per shop it shows only what came in or went out through that shop.</p>`;
+}
+
+$('stFrom').addEventListener('change', renderStatement);
+$('stTo').addEventListener('change', renderStatement);
+document.querySelector('.stmt-quick').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-range]');
+  if (b) { setStRange(b.dataset.range); b.classList.add('on'); }
+});
+
+function statementFileName() {
+  if (!ST) return 'Burmelin-statement';
+  return 'Burmelin-statement-' + (ST.from === ST.to ? ST.from : ST.from + '_to_' + ST.to);
+}
+
+// Print: the statement alone, on A4 (see @media print in styles.css)
+function printStatement() {
+  if (!ST) return;
+  // iOS home-screen apps ignore window.print(): the share sheet has Print instead
+  if (window.navigator.standalone === true) { shareStatement(); return; }
+  $('printArea').innerHTML = `<article class="stmt">${$('stDoc').innerHTML}</article>`;
+  window.print();
+}
+$('stPrintBtn').addEventListener('click', printStatement);
+
+// Share: an A4 PDF handed to the phone's share sheet (WhatsApp, LINE, Mail, Save to Files, Print).
+// Where sharing files isn't possible (most computers) the PDF is downloaded instead.
+function loadHtml2Pdf() {
+  if (window.html2pdf) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    sc.onload = () => (window.html2pdf ? resolve() : reject(new Error('PDF tool did not load')));
+    sc.onerror = () => reject(new Error('Could not load the PDF tool. Check the connection.'));
+    document.head.appendChild(sc);
+  });
+}
+async function statementPdf() {
+  await loadHtml2Pdf();
+  // Drawn off-screen at A4 width so the PDF looks the same from any phone
+  const box = document.createElement('div');
+  box.className = 'pdf-stage';
+  box.innerHTML = `<article class="stmt pdf">${$('stDoc').innerHTML}</article>`;
+  document.body.appendChild(box);
+  try {
+    const blob = await html2pdf().set({
+      margin: [10, 10, 12, 10],
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h3', '.st-kpis'] },
+    }).from(box.firstElementChild).outputPdf('blob');
+    return new File([blob], statementFileName() + '.pdf', { type: 'application/pdf' });
+  } finally {
+    box.remove();
+  }
+}
+async function shareStatement() {
+  if (!ST) return;
+  const btn = $('stShareBtn');
+  const label = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Making PDF…';
+  try {
+    const file = await statementPdf();
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/, '') }); }
+      catch (e) { if (e.name !== 'AbortError') throw e; }
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file); a.download = file.name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    }
+  } catch (err) {
+    alert('Could not make the PDF: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = label;
+  }
+}
+$('stShareBtn').addEventListener('click', shareStatement);
+
+// Signed in through the staff app's admin login: a way back to it
+$('officeLink').hidden = !ownerToken();
 
 
 // go

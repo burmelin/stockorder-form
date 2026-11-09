@@ -57,8 +57,56 @@ async function currentPin() {
   return String(process.env.APP_PIN || '').trim();
 }
 
-// PIN gate: every request must send the current PIN in the x-app-pin header.
+// Signed in through the staff app's admin login ("Settings" = Owner)? The staff app keeps a
+// signed 30-day token from its Apps Script server in localStorage; the finance page, on the
+// same site, sends it as x-owner-token. Only the Apps Script server can check that token, so
+// we ask it with the same verifyOwner call its own login uses: a shop's token carries that
+// shop's password, which verifyOwner refuses. A yes is remembered for a few minutes so each
+// screen doesn't wait on Apps Script; a changed Settings password signs phones out within that.
+const OWNER_CHECK_URL = process.env.OWNER_CHECK_URL
+  || 'https://script.google.com/macros/s/AKfycby-5YfvPpePbg1ni36sL5AI-DelH_I5qHgm1mkmAKqBSsopJPn-YWi24kXDMPMFkD-v/exec';
+const OWNER_OK_MS = 5 * 60 * 1000;
+const ownerOkUntil = new Map();
+
+const ownerChecking = new Map();   // token -> the check already on its way (a page asks several things at once)
+
+async function isOwnerRequest(req) {
+  const token = String(req.headers['x-owner-token'] || '').trim();
+  if (!token || token.length > 2000) return false;
+  const until = ownerOkUntil.get(token);
+  if (until && until > Date.now()) return true;
+  if (!ownerChecking.has(token)) {
+    ownerChecking.set(token, askOwner(token).finally(() => ownerChecking.delete(token)));
+  }
+  return ownerChecking.get(token);
+}
+
+async function askOwner(token) {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const resp = await fetch(OWNER_CHECK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'verifyOwner', token }),
+      redirect: 'follow',
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (!data || data.success !== true) return false;
+  } catch (err) {
+    console.error('Owner check failed:', err.message);
+    return false;
+  }
+  if (ownerOkUntil.size > 200) ownerOkUntil.clear();
+  ownerOkUntil.set(token, Date.now() + OWNER_OK_MS);
+  return true;
+}
+
+// Gate for every finance request: the admin login (above), or the finance PIN in x-app-pin.
 async function checkPin(req, res) {
+  if (await isOwnerRequest(req)) return true;
   let pin;
   try {
     pin = await currentPin();

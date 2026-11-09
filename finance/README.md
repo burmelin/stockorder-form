@@ -112,6 +112,31 @@ Dashboard → **Terminal 21 Commission** shows, for any month (this month update
 
 ---
 
+## Daily statement
+
+**Statement** tab (bottom right): pick the dates (today by default; quick buttons for
+yesterday, the last 7 days and this month). It shows:
+
+- **Opening, change and closing** of the cash in all drawers, the bank, and both together
+  (plus what credit customers owe). Opening = everything recorded before the first day.
+- **By shop:** each drawer's opening cash, cash sales, expenses, collections, closing cash;
+  card/QR sales; credit sales; total sales. The bank is one shared account, so per shop it only
+  shows the bank money that went in or out through that shop.
+- **Daily sales** per shop (when more than one day is picked), every **expense and pay-out**,
+  and every collection, deposit and adjustment.
+
+The figures follow the same rules as the dashboard, so today's closing equals the dashboard.
+**Share PDF** makes an A4 PDF and opens the phone's share sheet (WhatsApp, LINE, Mail, Save to
+Files, Print); on a computer it downloads. **Print** prints it on A4.
+
+## Opening Finance from the admin login
+
+Log in to the staff app as **Settings** (the owner's login) and tap **Finance** at the top:
+Finance opens with no PIN. The finance server asks the staff app's Apps Script server whether
+that login is the owner's, so shop logins (Bicasso, Nana, Palladium) still get the PIN question.
+Logging out of Settings, or changing the Settings password, takes this away again (within 5
+minutes). The PIN below keeps working for anyone who uses it.
+
 ## The app PIN
 
 The PIN is in the finance Google Sheet: **Lists tab, cell K2** (labelled *App PIN* in K1).
