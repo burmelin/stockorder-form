@@ -950,7 +950,7 @@ function renderCommission() {
 
 // One staff list with days off and the amount to pay; group is 't21' or 'nana'
 function commStaffRows(group, names, each) {
-  if (!names.length) return '<li><div class="row"><span class="name">No staff found<span class="sub">Add them in the Stock app: Settings → Staff.</span></span></div></li>';
+  if (!names.length) return '<li><div class="row"><span class="name">No staff found<span class="sub">Add them in Burmelin Office: Settings → Staff.</span></span></div></li>';
   return names.map((name, i) => {
     const off = getOff(COMM.month, name);
     const extra = Math.max(0, off - COMM_ALLOWED_OFF);
