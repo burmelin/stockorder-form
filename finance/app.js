@@ -120,6 +120,7 @@ async function loadDashboard() {
     renderDashboard(d);
     populateForm();
     loadCommissionCard();
+    initBankCard();
     load.hidden = true;
     $('dashContent').hidden = false;
   } catch (err) {
@@ -162,6 +163,53 @@ function renderDashboard(d) {
 function esc(s) { const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
 
 $('refreshBtn').addEventListener('click', () => { TX = null; loadDashboard(); });
+
+// ---- Bicasso bank sales: card / QR money from the Retail Sale rows (Bank In) of
+// Bicasso 1 and 2, for the dates picked. Defaults to this month so far. ----
+const BANK_SHOPS = ['Bicasso 1', 'Bicasso 2'];
+function initBankCard() {
+  if (!$('bankFrom').value) {
+    const now = new Date();
+    $('bankFrom').value = isoOf(new Date(now.getFullYear(), now.getMonth(), 1));
+    $('bankTo').value = isoOf(now);
+  }
+  loadBankCard();
+}
+async function loadBankCard() {
+  const r = { from: $('bankFrom').value || null, to: $('bankTo').value || null };
+  if (r.from && r.to && r.from > r.to) {
+    $('bankList').innerHTML = '<li><div class="row"><span class="name sub overdue">The first date must be before the second</span></div></li>';
+    $('bankTotal').textContent = '—'; $('bankDays').textContent = ''; $('bankDaily').hidden = true;
+    return;
+  }
+  $('bankList').innerHTML = '<li><div class="row"><span class="name sub">Loading…</span></div></li>';
+  let tx;
+  try { tx = await loadTx(); } catch (err) {
+    $('bankList').innerHTML = `<li><div class="row"><span class="name sub overdue">Could not load: ${esc(err.message)}</span></div></li>`;
+    return;
+  }
+  const rows = tx.filter((t) => t.category === 'Retail Sale' && BANK_SHOPS.includes(t.shop) && t.bankIn && inRange(t.date, r));
+  const byShop = Object.fromEntries(BANK_SHOPS.map((s) => [s, 0]));
+  const byDay = new Map();
+  for (const t of rows) {
+    byShop[t.shop] += t.bankIn;
+    const d = byDay.get(t.date) || Object.fromEntries(BANK_SHOPS.map((s) => [s, 0]));
+    d[t.shop] += t.bankIn;
+    byDay.set(t.date, d);
+  }
+  const total = BANK_SHOPS.reduce((n, s) => n + byShop[s], 0);
+  $('bankList').innerHTML = BANK_SHOPS.map((s) => `
+    <li><div class="row"><span class="name">${esc(s)}</span><span class="amount">${fmt(byShop[s])}</span></div></li>`).join('');
+  $('bankTotal').textContent = fmt(total);
+  $('bankDays').textContent = byDay.size ? `${byDay.size} day${byDay.size === 1 ? '' : 's'} with card sales` : 'no card sales in these dates';
+  const days = [...byDay].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  $('bankDaily').hidden = !days.length;
+  $('bankDayList').innerHTML = days.map(([date, d]) => `
+    <li><div class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span></span>
+      <span class="amount">${fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></div></li>`).join('');
+}
+$('bankFrom').addEventListener('change', loadBankCard);
+$('bankTo').addEventListener('change', loadBankCard);
 
 // ================= per-shop / per-customer detail =================
 let TX = null;

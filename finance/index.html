@@ -64,6 +64,24 @@
       </div>
     </section>
 
+    <section class="card" id="bankCard">
+      <h2>Bicasso Bank Sales <span class="hint">card / QR, for the dates you pick</span></h2>
+      <div class="custom-range lv-range">
+        <input type="date" id="bankFrom" aria-label="From date">
+        <span>to</span>
+        <input type="date" id="bankTo" aria-label="To date">
+      </div>
+      <ul id="bankList" class="rows"></ul>
+      <div class="row total-row">
+        <span>Total <span class="sub" id="bankDays"></span></span>
+        <strong id="bankTotal">&mdash;</strong>
+      </div>
+      <details id="bankDaily" class="bank-daily" hidden>
+        <summary>Day by day</summary>
+        <ul id="bankDayList" class="rows"></ul>
+      </details>
+    </section>
+
     <p class="updated" id="updatedAt"></p>
   </div>
 </main>
