@@ -157,11 +157,22 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
   return { totals: list, warnings, cardRefunds };
 }
 
+// Every sales row the import writes ends its note with the amounts it wrote, e.g.
+// "Loyverse · 12 receipts [3000|1500|0]" (cash|bank|credit). If the sheet's amounts no
+// longer match that stamp, someone corrected the row by hand, and the import keeps it.
+function stampOf(p) { return `[${round2(p.cash)}|${round2(p.bank)}|${round2(p.credit || 0)}]`; }
+function readStamp(notes) {
+  const m = String(notes || '').match(/\[(-?[\d.]+)\|(-?[\d.]+)\|(-?[\d.]+)\]\s*$/);
+  return m ? { cash: +m[1], bank: +m[2], credit: +m[3] } : null;
+}
+
 // Decides, per shop-day, whether to add a new row, update the existing Loyverse row,
 // or leave the sheet alone — for the day's Retail Sale and, at a shop with a
 // neighbour-card account, its Credit Sale. One source per shop-day: if any of that
 // day's sales rows was entered by hand, the whole day is left alone.
-function planSync(totals, existingRows) {
+// recentFrom (YYYY-MM-DD): older Loyverse rows written before the stamp existed are never
+// overwritten, because the import can't tell whether they were corrected by hand.
+function planSync(totals, existingRows, recentFrom = '') {
   const actions = [];
   for (const t of totals) {
     const base = { date: t.date, shop: t.shop, receipts: t.receipts, refunds: t.refunds };
@@ -169,34 +180,50 @@ function planSync(totals, existingRows) {
       && (r.category === 'Retail Sale' || (t.account && r.category === 'Credit Sale' && r.customer === t.account)));
     const manual = day.find((r) => r.enteredBy !== TAG);
     const auto = (category) => day.filter((r) => r.enteredBy === TAG && r.category === category);
-    actions.push(planRow({ ...base, kind: 'sale', cash: t.cash, bank: t.bank, credit: 0 }, auto('Retail Sale'), manual, 'sales'));
+    const recent = t.date >= recentFrom;
+    actions.push(planRow({ ...base, kind: 'sale', cash: t.cash, bank: t.bank, credit: 0 }, auto('Retail Sale'), manual, 'sales', recent));
     if (t.account) {
-      actions.push(planRow({ ...base, kind: 'credit', account: t.account, cash: 0, bank: 0, credit: t.credit }, auto('Credit Sale'), manual, 'neighbour card sales'));
+      actions.push(planRow({ ...base, kind: 'credit', account: t.account, cash: 0, bank: 0, credit: t.credit }, auto('Credit Sale'), manual, 'neighbour card sales', recent));
     }
   }
   return actions.filter(Boolean);
 }
 
-function planRow(p, auto, manual, what) {
+function planRow(p, auto, manual, what, recent = true) {
   const empty = p.cash === 0 && p.bank === 0 && p.credit === 0;
+  const total = (x) => fmtBaht(x.cash + x.bank + (x.credit || 0));
   if (manual) {
+    // A hand row and a Loyverse row for the same shop-day both count: say so loudly
+    if (auto.length) {
+      return { ...p, action: 'skip', row: manual.row, reason: `row ${manual.row} (typed by hand) and row ${auto.map((r) => r.row).join(', ')} (Loyverse) both count ${what} for this day — delete one of them` };
+    }
     if (empty) return null;
     return { ...p, action: 'skip', row: manual.row, reason: `sales already entered by hand (row ${manual.row}) — delete that row to let Loyverse fill this day` };
   }
   if (p.cash < 0 || p.bank < 0 || p.credit < 0) {
     return { ...p, action: 'skip', reason: `refunds are larger than ${what} — enter this day by hand` };
   }
-  if (!auto.length) return empty ? null : { ...p, action: 'add' };
+  if (!auto.length) return empty ? null : { ...p, action: 'add', stamp: stampOf(p) };
   const cur = auto[0];
+  const sheet = { cash: round2(cur.cashIn), bank: round2(cur.bankIn), credit: round2(cur.credit) };
   const dupNote = auto.length > 1 ? `duplicate Loyverse rows ${auto.slice(1).map((r) => r.row).join(', ')} — delete them` : undefined;
-  if (round2(cur.cashIn) === p.cash && round2(cur.bankIn) === p.bank && round2(cur.credit) === p.credit) {
+  if (sheet.cash === p.cash && sheet.bank === p.bank && sheet.credit === p.credit) {
     return { ...p, action: 'unchanged', row: cur.row, reason: dupNote };
+  }
+  // The row differs from Loyverse. Was it corrected by hand?
+  const stamp = readStamp(cur.notes);
+  const corrected = stamp ? (stamp.cash !== sheet.cash || stamp.bank !== sheet.bank || stamp.credit !== sheet.credit) : !recent;
+  if (corrected) {
+    return { ...p, action: 'skip', row: cur.row, kept: true,
+      reason: `row ${cur.row} ${stamp ? 'was corrected by hand' : 'may have been corrected by hand'} (sheet ${total(sheet)}, Loyverse ${total(p)}) — kept as it is. To take Loyverse's number instead, delete the row and import again` };
   }
   if (empty) {
     return { ...p, action: 'skip', row: cur.row, reason: `Loyverse now shows no ${what} but row ${cur.row} has some — check and fix by hand` };
   }
-  return { ...p, action: 'update', row: cur.row, was: { cash: cur.cashIn, bank: cur.bankIn, credit: cur.credit }, reason: dupNote };
+  return { ...p, action: 'update', row: cur.row, stamp: stampOf(p), was: { cash: cur.cashIn, bank: cur.bankIn, credit: cur.credit }, reason: dupNote };
 }
+
+const fmtBaht = (n) => '฿' + Math.round(n).toLocaleString('en-US');
 
 // ---- pay-ins / pay-outs (shift cash movements) ----
 
@@ -280,18 +307,28 @@ function planMovements(shifts, storeShop, dates, accounts, cardRefunds, existing
   const handPayouts = (p) => sameDay(p).find((r) => r.enteredBy !== TAG && PAYOUT_CATEGORIES.includes(r.category) && r.cashOut > 0);
   const handPayins = (p) => sameDay(p).find((r) => r.enteredBy !== TAG && r.category === 'Customer Payment' && r.customer === p.customer && r.cashIn > 0);
   const amountsOf = (x) => [round2(x.cashIn || 0), round2(x.bankIn || 0), round2(x.cashOut || 0)].join('/');
-  const keyOf = (x) => [x.date, x.shop, x.category, x.customer || '', amountsOf(x), x.notes ?? x.note].join('|');
-  const existingByKey = new Map();
-  for (const r of existingRows) if (r.enteredBy === TAG) existingByKey.set(keyOf(r), (existingByKey.get(keyOf(r)) || 0) + 1);
+  // A movement is found again by its day, shop and note (the note ends with the time it was
+  // made), not by its amounts — so a row whose amount or category was corrected by hand is
+  // recognised and kept, instead of a second copy being added next to it.
+  const idOf = (x) => [x.date, x.shop, x.notes ?? x.note].join('|');
+  const existingById = new Map();
+  for (const r of existingRows) {
+    if (r.enteredBy !== TAG || !PAYOUT_CATEGORIES.concat(['Customer Payment', 'Adjustment']).includes(r.category)) continue;
+    if (!existingById.has(idOf(r))) existingById.set(idOf(r), []);
+    existingById.get(idOf(r)).push(r);
+  }
 
   const actions = planned.map((p) => {
     if (p.action) return p;
+    const found = (existingById.get(idOf(p)) || []).shift();
     const hand = p.category === 'Customer Payment' ? handPayins(p) : handPayouts(p);
-    if (hand) return { ...p, action: 'skip', row: hand.row, reason: `already entered by hand (row ${hand.row})` };
-    const k = keyOf(p);
-    const n = existingByKey.get(k) || 0;
-    if (n > 0) { existingByKey.set(k, n - 1); return { ...p, action: 'unchanged' }; }
-    return { ...p, action: 'add' };
+    if (hand) {
+      if (found) return { ...p, action: 'skip', row: hand.row, reason: `row ${hand.row} (typed by hand) and row ${found.row} (Loyverse) may both record the same money — check for double counting` };
+      return { ...p, action: 'skip', row: hand.row, reason: `already entered by hand (row ${hand.row})` };
+    }
+    if (!found) return { ...p, action: 'add' };
+    if (found.category === p.category && amountsOf(found) === amountsOf(p)) return { ...p, action: 'unchanged', row: found.row };
+    return { ...p, action: 'skip', row: found.row, kept: true, reason: `row ${found.row} was corrected by hand — kept as it is` };
   });
   actions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.shop.localeCompare(b.shop) || a.time.localeCompare(b.time)));
   return { actions, warnings };

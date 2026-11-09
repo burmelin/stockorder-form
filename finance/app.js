@@ -62,7 +62,9 @@ async function saveJSON(path, method, body) {
   let resp = await api(path, { method, body: JSON.stringify(body) });
   let data = await resp.json();
   if (resp.status === 409 && data.needsConfirm) {
-    if (!confirm(data.error)) throw new Error('Not saved — nothing was changed');
+    // Typing YES (not just tapping OK) so a duplicate is never saved by accident
+    const answer = prompt(`${data.error}\n\nThis may count the same money twice. Type YES to save anyway.`);
+    if (String(answer || '').trim().toUpperCase() !== 'YES') throw new Error('Not saved — nothing was changed');
     resp = await api(path, { method, body: JSON.stringify({ ...body, confirmDuplicates: true }) });
     data = await resp.json();
   }
@@ -768,7 +770,7 @@ function renderLoyverse(d) {
       s.n[p.action] = (s.n[p.action] || 0) + 1;
       if (p.cashOut && p.action !== 'skip') { const b = bucket[p.category] || 'expenses'; s.out[b] = (s.out[b] || 0) + p.cashOut; }
       if (p.cashIn && p.action !== 'skip') s.paidIn += p.cashIn;
-      if (p.action === 'skip') note(p.row ? `${fmtDate(p.date)} pay-outs: ${p.reason}` : `${fmtDate(p.date)} ${p.time}: ${p.reason}`, true);
+      if (p.action === 'skip') note(p.row ? `${fmtDate(p.date)} pay-outs: ${p.reason}` : `${fmtDate(p.date)} ${p.time}: ${p.reason}`, !p.kept);
       else if (p.review) note(`${fmtDate(p.date)} ${p.note}: ${p.review}`, true);
       return;
     }
@@ -779,7 +781,7 @@ function renderLoyverse(d) {
     const label = p.kind === 'credit' ? `${fmtDate(p.date)} neighbour card` : fmtDate(p.date);
     if (p.action === 'update') note(`${label}: sheet had ${fmt(total(p.was))}, Loyverse says ${fmt(total(p))}`);
     // a day typed by hand skips both of its rows: say it once
-    if (p.reason) note(`${p.action === 'skip' && p.row ? fmtDate(p.date) : label}: ${p.reason}`, p.action === 'skip');
+    if (p.reason) note(`${p.action === 'skip' && p.row ? fmtDate(p.date) : label}: ${p.reason}`, p.action === 'skip' && !p.kept);
   });
 
   const items = [...shops].map(([shop, s]) => {
