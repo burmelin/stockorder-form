@@ -2,8 +2,15 @@
 
 A phone-friendly web app for your **Burmelin_Finance_NewX** Google Sheet:
 
-- **Dashboard** — total cash & bank, every shop's drawer, every credit customer's balance, all on one screen
-- **Record** — a smart entry form that writes rows straight into Master Entry, following the same double-entry rules as the sheet
+Four tabs, in the same Burmelin look as the staff app (on a computer they sit down the left side):
+
+- **Home** — money on hand (cash + bank), what customers owe, each shop's drawer, and the overdue
+  customers owing the most (tap **All customers** for the full list)
+- **Add** — **Day sheet** (one shop, one day: sales, collection, expenses; a green dot marks a shop
+  that already has entries that day) and **One-off entry**, a smart form that writes rows straight
+  into Master Entry, following the same double-entry rules as the sheet
+- **Staff** — Terminal 21 and Nana commission for any month, with days off and the amount to pay
+- **Reports** — the statement (share as PDF or print) and Bicasso card sales for any dates
 - **Loyverse sync** — each shop's daily sales are pulled from Loyverse automatically (see the Loyverse section below)
 
 ---
@@ -87,7 +94,7 @@ APP_PIN=4832
 
 ## Terminal 21 commission
 
-Dashboard → **Terminal 21 Commission** shows, for any month (this month updates every day):
+The **Staff** tab shows, for any month (this month updates every day):
 
 - **Commission:** 3% of that month's **Bicasso 1 + Bicasso 2** sales (cash + card, after
   refunds), split equally between the staff listed in the **Lists tab, column M** (M2 down —
@@ -114,7 +121,7 @@ Dashboard → **Terminal 21 Commission** shows, for any month (this month update
 
 ## Daily statement
 
-**Statement** tab (bottom right): pick the dates (today by default; quick buttons for
+**Reports** tab → **Statement**: pick the dates (today by default; quick buttons for
 yesterday, the last 7 days and this month). It shows:
 
 - **Opening, change and closing** of the cash in all drawers, the bank, and both together
@@ -154,7 +161,7 @@ link private anyway: the PIN is the only thing between the internet and your fin
   contain formulas and are never touched.
 - Credit Sale / Customer Payment entries use the **customer's shop**: Palladium, unless the
   *Lists* tab's column F names another shop for that customer. **Nana Card (Neighbour)** is
-  Nana's: Nana's card sales go through the neighbour shop's machine, so on the Daily tab they
+  Nana's: Nana's card sales go through the neighbour shop's machine, so on the Day sheet they
   are saved as a Credit Sale to that account (not Bank In), and the cash the neighbour later
   brings is saved as a Customer Payment into Nana's drawer. The dashboard flags this account
   after 7 days without a payment (30 days for other customers).
@@ -251,7 +258,7 @@ Until `LOYVERSE_TOKEN` is set, all of this stays switched off and the Loyverse c
 - **One source per shop-day.** If any of a shop-day's sales rows was typed by hand (including
   the catch-up rows marked *Loyverse import*), the sync **skips** that whole day and says so.
   Delete your manual rows if you want Loyverse to fill it.
-- Once Loyverse has filled a shop-day, the Daily and Record screens **refuse** a hand-typed
+- Once Loyverse has filled a shop-day, the Day sheet and One-off entry screens **refuse** a hand-typed
   Retail Sale (or Nana card amount) for that shop and date.
 - **Pay-outs follow the same rule.** If you typed a shop-day's cash expenses or collection by
   hand, Loyverse leaves that day's pay-outs alone (likewise a hand-typed "Neighbour paid" for
@@ -265,11 +272,11 @@ Until `LOYVERSE_TOKEN` is set, all of this stays switched off and the Loyverse c
 and today*. On Vercel's free plan the job can start any time within that hour and can only
 run once a day — that's fine, because the yesterday+today window makes the exact time
 irrelevant. To change the time, edit `schedule` in `vercel.json` (it's in UTC) and redeploy.
-Need it sooner? Tap **Check Loyverse** on the Daily tab any time.
+Need it sooner? Tap **Check Loyverse** on Add → Day sheet any time.
 
 ### Catching up missed days
 
-Daily tab → Loyverse card → set the **from** and **to** dates (up to 3 months) → **Check
+Add → Day sheet → Loyverse card → set the **from** and **to** dates (up to 3 months) → **Check
 Loyverse**. You get one line per shop with its cash and bank totals for the whole period —
 compare those with Loyverse's *Sales by payment type* report for the same dates, then tap
 **Save Loyverse sales**. Days you already typed by hand are skipped, so overlapping the

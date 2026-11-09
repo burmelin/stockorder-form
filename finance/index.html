@@ -5,97 +5,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#1a56db">
+<meta name="theme-color" content="#003D7A">
 <title>Finance · Burmelin Office</title>
-<link rel="stylesheet" href="/finance/styles.css">
+<link rel="icon" href="/icons/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Caladea:wght@700&display=swap">
+<link rel="stylesheet" href="/finance/styles.css?v=3">
 </head>
 <body>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-staff" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.7 3 2.5 3.5 5.2"/></symbol>
+  <symbol id="i-reports" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></symbol>
+</svg>
+
 <header class="topbar">
-  <h1><a id="officeLink" class="office-link" href="/" hidden>&#8592;</a>Burmelin Finance</h1>
-  <button id="refreshBtn" class="icon-btn" title="Refresh">&#8635;</button>
+  <a id="officeLink" class="office-link" href="/" hidden aria-label="Back to Burmelin Office">&#8249;</a>
+  <svg class="topbar-mark" viewBox="0 0 168 318" aria-hidden="true"><path fill="currentColor" d="M65.60 317.48 C68.03 316.76 69.70 315.76 71.52 313.93 C73.05 312.38 73.12 312.24 120.06 218.38 C145.91 166.67 167.33 123.67 167.66 122.81 C171.10 113.69 163.50 104.13 153.89 105.50 C150.97 105.91 149.86 106.51 142.38 111.67 C138.80 114.13 130.61 119.78 124.19 124.21 C109.99 134.01 110.24 133.88 105.86 133.88 C102.60 133.88 102.60 133.87 100.72 132.95 C95.92 130.58 94.26 127.86 92.89 120.12 C92.52 118.06 92.01 115.25 91.75 113.88 C91.49 112.50 91.04 110.03 90.74 108.38 C90.45 106.72 90.00 104.25 89.74 102.88 C89.49 101.50 89.04 99.03 88.74 97.38 C88.45 95.72 88.00 93.25 87.74 91.88 C87.49 90.50 87.04 88.03 86.74 86.38 C86.45 84.72 86.00 82.25 85.74 80.88 C85.49 79.50 85.04 77.03 84.74 75.38 C84.45 73.72 84.00 71.25 83.74 69.88 C83.49 68.50 83.04 66.03 82.74 64.38 C82.45 62.72 82.00 60.25 81.74 58.88 C81.49 57.50 81.04 55.02 80.74 53.38 C80.45 51.73 80.00 49.25 79.74 47.88 C79.49 46.50 79.04 44.02 78.74 42.38 C78.45 40.73 78.00 38.25 77.74 36.88 C77.49 35.50 77.04 33.02 76.74 31.38 C76.45 29.73 76.00 27.25 75.74 25.88 C75.49 24.50 75.03 22.02 74.74 20.38 C72.53 7.96 72.05 6.54 69.13 3.78 C64.20 -0.89 56.06 -0.80 51.27 3.97 C48.27 6.96 50.53 -1.38 23.86 105.27 C-2.49 210.64 -1.05 204.50 -0.25 208.38 C-0.02 209.50 6.51 222.76 25.66 261.07 L51.27 312.27 L52.95 313.98 C56.43 317.51 61.10 318.80 65.60 317.48 Z"
+/></svg>
+  <h1>Finance</h1><span class="topbar-tag">Office</span>
+  <button id="refreshBtn" class="icon-btn" title="Refresh" aria-label="Refresh"><svg><use href="#i-refresh"/></svg></button>
 </header>
 
-<!-- ============ DASHBOARD ============ -->
-<main id="page-dashboard" class="page">
+<!-- ============ HOME ============ -->
+<main id="page-dashboard" class="page page-wide">
   <div id="loadState" class="load-state">Loading&hellip;</div>
 
   <div id="dashContent" hidden>
     <p id="mockBanner" class="mock-banner" hidden>Sample data &mdash; not connected to the sheet yet</p>
 
-    <section class="totals">
-      <div class="total-card cash">
-        <span class="label">Total Cash</span>
-        <span class="value" id="totalCash">&mdash;</span>
-      </div>
-      <div class="total-card bank">
-        <span class="label">Total Bank</span>
-        <span class="value" id="totalBank">&mdash;</span>
-      </div>
-      <div class="total-card grand">
-        <span class="label">Grand Total (Cash + Bank)</span>
-        <span class="value" id="totalGrand">&mdash;</span>
-      </div>
-    </section>
+    <div class="home-grid">
+      <div class="home-col">
+        <section class="card hero">
+          <span class="label">Money on hand</span>
+          <span class="hero-value" id="totalGrand">&mdash;</span>
+          <div class="hero-split"><span>Cash <b id="totalCash">&mdash;</b></span><span>Bank <b id="totalBank">&mdash;</b></span></div>
+          <div class="hero-owed">
+            <div><span class="label">Customers owe you</span><span class="hero-owed-value" id="heroCredit">&mdash;</span></div>
+            <span id="overduePill" class="pill" hidden></span>
+          </div>
+        </section>
 
-    <section class="card">
-      <h2>Shop Drawers <span class="hint">cash to collect</span></h2>
-      <ul id="shopList" class="rows"></ul>
-    </section>
+        <section class="card">
+          <h2>Cash in drawers <span class="h-amount" id="drawerTotal"></span></h2>
+          <ul id="shopList" class="rows"></ul>
+        </section>
+      </div>
 
-    <section class="card">
-      <h2>Credit Customers <span class="hint">they owe you</span></h2>
-      <ul id="creditList" class="rows"></ul>
-      <div class="row total-row">
-        <span>Total Credit</span>
-        <strong id="totalCredit">&mdash;</strong>
+      <div class="home-col">
+        <section class="card">
+          <h2><span id="creditTitle">Credit customers</span> <button type="button" id="creditToggle" class="link-btn" hidden></button></h2>
+          <ul id="creditList" class="rows"></ul>
+          <div class="row total-row" id="creditTotalRow">
+            <span>Total credit</span>
+            <strong id="totalCredit">&mdash;</strong>
+          </div>
+        </section>
       </div>
-    </section>
-
-    <section class="card">
-      <h2>Staff Commission <span id="commHint" class="hint">this month so far</span></h2>
-      <div class="row tappable" id="commRow">
-        <span class="name">Terminal 21 · each<span class="sub" id="commSub">&mdash;</span></span>
-        <span class="amount"><span id="commEach">&mdash;</span><span class="chevron">›</span></span>
-      </div>
-      <div class="row tappable" id="commNanaRow">
-        <span class="name">Nana · each<span class="sub" id="commNanaSub">&mdash;</span></span>
-        <span class="amount"><span id="commNanaEach">&mdash;</span><span class="chevron">›</span></span>
-      </div>
-    </section>
-
-    <section class="card" id="bankCard">
-      <h2>Bicasso Bank Sales <span class="hint">card / QR, for the dates you pick</span></h2>
-      <div class="custom-range lv-range">
-        <input type="date" id="bankFrom" aria-label="From date">
-        <span>to</span>
-        <input type="date" id="bankTo" aria-label="To date">
-      </div>
-      <ul id="bankList" class="rows"></ul>
-      <div class="row total-row">
-        <span>Total <span class="sub" id="bankDays"></span></span>
-        <strong id="bankTotal">&mdash;</strong>
-      </div>
-      <details id="bankDaily" class="bank-daily" hidden>
-        <summary>Day by day</summary>
-        <ul id="bankDayList" class="rows"></ul>
-      </details>
-    </section>
+    </div>
 
     <p class="updated" id="updatedAt"></p>
   </div>
 </main>
 
-<!-- ============ RECORD ============ -->
+<!-- ============ ADD · one-off entry ============ -->
 <main id="page-record" class="page" hidden>
+  <div class="seg" role="tablist">
+    <button type="button" data-sub="daily">Day sheet</button>
+    <button type="button" data-sub="record" class="on">One-off entry</button>
+  </div>
   <div id="editBanner" class="edit-banner" hidden>
     Editing transaction <button id="cancelEdit" class="cancel-edit-btn">Cancel</button>
   </div>
   <form id="txForm" class="card form" autocomplete="off">
     <label>
-      <span>Category</span>
+      <span>What happened</span>
       <select id="fCategory" required>
-        <option value="" disabled selected>Choose what happened&hellip;</option>
+        <option value="" disabled selected>Choose&hellip;</option>
       </select>
     </label>
 
@@ -105,7 +95,7 @@
     </label>
 
     <label id="rowCustomer" hidden>
-      <span>Credit Customer</span>
+      <span>Credit customer</span>
       <select id="fCustomer"></select>
     </label>
 
@@ -129,17 +119,23 @@
   <div id="toast" class="toast" hidden></div>
 </main>
 
-<!-- ============ DAILY (sales + expenses per shop per date) ============ -->
+<!-- ============ ADD · day sheet (sales + expenses per shop per date) ============ -->
 <main id="page-daily" class="page" hidden>
-  <div class="card form">
-    <label>
-      <span>Shop</span>
-      <select id="dShop"></select>
-    </label>
-    <label>
-      <span>Date</span>
-      <input type="date" id="dDate" required>
-    </label>
+  <div class="seg" role="tablist">
+    <button type="button" data-sub="daily" class="on">Day sheet</button>
+    <button type="button" data-sub="record">One-off entry</button>
+  </div>
+
+  <div class="card">
+    <span class="label">Shop</span>
+    <div id="dShopChips" class="chips shop-chips"></div>
+    <select id="dShop" hidden aria-label="Shop"></select>
+    <div class="datebar">
+      <button type="button" id="dPrev" aria-label="Day before">&#8249;</button>
+      <input type="date" id="dDate" required aria-label="Date">
+      <button type="button" id="dNext" aria-label="Day after">&#8250;</button>
+    </div>
+    <p id="dSavedHint" class="chip-hint" hidden><i class="dot"></i> already has entries for this day</p>
   </div>
 
   <section id="lvCard" class="card" hidden>
@@ -160,11 +156,11 @@
 
   <section class="card form">
     <h2>Sales <span id="dSalesHint" class="hint">retail sale for the day</span></h2>
-    <label class="amount-field">
-      <span>Cash In</span>
+    <label class="amount-field inline">
+      <span>Cash</span>
       <span class="currency-wrap"><input type="number" inputmode="decimal" min="0" step="any" id="dSaleCash" placeholder="0"></span>
     </label>
-    <label class="amount-field">
+    <label class="amount-field inline">
       <span id="dSaleBankLabel">Bank In <em>(card / QR)</em></span>
       <span class="currency-wrap"><input type="number" inputmode="decimal" min="0" step="any" id="dSaleBank" placeholder="0"></span>
     </label>
@@ -172,7 +168,7 @@
 
   <section id="neighbourCard" class="card form" hidden>
     <h2>Neighbour paid <span id="dNeighbourHint" class="hint">cash for earlier card sales</span></h2>
-    <label class="amount-field">
+    <label class="amount-field inline">
       <span>Cash received <em id="neighbourOwes"></em></span>
       <span class="currency-wrap"><input type="number" inputmode="decimal" min="0" step="any" id="dNeighbourPaid" placeholder="0"></span>
     </label>
@@ -180,7 +176,7 @@
 
   <section id="collectionCard" class="card form">
     <h2>Collection <span id="dCollectionHint" class="hint">cash taken to Palladium</span></h2>
-    <label class="amount-field">
+    <label class="amount-field inline">
       <span>Amount collected</span>
       <span class="currency-wrap"><input type="number" inputmode="decimal" min="0" step="any" id="dCollection" placeholder="0"></span>
     </label>
@@ -192,20 +188,21 @@
     <button type="button" id="addExpBtn" class="add-line-btn">+ Add expense</button>
   </section>
 
-  <section class="daily-summary">
-    <div class="total-card in"><span class="label">Sales</span><span class="value" id="dSumSales">&#3647;0</span></div>
-    <div class="total-card out"><span class="label">Expenses</span><span class="value" id="dSumExp">&#3647;0</span></div>
-    <div class="total-card grand wide"><span class="label">Net for the day</span><span class="value" id="dSumNet">&#3647;0</span></div>
-  </section>
-
-  <button type="button" id="dailySaveBtn" class="save-btn">Save day</button>
+  <div class="daily-foot">
+    <div class="daily-net">
+      <span class="label">Net for the day</span>
+      <span class="daily-net-value" id="dSumNet">&#3647;0</span>
+      <span class="daily-net-sub">sales <b id="dSumSales">&#3647;0</b> · expenses <b id="dSumExp">&#3647;0</b></span>
+    </div>
+    <button type="button" id="dailySaveBtn" class="save-btn">Save day</button>
+  </div>
 
   <div id="dailyToast" class="toast" hidden></div>
 </main>
 
 <!-- ============ DETAIL (per shop / per customer) ============ -->
 <main id="page-detail" class="page" hidden>
-  <button id="backBtn" class="back-btn">&#8592; Back</button>
+  <button id="backBtn" class="back-btn">&#8249; Home</button>
   <h2 id="detailTitle" class="detail-title"></h2>
   <p id="detailSub" class="detail-sub"></p>
 
@@ -232,63 +229,92 @@
     <p id="detailEmpty" class="load-state" hidden>No transactions yet.</p>
   </div>
 
-  <button id="shareBtn" class="save-btn share-btn" hidden>&#128196; Share / Print statement</button>
+  <button id="shareBtn" class="save-btn share-btn" hidden>Share / Print statement</button>
 </main>
 
-<!-- ============ COMMISSION (Terminal 21 staff, per month) ============ -->
-<main id="page-commission" class="page" hidden>
-  <button id="commBackBtn" class="back-btn">&#8592; Back</button>
-  <h2 class="detail-title">Staff Commission</h2>
-  <p id="commPeriod" class="detail-sub"></p>
-  <div class="detail-filter"><input type="month" id="commMonth" aria-label="Month"></div>
-
+<!-- ============ STAFF (commission per month) ============ -->
+<main id="page-commission" class="page page-wide" hidden>
+  <div class="datebar month-bar">
+    <button type="button" id="commPrev" aria-label="Month before">&#8249;</button>
+    <input type="month" id="commMonth" aria-label="Month">
+    <button type="button" id="commNext" aria-label="Month after">&#8250;</button>
+  </div>
+  <p id="commPeriod" class="detail-sub center"></p>
   <p id="commStaffNote" class="rule-hint comm-staff-note" hidden></p>
 
-  <h3 class="comm-group">Terminal 21 &middot; Bicasso 1 + 2</h3>
-  <section id="commSummary" class="detail-summary"></section>
+  <div class="staff-grid">
+    <section class="card">
+      <h2>Terminal 21 <span class="label">Bicasso 1 + 2</span></h2>
+      <div id="commSummary" class="comm-head"></div>
+      <span class="label comm-list-label">Days off <em>(2 free · each extra day takes 1/30 off)</em></span>
+      <ul id="commStaff" class="rows"></ul>
+      <div class="row total-row"><span>To pay</span><strong id="commTotal" class="total-big">&mdash;</strong></div>
+      <details class="more">
+        <summary>Daily bonus, day by day</summary>
+        <p class="rule-hint">Each person gets both shops' bonus.</p>
+        <ul id="commDays" class="rows"></ul>
+        <p id="commNoDays" class="load-state" hidden>No sales recorded for this month yet.</p>
+      </details>
+      <p class="rule-hint comm-note">Days off: Loyverse &rarr; Employees &rarr; Timecards (days with no clock-in).</p>
+    </section>
 
-  <div class="card">
-    <h2>To pay <span class="hint">2 days off allowed &middot; each extra day takes 1/30 off</span></h2>
-    <ul id="commStaff" class="rows"></ul>
-    <p class="rule-hint comm-note">Days off: Loyverse &rarr; Employees &rarr; Timecards (days with no clock-in).</p>
-  </div>
-
-  <div class="card">
-    <h2>Daily bonus <span class="hint">each person gets both shops' bonus</span></h2>
-    <ul id="commDays" class="rows"></ul>
-    <p id="commNoDays" class="load-state" hidden>No sales recorded for this month yet.</p>
-  </div>
-
-  <h3 class="comm-group">Nana &middot; 1% of sales</h3>
-  <section id="commNanaSummary" class="detail-summary"></section>
-  <div class="card">
-    <h2>To pay <span class="hint">2 days off allowed &middot; each extra day takes 1/30 off</span></h2>
-    <ul id="commNanaStaff" class="rows"></ul>
-    <p class="rule-hint comm-note">Sales = cash + card through the neighbour's machine. No daily bonus.</p>
+    <section class="card">
+      <h2>Nana <span class="label">1% of sales</span></h2>
+      <div id="commNanaSummary" class="comm-head"></div>
+      <span class="label comm-list-label">Days off <em>(2 free · each extra day takes 1/30 off)</em></span>
+      <ul id="commNanaStaff" class="rows"></ul>
+      <div class="row total-row"><span>To pay</span><strong id="commNanaTotal" class="total-big">&mdash;</strong></div>
+      <p class="rule-hint comm-note">Sales = cash + card through the neighbour's machine. No daily bonus.</p>
+    </section>
   </div>
 </main>
 
-<!-- ============ STATEMENT (opening, shops, sales, expenses, closing for the dates picked) ============ -->
-<main id="page-statement" class="page" hidden>
-  <div class="card stmt-controls">
-    <div class="custom-range lv-range">
-      <input type="date" id="stFrom" aria-label="From date">
-      <span>to</span>
-      <input type="date" id="stTo" aria-label="To date">
-    </div>
-    <div class="stmt-quick">
-      <button type="button" class="chip" data-range="today">Today</button>
-      <button type="button" class="chip" data-range="yesterday">Yesterday</button>
-      <button type="button" class="chip" data-range="week">Last 7 days</button>
-      <button type="button" class="chip" data-range="month">This month</button>
-    </div>
-    <div class="stmt-actions">
-      <button type="button" id="stShareBtn" class="save-btn">&#128228; Share PDF</button>
-      <button type="button" id="stPrintBtn" class="add-line-btn">&#128424; Print</button>
-    </div>
+<!-- ============ REPORTS (statement + Bicasso card sales) ============ -->
+<main id="page-statement" class="page page-wide" hidden>
+  <div class="seg" role="tablist" id="reportSeg">
+    <button type="button" data-report="statement" class="on">Statement</button>
+    <button type="button" data-report="bank">Bicasso card sales</button>
   </div>
-  <p id="stState" class="load-state" hidden></p>
-  <div class="stmt-scroll"><article id="stDoc" class="stmt"></article></div>
+
+  <div id="stPanel">
+    <div class="card stmt-controls">
+      <div class="custom-range lv-range">
+        <input type="date" id="stFrom" aria-label="From date">
+        <span>to</span>
+        <input type="date" id="stTo" aria-label="To date">
+      </div>
+      <div class="stmt-quick chips">
+        <button type="button" class="chip" data-range="today">Today</button>
+        <button type="button" class="chip" data-range="yesterday">Yesterday</button>
+        <button type="button" class="chip" data-range="week">Last 7 days</button>
+        <button type="button" class="chip" data-range="month">This month</button>
+      </div>
+      <div class="stmt-actions">
+        <button type="button" id="stShareBtn" class="save-btn">Share PDF</button>
+        <button type="button" id="stPrintBtn" class="ghost-btn">Print</button>
+      </div>
+    </div>
+    <p id="stState" class="load-state" hidden></p>
+    <div class="stmt-scroll"><article id="stDoc" class="stmt"></article></div>
+  </div>
+
+  <section class="card" id="bankCard" hidden>
+    <h2>Bicasso card sales <span class="hint">card / QR, for the dates you pick</span></h2>
+    <div class="custom-range lv-range">
+      <input type="date" id="bankFrom" aria-label="From date">
+      <span>to</span>
+      <input type="date" id="bankTo" aria-label="To date">
+    </div>
+    <ul id="bankList" class="rows"></ul>
+    <div class="row total-row">
+      <span>Total <span class="sub" id="bankDays"></span></span>
+      <strong id="bankTotal">&mdash;</strong>
+    </div>
+    <details id="bankDaily" class="more" hidden>
+      <summary>Day by day</summary>
+      <ul id="bankDayList" class="rows"></ul>
+    </details>
+  </section>
 </main>
 
 <!-- printable statement (only visible when printing) -->
@@ -296,21 +322,13 @@
 
 <!-- ============ NAV ============ -->
 <nav class="tabbar">
-  <button class="tab active" data-page="dashboard">
-    <span class="tab-icon">&#128202;</span>Dashboard
-  </button>
-  <button class="tab" data-page="daily">
-    <span class="tab-icon">&#128197;</span>Daily
-  </button>
-  <button class="tab" data-page="record">
-    <span class="tab-icon">&#9998;</span>Record
-  </button>
-  <button class="tab" data-page="statement">
-    <span class="tab-icon">&#129534;</span>Statement
-  </button>
+  <button class="tab active" data-page="dashboard"><svg><use href="#i-home"/></svg><span>Home</span></button>
+  <button class="tab" data-page="add"><svg><use href="#i-add"/></svg><span>Add</span></button>
+  <button class="tab" data-page="staff"><svg><use href="#i-staff"/></svg><span>Staff</span></button>
+  <button class="tab" data-page="statement"><svg><use href="#i-reports"/></svg><span>Reports</span></button>
 </nav>
 
-<script src="/finance/statement.js"></script>
-<script src="/finance/app.js"></script>
+<script src="/finance/statement.js?v=3"></script>
+<script src="/finance/app.js?v=3"></script>
 </body>
 </html>
