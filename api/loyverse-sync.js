@@ -9,7 +9,8 @@
 //   ?dryRun=1          report what would be written without touching the sheet
 //
 // Safe to run any number of times: rows are tagged "Loyverse" in Entered By and are
-// updated in place on the next run, never duplicated. Vercel Cron calls it daily
+// updated in place on the next run, never duplicated. A Loyverse row someone corrected
+// by hand in the sheet is kept as it is (see planSync / planMovements). Vercel Cron calls it daily
 // (see vercel.json) with "Authorization: Bearer $CRON_SECRET".
 const { SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
 const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements } = require('./_loyverse');
@@ -76,7 +77,7 @@ module.exports = async function handler(req, res) {
     const { totals, warnings, cardRefunds } = dailyTotals(receipts, storeShop, dates, accounts);
     const moves = planMovements(shifts, storeShop, dates, accounts, cardRefunds, existing);
     warnings.push(...moves.warnings);
-    const plan = [...planSync(totals, existing), ...moves.actions];
+    const plan = [...planSync(totals, existing, addDays(today, -1)), ...moves.actions];
 
     // Receipts from stores we couldn't map, so the user knows money is being left out.
     const unmatchedCounts = unmatched.map((u) => {
@@ -112,8 +113,9 @@ module.exports = async function handler(req, res) {
       '', '',                                                               // H Cash Out, I Bank Out
       p.credit || '',                                                       // J Credit Sale Amount
       TAG,                                                                  // K Entered By
-      credit(p) ? "Loyverse · card sales on neighbour's machine"            // L Notes
-        : `Loyverse · ${p.receipts} receipt${p.receipts === 1 ? '' : 's'}${p.refunds ? ` · ${p.refunds} refund${p.refunds === 1 ? '' : 's'}` : ''}`,
+      (credit(p) ? "Loyverse · card sales on neighbour's machine"           // L Notes
+        : `Loyverse · ${p.receipts} receipt${p.receipts === 1 ? '' : 's'}${p.refunds ? ` · ${p.refunds} refund${p.refunds === 1 ? '' : 's'}` : ''}`)
+        + ` ${p.stamp}`,                                                    // amounts written, to spot hand corrections later
     ]);
 
     const endRow = nextRow + toAdd.length - 1;

@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
         type: String(r[4] || ''),
         cashIn: num(r[5]), bankIn: num(r[6]), cashOut: num(r[7]), bankOut: num(r[8]),
         creditAmount: num(r[9]),
-        notes: String(r[11] || ''),
+        notes: String(r[11] || '').replace(/\s*\[-?[\d.]+\|-?[\d.]+\|-?[\d.]+\]\s*$/, ''), // hide the import's amount stamp
       });
     });
     res.json({ transactions: tx, mock: false });

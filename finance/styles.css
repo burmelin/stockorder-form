@@ -303,3 +303,8 @@ body {
 .comm-note { margin: 8px 0 0; }
 .comm-group { margin: 18px 4px 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .comm-staff-note { margin: 4px 0 10px; color: #b42318; }
+
+/* Bicasso bank sales card */
+.bank-daily { margin-top: 10px; }
+.bank-daily summary { cursor: pointer; color: var(--blue); font-size: 14px; padding: 6px 0; }
+.bank-daily .row { font-size: 14px; }
