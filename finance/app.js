@@ -1117,7 +1117,11 @@ async function renderStatement() {
   const state = $('stState');
   if (!from || !to) return;
   if (from > to) { state.hidden = false; state.classList.add('error'); state.textContent = 'The first date must be before the second.'; $('stDoc').innerHTML = ''; return; }
-  state.hidden = false; state.classList.remove('error'); state.textContent = 'Loading…';
+  // A statement already on screen just fades while the new one loads (no "Loading…" block above it)
+  const redraw = !!$('stDoc').innerHTML;
+  state.classList.remove('error');
+  if (redraw) { state.hidden = true; $('stDoc').classList.add('stale'); }
+  else { state.hidden = false; state.textContent = 'Loading…'; }
   try {
     const tx = await loadTx();
     if (!LISTS) {
@@ -1130,7 +1134,9 @@ async function renderStatement() {
     $('stDoc').innerHTML = statementHtml(ST);
     state.hidden = true;
   } catch (err) {
-    state.classList.add('error'); state.textContent = 'Could not load: ' + err.message;
+    state.hidden = false; state.classList.add('error'); state.textContent = 'Could not load: ' + err.message;
+  } finally {
+    $('stDoc').classList.remove('stale');
   }
 }
 
