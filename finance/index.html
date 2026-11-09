@@ -12,7 +12,7 @@
 <body>
 
 <header class="topbar">
-  <h1>Burmelin Finance</h1>
+  <h1><a id="officeLink" class="office-link" href="/" hidden>&#8592;</a>Burmelin Finance</h1>
   <button id="refreshBtn" class="icon-btn" title="Refresh">&#8635;</button>
 </header>
 
@@ -268,6 +268,29 @@
   </div>
 </main>
 
+<!-- ============ STATEMENT (opening, shops, sales, expenses, closing for the dates picked) ============ -->
+<main id="page-statement" class="page" hidden>
+  <div class="card stmt-controls">
+    <div class="custom-range lv-range">
+      <input type="date" id="stFrom" aria-label="From date">
+      <span>to</span>
+      <input type="date" id="stTo" aria-label="To date">
+    </div>
+    <div class="stmt-quick">
+      <button type="button" class="chip" data-range="today">Today</button>
+      <button type="button" class="chip" data-range="yesterday">Yesterday</button>
+      <button type="button" class="chip" data-range="week">Last 7 days</button>
+      <button type="button" class="chip" data-range="month">This month</button>
+    </div>
+    <div class="stmt-actions">
+      <button type="button" id="stShareBtn" class="save-btn">&#128228; Share PDF</button>
+      <button type="button" id="stPrintBtn" class="add-line-btn">&#128424; Print</button>
+    </div>
+  </div>
+  <p id="stState" class="load-state" hidden></p>
+  <div class="stmt-scroll"><article id="stDoc" class="stmt"></article></div>
+</main>
+
 <!-- printable statement (only visible when printing) -->
 <div id="printArea" class="print-only"></div>
 
@@ -282,8 +305,12 @@
   <button class="tab" data-page="record">
     <span class="tab-icon">&#9998;</span>Record
   </button>
+  <button class="tab" data-page="statement">
+    <span class="tab-icon">&#129534;</span>Statement
+  </button>
 </nav>
 
+<script src="/finance/statement.js"></script>
 <script src="/finance/app.js"></script>
 </body>
 </html>
