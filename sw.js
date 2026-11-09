@@ -4,7 +4,7 @@
 // - Icons and fonts: kept once, reused.
 // - Data (the Apps Script server) is never touched here: stock and orders always come live,
 //   and the app keeps its own saved copy of the last data it loaded.
-var CACHE = 'burmelin-app-v1';
+var CACHE = 'burmelin-app-v2';
 var APP_FILES = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
                  '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 

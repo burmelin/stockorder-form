@@ -1,4 +1,7 @@
-# Burmelin Stock & Orders
+# Burmelin Office
+
+The app was called "Stock & Orders" until it took over finance too. The repo and the address
+(stockorder-form.vercel.app) keep the old name on purpose: staff phones and saved links use them.
 
 Staff app for the Palladium warehouse and the three retail stores (Bicasso 1, Bicasso 2,
 Bicasso Nana). The **app** (`index.html`) is hosted on **Vercel**. The **server** is a

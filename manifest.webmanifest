@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Burmelin Staff",
+  "name": "Burmelin Office",
   "short_name": "Burmelin",
-  "description": "Stock, sales and orders for Burmelin stores",
+  "description": "Stock, orders and finance for Burmelin stores",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

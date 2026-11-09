@@ -50,7 +50,7 @@ module.exports = async function handler(req, res) {
     } else {
       staff = { bicasso: [], nana: [] };
       staffSource = 'none';
-      staffNote = 'Staff are read from the Stock app\'s Staff tab, but the finance app can\'t open that sheet yet ('
+      staffNote = 'Staff are read from the Staff tab of the Stock sheet, but the finance app can\'t open that sheet yet ('
         + (stock.err.code || stock.err.message) + '). Share "Burmelin Stock & Orders" with the finance app\'s robot account (Viewer).';
       console.error('Stock Staff tab:', stock.err.message);
     }

@@ -103,7 +103,7 @@ function doGet(e) {
     + '</style>'
     + '<div class="box"><h2>This link has moved</h2>'
     + '<p>Please use the new link below.</p>'
-    + '<a href="https://stockorder-form.vercel.app">Go to Burmelin Order Form</a></div>'
+    + '<a href="https://stockorder-form.vercel.app">Go to Burmelin Office</a></div>'
   ).setTitle('Moved').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
