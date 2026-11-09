@@ -86,30 +86,48 @@ async function saveJSON(path, method, body) {
 // ---- formatting ----
 const fmt = (n) => '฿' + Math.round(n).toLocaleString('en-US');
 
-// ---- tabs ----
+// ---- tabs: Home · Add (day sheet / one-off entry) · Staff · Reports ----
+const PAGES = ['dashboard', 'daily', 'record', 'detail', 'commission', 'statement'];
+function showPage(id) {
+  PAGES.forEach((p) => { $('page-' + p).hidden = p !== id; });
+  $('page-' + id).scrollTop = 0;
+}
+function setTab(name) {
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.page === name));
+}
+// Leaving the one-off form while editing drops the edit
+function dropEdit() {
+  if (editingRow === null) return;
+  editingRow = null;
+  $('saveBtn').textContent = 'Save Transaction';
+  $('editBanner').hidden = true;
+  $('fCategory').value = '';
+  $('amountFields').innerHTML = '';
+  $('ruleHint').textContent = '';
+  $('fNotes').value = '';
+  $('fDate').value = todayLocalISO();
+  $('rowCustomer').hidden = true;
+  $('rowShop').hidden = false;
+}
+let addSub = 'daily';   // which half of Add was open last
+function openAdd(sub) {
+  addSub = sub;
+  showPage(sub);
+  if (sub === 'daily') refreshSavedDots();
+}
 document.querySelectorAll('.tab').forEach((btn) => {
   btn.addEventListener('click', () => {
-    if (editingRow !== null) {
-      editingRow = null;
-      $('saveBtn').textContent = 'Save Transaction';
-      $('editBanner').hidden = true;
-      $('fCategory').value = '';
-      $('amountFields').innerHTML = '';
-      $('ruleHint').textContent = '';
-      $('fNotes').value = '';
-      $('fDate').value = todayLocalISO();
-      $('rowCustomer').hidden = true;
-      $('rowShop').hidden = false;
-    }
-    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b === btn));
-    $('page-dashboard').hidden = btn.dataset.page !== 'dashboard';
-    $('page-daily').hidden = btn.dataset.page !== 'daily';
-    $('page-record').hidden = btn.dataset.page !== 'record';
-    $('page-statement').hidden = btn.dataset.page !== 'statement';
-    if (btn.dataset.page === 'statement') openStatement();
-    $('page-detail').hidden = true;
-    $('page-commission').hidden = true;
+    dropEdit();
+    const page = btn.dataset.page;
+    setTab(page);
+    if (page === 'dashboard') showPage('dashboard');
+    if (page === 'add') openAdd(addSub);
+    if (page === 'staff') openCommission(COMM ? COMM.month : thisMonth());
+    if (page === 'statement') { showPage('statement'); openStatement(); }
   });
+});
+document.querySelectorAll('.seg [data-sub]').forEach((b) => {
+  b.addEventListener('click', () => { dropEdit(); openAdd(b.dataset.sub); });
 });
 
 // ---- dashboard ----
@@ -132,8 +150,8 @@ async function loadDashboard() {
     $('dNeighbourHint').textContent = d.loyverse ? "imported from Loyverse 'Card' pay-ins" : 'cash for earlier card sales';
     renderDashboard(d);
     populateForm();
-    loadCommissionCard();
     initBankCard();
+    refreshSavedDots();
     load.hidden = true;
     $('dashContent').hidden = false;
   } catch (err) {
@@ -142,11 +160,16 @@ async function loadDashboard() {
   }
 }
 
+let DASH = null;
+let showAllCustomers = false;
 function renderDashboard(d) {
+  DASH = d;
   $('mockBanner').hidden = !d.mock;
   $('totalCash').textContent = fmt(d.totals.cash);
   $('totalBank').textContent = fmt(d.totals.bank);
   $('totalGrand').textContent = fmt(d.totals.grand);
+  $('heroCredit').textContent = fmt(d.totalCredit);
+  $('drawerTotal').textContent = fmt(d.shops.reduce((n, s) => n + s.cash, 0));
 
   $('shopList').innerHTML = d.shops.map((s) => `
     <li><div class="row tappable" data-shop="${esc(s.name)}">
@@ -154,24 +177,42 @@ function renderDashboard(d) {
       <span class="amount ${s.cash < 0 ? 'neg' : 'pos'}">${fmt(s.cash)}<span class="chevron">›</span></span>
     </div></li>`).join('');
 
-  $('creditList').innerHTML = d.credit.map((c) => {
-    let sub = 'no payment recorded';
-    let overdue = true;
-    if (c.daysSince !== null && c.daysSince !== undefined) {
-      sub = c.daysSince === 0 ? 'paid today' : `last paid ${c.daysSince} day${c.daysSince === 1 ? '' : 's'} ago`;
-      overdue = c.daysSince > (c.overdueDays || 30);
-    }
-    if (c.balance === 0) { sub = 'settled'; overdue = false; }
-    return `
-    <li><div class="row tappable" data-customer="${esc(c.name)}">
-      <span class="name">${esc(c.name)}<span class="sub ${overdue ? 'overdue' : ''}">${sub}</span></span>
-      <span class="amount ${c.balance < 0 ? 'neg' : 'pos'}">${fmt(c.balance)}<span class="chevron">›</span></span>
-    </div></li>`;
-  }).join('');
-
+  renderCredit();
   $('totalCredit').textContent = fmt(d.totalCredit);
   $('updatedAt').textContent = 'Updated ' + new Date(d.updatedAt).toLocaleTimeString();
 }
+
+// Credit customers: the overdue ones with the most money owed first, three on Home until
+// "All customers" is tapped.
+function renderCredit() {
+  const items = DASH.credit.map((c) => {
+    let sub = 'no payment recorded';
+    let overdue = true;
+    let wait = Infinity;
+    if (c.daysSince !== null && c.daysSince !== undefined) {
+      sub = c.daysSince === 0 ? 'paid today' : `last paid ${c.daysSince} day${c.daysSince === 1 ? '' : 's'} ago`;
+      overdue = c.daysSince > (c.overdueDays || 30);
+      wait = c.daysSince;
+    }
+    if (c.balance === 0) { sub = 'settled'; overdue = false; }
+    return { c, sub, overdue, wait };
+  });
+  const overdue = items.filter((x) => x.overdue).sort((a, b) => b.c.balance - a.c.balance || b.wait - a.wait);
+  const short = !showAllCustomers && overdue.length > 0 && items.length > 3;
+  const shown = short ? overdue.slice(0, 3) : items;
+  $('overduePill').hidden = !overdue.length;
+  $('overduePill').textContent = `${overdue.length} overdue`;
+  $('creditTitle').textContent = short ? 'Chase these first' : 'Credit customers';
+  $('creditToggle').hidden = !(overdue.length > 0 && items.length > 3);
+  $('creditToggle').textContent = short ? `All ${items.length} customers ›` : 'Overdue only';
+  $('creditTotalRow').hidden = short;
+  $('creditList').innerHTML = shown.map(({ c, sub, overdue: od }) => `
+    <li><div class="row tappable" data-customer="${esc(c.name)}">
+      <span class="name">${esc(c.name)}<span class="sub ${od ? 'overdue' : ''}">${sub}</span></span>
+      <span class="amount ${c.balance < 0 ? 'neg' : 'pos'}">${fmt(c.balance)}<span class="chevron">›</span></span>
+    </div></li>`).join('');
+}
+$('creditToggle').addEventListener('click', () => { showAllCustomers = !showAllCustomers; renderCredit(); });
 
 function esc(s) { const el = document.createElement('span'); el.textContent = s; return el.innerHTML; }
 
@@ -226,12 +267,19 @@ $('bankTo').addEventListener('change', loadBankCard);
 
 // ================= per-shop / per-customer detail =================
 let TX = null;
+let TX_LOADING = null;   // shared, so Home, the day sheet and Reports don't each fetch it
 async function loadTx(force) {
   if (TX && !force) return TX;
-  const resp = await api('/api/transactions');
-  if (!resp.ok) throw new Error((await resp.json()).error || 'Server error');
-  TX = (await resp.json()).transactions;
-  return TX;
+  if (TX_LOADING && !force) return TX_LOADING;
+  const p = (async () => {
+    const resp = await api('/api/transactions');
+    if (!resp.ok) throw new Error((await resp.json()).error || 'Server error');
+    TX = (await resp.json()).transactions;
+    return TX;
+  })();
+  TX_LOADING = p;
+  p.catch(() => {}).finally(() => { if (TX_LOADING === p) TX_LOADING = null; });
+  return p;
 }
 
 function fmtDate(iso) {
@@ -261,10 +309,7 @@ function inRange(dateStr, r) {
 let currentDetail = null;
 
 async function openDetail(kind, name) {
-  $('page-dashboard').hidden = true;
-  $('page-record').hidden = true;
-  $('page-detail').hidden = false;
-  $('page-detail').scrollTop = 0;
+  showPage('detail');
   $('detailTitle').textContent = name;
   $('detailSub').textContent = 'Loading…';
   $('detailSummary').innerHTML = '';
@@ -375,10 +420,7 @@ $('detailPeriod').addEventListener('change', () => {
 $('fromDate').addEventListener('change', renderDetail);
 $('toDate').addEventListener('change', renderDetail);
 
-$('backBtn').addEventListener('click', () => {
-  $('page-detail').hidden = true;
-  $('page-dashboard').hidden = false;
-});
+$('backBtn').addEventListener('click', () => showPage('dashboard'));
 $('shareBtn').addEventListener('click', () => {
   if (!currentDetail || currentDetail.kind !== 'customer') return;
   buildStatement();
@@ -432,6 +474,7 @@ function populateForm() {
   if (!dShop.options.length) {
     LISTS.shops.forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = s; dShop.appendChild(o); });
   }
+  renderShopChips();
   updateCollectionVisibility();
 }
 
@@ -550,11 +593,9 @@ let editingRow = null;
 
 function startEdit(tx) {
   editingRow = tx.row;
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.page === 'record'));
-  $('page-dashboard').hidden = true;
-  $('page-detail').hidden = true;
-  $('page-record').hidden = false;
-  $('page-record').scrollTop = 0;
+  setTab('add');
+  addSub = 'record';
+  showPage('record');
 
   const isOpeningBalance = tx.category === 'Credit Sale' && /opening/i.test(tx.notes);
   const catValue = isOpeningBalance ? 'Credit Opening Balance' : tx.category;
@@ -593,9 +634,7 @@ function cancelEdit() {
   $('rowShop').hidden = false;
 
   if (currentDetail) {
-    $('page-record').hidden = true;
-    $('page-detail').hidden = false;
-    document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.page === 'dashboard'));
+    setTab('dashboard');
     openDetail(currentDetail.kind, currentDetail.name);
   }
 }
@@ -649,7 +688,40 @@ $('expLines').addEventListener('click', (e) => {
 $('expLines').addEventListener('input', updateDailySummary);
 $('dSaleCash').addEventListener('input', updateDailySummary);
 $('dSaleBank').addEventListener('input', updateDailySummary);
-$('dShop').addEventListener('change', updateCollectionVisibility);
+$('dShop').addEventListener('change', () => { updateCollectionVisibility(); renderShopChips(); });
+
+// Shop buttons drive the (hidden) shop list, so everything else reads $('dShop') as before.
+// A green dot marks a shop that already has entries on the chosen day.
+let SAVED_SHOPS = new Set();
+function renderShopChips() {
+  const shops = (LISTS && LISTS.shops) || [];
+  const cur = $('dShop').value;
+  $('dShopChips').innerHTML = shops.map((s) => `<button type="button" class="chip${s === cur ? ' on' : ''}" data-shop="${esc(s)}">${esc(s)}${SAVED_SHOPS.has(s) ? '<i class="dot" title="already has entries for this day"></i>' : ''}</button>`).join('');
+  $('dSavedHint').hidden = !SAVED_SHOPS.size;
+}
+$('dShopChips').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-shop]');
+  if (!b || b.dataset.shop === $('dShop').value) return;
+  $('dShop').value = b.dataset.shop;
+  $('dShop').dispatchEvent(new Event('change'));
+});
+async function refreshSavedDots() {
+  const date = $('dDate').value;
+  try {
+    const tx = await loadTx();
+    if ($('dDate').value !== date) return;   // the day changed while loading
+    SAVED_SHOPS = new Set(tx.filter((t) => t.date === date).map((t) => t.shop));
+  } catch (e) { SAVED_SHOPS = new Set(); }
+  renderShopChips();
+}
+function shiftDailyDate(n) {
+  const d = $('dDate').value || todayLocalISO();
+  $('dDate').value = shiftISO(d, n);
+  $('dDate').dispatchEvent(new Event('change'));
+}
+$('dPrev').addEventListener('click', () => shiftDailyDate(-1));
+$('dNext').addEventListener('click', () => shiftDailyDate(1));
+$('dDate').addEventListener('change', refreshSavedDots);
 $('dNeighbourPaid').addEventListener('input', updateDailySummary);
 
 function readDaily() {
@@ -895,19 +967,6 @@ async function fetchCommission(month) {
   return data;
 }
 
-async function loadCommissionCard() {
-  try {
-    const c = await fetchCommission(thisMonth());
-    $('commHint').textContent = `${monthLabel(c.month)} so far`;
-    $('commEach').textContent = fmt(c.commissionEach + c.bonusEach);
-    $('commSub').textContent = `commission ${fmt(c.commissionEach)} + bonus ${fmt(c.bonusEach)} · sales ${fmt(c.totalSales)}`;
-    $('commNanaEach').textContent = fmt(c.nana.commissionEach);
-    $('commNanaSub').textContent = `1% of sales ${fmt(c.nana.totalSales)}` + (c.nana.staff.length ? '' : ' · no Nana staff found');
-  } catch (err) {
-    $('commSub').textContent = 'Could not load: ' + err.message;
-  }
-}
-
 // Days off are only needed at month end; remember what was typed per month on this phone.
 const offKey = (month, name) => `commOff:${month}:${name}`;
 function getOff(month, name) { try { return parseInt(localStorage.getItem(offKey(month, name)), 10) || 0; } catch (e) { return 0; } }
@@ -915,13 +974,12 @@ function setOff(month, name, n) { try { localStorage.setItem(offKey(month, name)
 
 let COMM = null;
 async function openCommission(month) {
-  $('page-dashboard').hidden = true;
-  $('page-commission').hidden = false;
-  $('page-commission').scrollTop = 0;
+  showPage('commission');
   $('commMonth').value = month;
   $('commPeriod').textContent = 'Loading…';
   $('commSummary').innerHTML = ''; $('commStaff').innerHTML = ''; $('commDays').innerHTML = '';
   $('commNanaSummary').innerHTML = ''; $('commNanaStaff').innerHTML = ''; $('commStaffNote').hidden = true;
+  $('commTotal').textContent = '—'; $('commNanaTotal').textContent = '—';
   try {
     COMM = await fetchCommission(month);
     renderCommission();
@@ -935,20 +993,18 @@ function renderCommission() {
   const each = c.commissionEach + c.bonusEach;
   const inProgress = c.month === thisMonth();
   $('commPeriod').textContent = `${monthLabel(c.month)}${inProgress ? ` · so far, to ${fmtDate(todayLocalISO())}` : ''}${c.mock ? ' · sample data' : ''}`;
+  // The answer first (each person), the working beside it in one line
+  const split = (people) => (people ? ` ÷ ${people}` : '');
   $('commSummary').innerHTML = `
-    ${c.shops.map((s) => `<div class="total-card"><span class="label">${esc(s)} sales</span><span class="value">${fmt(c.sales[s])}</span></div>`).join('')}
-    <div class="total-card"><span class="label">${Math.round(c.rate * 100)}% pool</span><span class="value">${fmt(c.pool)}</span></div>
-    <div class="total-card in"><span class="label">Commission each</span><span class="value">${fmt(c.commissionEach)}</span></div>
-    <div class="total-card in"><span class="label">Bonus each</span><span class="value">${fmt(c.bonusEach)}</span></div>
-    <div class="total-card"><span class="label">Staff</span><span class="value">${c.staff.length}</span></div>
-    <div class="total-card grand wide"><span class="label">Each person (before days off)</span><span class="value">${fmt(each)}</span></div>`;
+    <div><span class="label">Each person</span><span class="comm-each">${fmt(each)}</span></div>
+    <div class="comm-calc">${c.shops.map((s) => `${esc(s)} ${fmt(c.sales[s])}`).join(' · ')}<br>
+      ${Math.round(c.rate * 100)}% of ${fmt(c.totalSales)}${split(c.staff.length)} = ${fmt(c.commissionEach)}<br>
+      + daily bonus ${fmt(c.bonusEach)}</div>`;
   const n = c.nana;
   $('commNanaSummary').innerHTML = `
-    <div class="total-card"><span class="label">Cash sales</span><span class="value">${fmt(n.cash)}</span></div>
-    <div class="total-card"><span class="label">Card (neighbour)</span><span class="value">${fmt(n.card)}</span></div>
-    <div class="total-card"><span class="label">${Math.round(n.rate * 100)}% of ${fmt(n.totalSales)}</span><span class="value">${fmt(n.pool)}</span></div>
-    <div class="total-card"><span class="label">Staff</span><span class="value">${n.staff.length}</span></div>
-    <div class="total-card grand wide"><span class="label">Each person (before days off)</span><span class="value">${fmt(n.commissionEach)}</span></div>`;
+    <div><span class="label">Each person</span><span class="comm-each">${fmt(n.commissionEach)}</span></div>
+    <div class="comm-calc">cash ${fmt(n.cash)} · card ${fmt(n.card)}<br>
+      ${Math.round(n.rate * 100)}% of ${fmt(n.totalSales)}${split(n.staff.length)}</div>`;
   $('commStaffNote').textContent = c.staffNote || '';
   $('commStaffNote').hidden = !c.staffNote;
   renderCommissionStaff();
@@ -961,39 +1017,64 @@ function renderCommission() {
     + (c.days.length ? `<li><div class="row total-row"><span>${bonusDays.length} of ${c.days.length} days earned a bonus</span><strong>${fmt(c.bonusEach)}</strong></div></li>` : '');
 }
 
-// One staff list with days off and the amount to pay; group is 't21' or 'nana'
+// One staff list with days off (− / + or type it) and the amount to pay; group is 't21' or 'nana'
 function commStaffRows(group, names, each) {
-  if (!names.length) return '<li><div class="row"><span class="name">No staff found<span class="sub">Add them in Burmelin Office: Settings → Staff.</span></span></div></li>';
-  return names.map((name, i) => {
+  if (!names.length) return { html: '<li><div class="row"><span class="name">No staff found<span class="sub">Add them in Burmelin Office: Settings → Staff.</span></span></div></li>', total: 0 };
+  let total = 0;
+  const html = names.map((name, i) => {
     const off = getOff(COMM.month, name);
     const extra = Math.max(0, off - COMM_ALLOWED_OFF);
     const cut = Math.round((each / 30) * extra);
+    total += each - cut;
     return `<li><div class="row comm-staff">
-      <span class="name">${esc(name)}<span class="sub">${extra ? `${extra} extra day${extra === 1 ? '' : 's'} off: −${fmt(cut)}` : 'no deduction'}</span></span>
-      <label class="comm-off-wrap">days off <input type="number" inputmode="numeric" min="0" max="31" class="comm-off" data-group="${group}" data-i="${i}" value="${off || ''}" placeholder="0"></label>
+      <span class="name">${esc(name)}<span class="sub ${extra ? 'overdue' : ''}">${extra ? `${extra} extra day${extra === 1 ? '' : 's'} off: −${fmt(cut)}` : 'no deduction'}</span></span>
+      <span class="stepper">
+        <button type="button" data-step="-1" data-group="${group}" data-i="${i}" aria-label="One day off less">−</button>
+        <input type="number" inputmode="numeric" min="0" max="31" class="comm-off" data-group="${group}" data-i="${i}" value="${off}" aria-label="Days off for ${esc(name)}">
+        <button type="button" data-step="1" data-group="${group}" data-i="${i}" aria-label="One day off more">+</button>
+      </span>
       <span class="amount">${fmt(each - cut)}</span>
     </div></li>`;
   }).join('');
+  return { html, total };
 }
 function renderCommissionStaff() {
   const c = COMM;
-  $('commStaff').innerHTML = commStaffRows('t21', c.staff, c.commissionEach + c.bonusEach);
-  $('commNanaStaff').innerHTML = commStaffRows('nana', c.nana.staff, c.nana.commissionEach);
+  const t21 = commStaffRows('t21', c.staff, c.commissionEach + c.bonusEach);
+  const nana = commStaffRows('nana', c.nana.staff, c.nana.commissionEach);
+  $('commStaff').innerHTML = t21.html;
+  $('commNanaStaff').innerHTML = nana.html;
+  $('commTotal').textContent = fmt(t21.total);
+  $('commNanaTotal').textContent = fmt(nana.total);
 }
 
-$('commRow').addEventListener('click', () => openCommission(thisMonth()));
-$('commNanaRow').addEventListener('click', () => openCommission(thisMonth()));
 $('commMonth').addEventListener('change', () => { if ($('commMonth').value) openCommission($('commMonth').value); });
-$('commBackBtn').addEventListener('click', () => { $('page-commission').hidden = true; $('page-dashboard').hidden = false; });
+function shiftMonth(n) {
+  const [y, m] = ($('commMonth').value || thisMonth()).split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  openCommission(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+}
+$('commPrev').addEventListener('click', () => shiftMonth(-1));
+$('commNext').addEventListener('click', () => shiftMonth(1));
 function onDaysOff(e) {
   const el = e.target.closest('.comm-off');
   if (!el || !COMM) return;
   const names = el.dataset.group === 'nana' ? COMM.nana.staff : COMM.staff;
-  setOff(COMM.month, names[+el.dataset.i], Math.max(0, parseInt(el.value, 10) || 0));
+  setOff(COMM.month, names[+el.dataset.i], Math.min(31, Math.max(0, parseInt(el.value, 10) || 0)));
   renderCommissionStaff();
 }
-$('commStaff').addEventListener('change', onDaysOff);
-$('commNanaStaff').addEventListener('change', onDaysOff);
+function onDaysOffStep(e) {
+  const b = e.target.closest('[data-step]');
+  if (!b || !COMM) return;
+  const names = b.dataset.group === 'nana' ? COMM.nana.staff : COMM.staff;
+  const name = names[+b.dataset.i];
+  setOff(COMM.month, name, Math.min(31, Math.max(0, getOff(COMM.month, name) + Number(b.dataset.step))));
+  renderCommissionStaff();
+}
+['commStaff', 'commNanaStaff'].forEach((id) => {
+  $(id).addEventListener('change', onDaysOff);
+  $(id).addEventListener('click', onDaysOffStep);
+});
 
 // ================= daily statement =================
 // Opening balance, each shop's drawer cash and bank, sales, every expense and pay-out, and
@@ -1149,6 +1230,15 @@ function statementHtml(s) {
     ${listTable(s.incomes, 'Other money in', 'customer payments, adjustments')}
     <p class="st-foot">Opening = everything recorded before ${longDate(s.from)}. Closing = opening + this period. Drawer and bank figures match the Finance dashboard. The bank is one account shared by all shops, so per shop it shows only what came in or went out through that shop.</p>`;
 }
+
+$('reportSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-report]');
+  if (!b) return;
+  $('reportSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  $('stPanel').hidden = b.dataset.report !== 'statement';
+  $('bankCard').hidden = b.dataset.report !== 'bank';
+  if (b.dataset.report === 'bank') loadBankCard();
+});
 
 $('stFrom').addEventListener('change', renderStatement);
 $('stTo').addEventListener('change', renderStatement);
