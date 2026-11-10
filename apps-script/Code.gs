@@ -1540,8 +1540,34 @@ var LEAVE_SHEET    = 'Leave';
 var LEAVE_HEADERS  = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
 var LEAVE_TYPES    = { dayoff: 'Day off', sick: 'Sick leave' };
 var LEAVE_HALVES   = { morning: 'Morning', afternoon: 'Afternoon' };
-// The hours of each half day, shown in the app and in the email. Change them here.
-var HALF_DAY_TIMES = { morning: '9:00 AM – 1:00 PM', afternoon: '1:00 PM – 6:00 PM' };
+// Each shop's opening and closing time (24-hour 'HH:MM'). A half day is the first or second
+// half of the person's own shop day, split at the middle. Empty = not known yet: the app then
+// shows only "Morning" / "Afternoon" without hours.
+var SHOP_HOURS = {
+  'Bicasso 1':    { opens: '', closes: '' },
+  'Bicasso 2':    { opens: '', closes: '' },
+  'Bicasso Nana': { opens: '', closes: '' }
+};
+function minutesOf(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? +m[1] * 60 + +m[2] : null; }
+function clockText(min) {
+  var h = Math.floor(min / 60), m = min % 60;
+  return ((h + 11) % 12 + 1) + ':' + ('0' + m).slice(-2) + (h < 12 ? ' AM' : ' PM');
+}
+// { morning: '9:00 AM – 1:30 PM', afternoon: '1:30 PM – 6:00 PM' } for a staff member's shop, or blanks
+function halfTimesFor(s) {
+  var shop = s && s.places.filter(function(p) { return SHOP_HOURS[p]; })[0];
+  var h = shop && SHOP_HOURS[shop], open = h && minutesOf(h.opens), close = h && minutesOf(h.closes);
+  if (open == null || close == null || close <= open) return { morning: '', afternoon: '' };
+  var mid = open + Math.round((close - open) / 60) * 30;   // the middle, on the half hour
+  return { morning: clockText(open) + ' – ' + clockText(mid), afternoon: clockText(mid) + ' – ' + clockText(close) };
+}
+// Adds the hours to each half-day request (the hours of that person's shop)
+function withHalfTimes(requests, staff) {
+  return requests.map(function(r) {
+    if (r.half) r.time = halfTimesFor(staff.filter(function(s) { return s.id === r.staffId; })[0])[r.half] || '';
+    return r;
+  });
+}
 var WORK_PLACES    = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
 var WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 var LEAVE_NOTICE_DAYS = 3;     // a full day off must be asked at least this many days ahead (a half day can be today)
@@ -1761,11 +1787,11 @@ function leaveMine(b) {
   if (who.error) return who.error;
   var s = who.staff, today = todayKey(), from = addDaysKey(today, -90);
   var rows = readLeave(ss).filter(function(l) { return l.staffId === s.id; });
-  var mine = groupLeave(rows.filter(function(l) { return l.date >= from; })).reverse();
+  var mine = withHalfTimes(groupLeave(rows.filter(function(l) { return l.date >= from; })).reverse(), staff);
   var used = {};
   rows.forEach(function(l) { if (l.type === 'dayoff' && isActiveLeave(l)) used[l.date.slice(0, 7)] = (used[l.date.slice(0, 7)] || 0) + leaveAmount(l); });
   var out = { success: true, me: staffOut(s), requests: mine, daysOffUsed: used, today: today, earliestDayOff: addDaysKey(today, LEAVE_NOTICE_DAYS),
-              halfTimes: HALF_DAY_TIMES };
+              halfTimes: halfTimesFor(s) };
   if (Date.now() - who.t > DAY_MS) out.staffToken = issueStaffToken(s);
   return out;
 }
@@ -1781,7 +1807,7 @@ function leaveRequest(b, type, dates, reason, half) {
   if (!dates.length) return { success: false, error: 'Choose the date.' };
   if (half && dates.length > 1) return { success: false, error: 'A half day is for one date only.' };
   if (type === 'dayoff' && dates.length > DAYOFF_MAX_DAYS) return { success: false, error: 'One day-off request can cover up to ' + DAYOFF_MAX_DAYS + ' days.' };
-  var amount = half ? 0.5 : 1, what = LEAVE_TYPES[type] + (half ? ' (' + LEAVE_HALVES[half].toLowerCase() + ', ' + HALF_DAY_TIMES[half] + ')' : '');
+  var amount = half ? 0.5 : 1, what = LEAVE_TYPES[type] + (half ? ' (' + LEAVE_HALVES[half].toLowerCase() + ')' : '');
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
   var s, id, warning = null;
@@ -1790,6 +1816,7 @@ function leaveRequest(b, type, dates, reason, half) {
     var who = leaveWho(b, ss, staff);
     if (who.error) return who.error;
     s = who.staff;
+    if (half && halfTimesFor(s)[half]) what = LEAVE_TYPES[type] + ' (' + LEAVE_HALVES[half].toLowerCase() + ', ' + halfTimesFor(s)[half] + ')';
     var today = todayKey(), leave = readLeave(ss);
     if (type === 'dayoff') {
       if (s.dayOffRule === 'fixed') return { success: false, error: 'Your day off is every ' + s.fixedDayOff + '. You can only request sick leave here.' };
@@ -1875,7 +1902,7 @@ function ownerLeave(b) {
   if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
   var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss), leave = readLeave(ss);
   var from = addDaysKey(todayKey(), -60);
-  var requests = groupLeave(leave.filter(function(l) { return l.date >= from; })).map(function(r) {
+  var requests = withHalfTimes(groupLeave(leave.filter(function(l) { return l.date >= from; })), staff).map(function(r) {
     if (r.status === 'Pending' || r.status === 'Approved') {
       for (var i = 0; i < r.dates.length && !r.warning; i++) r.warning = coverageGap(r.dates[i], staff, leave, null);
     }
@@ -1886,7 +1913,7 @@ function ownerLeave(b) {
     return pa !== pb ? pa - pb : (a.dates[0] < b.dates[0] ? (pa ? 1 : -1) : (pa ? -1 : 1));
   });
   return { success: true, today: todayKey(), requests: requests, staff: staff.map(ownerStaffOut),
-           places: WORK_PLACES, weekdays: WEEKDAYS, halfTimes: HALF_DAY_TIMES,
+           places: WORK_PLACES, weekdays: WEEKDAYS,
            pending: requests.filter(function(r) { return r.status === 'Pending'; }).length };
 }
 

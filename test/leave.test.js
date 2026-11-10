@@ -107,7 +107,7 @@ test('a half day off can be today; a full day off still needs 3 days notice; the
   const { ctx } = load([HEAD10]);
   const r = ctx.leaveRequest({}, 'dayoff', ['2026-11-10'], '', 'afternoon');
   assert.equal(r.success, true, r.error);
-  assert.equal(r.halfTimes.afternoon, ctx.HALF_DAY_TIMES.afternoon);
+  assert.equal(r.halfTimes.afternoon, '');                 // shop hours not set: no hours shown
   assert.match(ctx.leaveRequest({}, 'dayoff', ['2026-11-11'], '', '').error, /3 days ahead/);
   assert.match(ctx.leaveRequest({}, 'dayoff', ['2026-11-09'], '', 'morning').error, /today at the earliest/);
 });
@@ -128,4 +128,19 @@ test('older rows without the Half day column still read as full days, even on a 
   const r = ctx.leaveRequest({}, 'dayoff', ['2026-11-20'], '', 'afternoon');
   assert.equal(r.success, true, r.error);
   assert.equal(r.daysOffUsed['2026-11'], 1.5);
+});
+
+test('half-day hours come from each person\'s own shop, split at the middle', () => {
+  const { ctx } = load([HEAD10]);
+  ctx.SHOP_HOURS['Bicasso 1'] = { opens: '09:00', closes: '18:00' };
+  ctx.SHOP_HOURS['Bicasso Nana'] = { opens: '10:00', closes: '21:00' };
+  const b = ctx.halfTimesFor({ places: ['Bicasso 1', 'Bicasso 2'] });
+  assert.equal(b.morning, '9:00 AM – 1:30 PM');
+  assert.equal(b.afternoon, '1:30 PM – 6:00 PM');
+  const n = ctx.halfTimesFor({ places: ['Bicasso Nana'] });
+  assert.equal(n.morning, '10:00 AM – 3:30 PM');
+  assert.equal(n.afternoon, '3:30 PM – 9:00 PM');
+  const r = ctx.leaveRequest({}, 'sick', ['2026-11-10'], '', 'morning');   // Sunil works at Bicasso 1
+  assert.equal(r.requests[0].time, '9:00 AM – 1:30 PM');
+  assert.equal(r.halfTimes.afternoon, '1:30 PM – 6:00 PM');
 });

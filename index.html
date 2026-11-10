@@ -2725,7 +2725,7 @@ var LEAVE_TYPE_LABEL = { dayoff: 'Day off', sick: 'Sick leave' };
 var LEAVE_HALF_LABEL = { morning: 'Morning', afternoon: 'Afternoon' };
 var LEAVE_LEN = 'full';                    // 'full' (one or more whole days) or 'half'
 var LEAVE_HALF = 'morning';
-var HALF_TIMES = { morning: '', afternoon: '' };   // the hours of each half, from the server
+var HALF_TIMES = { morning: '', afternoon: '' };   // the hours of each half at this person's shop, from the server
 
 function lvEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function lvDay(k) { var d = new Date(k + 'T12:00:00Z'); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]; }
@@ -2735,7 +2735,7 @@ function lvDays(list) {
 // The days of a request, with "Morning" / "Afternoon" for a half day
 function lvWhen(q) {
   if (!q.half) return lvDays(q.dates);
-  return lvDay(q.dates[0]) + ' · ' + (LEAVE_HALF_LABEL[q.half] || '') + (HALF_TIMES[q.half] ? ', ' + HALF_TIMES[q.half] : ' (half day)');
+  return lvDay(q.dates[0]) + ' · ' + (LEAVE_HALF_LABEL[q.half] || '') + (q.time ? ', ' + q.time : ' (half day)');
 }
 function lvAddDays(k, n) { var d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 function lvStatus(st) { return '<span class="lv-st ' + lvEsc(st) + '">' + (LEAVE_STATUS[st] || lvEsc(st)) + '</span>'; }
@@ -3085,7 +3085,6 @@ function ownerRemoveStaff() {
 
 function ownerRender() {
   var r = OWNER_DATA, today = r.today;
-  if (r.halfTimes) HALF_TIMES = r.halfTimes;
   var pending = r.requests.filter(function(q) { return q.status === 'Pending'; });
   var upcoming = r.requests.filter(function(q) { return q.status === 'Approved' && q.dates[q.dates.length - 1] >= today; });
   var past = r.requests.filter(function(q) { return q.status !== 'Pending' && upcoming.indexOf(q) < 0; });
@@ -3114,7 +3113,7 @@ function ownerRender() {
     + (dayKeys.length ? dayKeys.map(function(d) {
         return '<div class="lv-day"><span class="lv-day-date">' + lvDay(d) + '</span><span>'
           + days[d].map(function(q) {
-              var tags = [q.type === 'sick' ? 'sick' : '', q.half ? (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() + (HALF_TIMES[q.half] ? ' ' + HALF_TIMES[q.half] : '') : ''].filter(Boolean);
+              var tags = [q.type === 'sick' ? 'sick' : '', q.half ? (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() + (q.time ? ' ' + q.time : '') : ''].filter(Boolean);
               return lvEsc(q.name) + (tags.length ? ' <i>(' + tags.join(', ') + ')</i>' : '');
             }).join(', ') + '</span></div>';
       }).join('') : '<div class="hist-empty" style="padding:4px 0">Nobody is off in the coming days.</div>')
