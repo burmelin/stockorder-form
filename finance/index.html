@@ -289,6 +289,35 @@
       <p class="rule-hint comm-note">Sales = cash + card through the neighbour's machine. No daily bonus.</p>
     </section>
   </div>
+
+  <section class="card adv-card">
+    <h2>Salary and advances <span class="label">payday for this month</span></h2>
+    <p id="advNote" class="rule-hint comm-staff-note" hidden></p>
+    <div class="adv-head" aria-hidden="true"><span>Person</span><span>Salary</span><span>Take off</span><span>Pay</span></div>
+    <ul id="advStaff" class="rows"></ul>
+    <div class="row total-row"><span>Salaries to pay<span id="advMissing" class="sub"></span></span><strong id="advTotal" class="total-big">&mdash;</strong></div>
+
+    <span class="label comm-list-label adv-list-label">Advances this month</span>
+    <ul id="advList" class="rows"></ul>
+
+    <details class="more" id="advAddBox">
+      <summary>Add an advance you paid</summary>
+      <form id="advForm" class="form adv-form" autocomplete="off">
+        <label><span>Person</span><select id="advName" required></select></label>
+        <label><span>Amount</span><input type="number" inputmode="numeric" min="1" step="1" id="advAmount" required></label>
+        <label><span>Date</span><input type="date" id="advDate" required></label>
+        <label><span>Paid from</span>
+          <select id="advFrom">
+            <option value="cash">Cash at Palladium</option>
+            <option value="bank">Bank transfer</option>
+          </select>
+        </label>
+        <button type="submit" id="advSave" class="save-btn">Save advance</button>
+      </form>
+      <div id="advToast" class="toast" hidden></div>
+    </details>
+    <p class="rule-hint comm-note">An advance from a shop drawer comes in by itself: staff type the name and "Advance" as the Loyverse pay-out note, e.g. <em>Kumar Advance</em>. It counts as salary on the day it's paid. On payday, type how much to take off: the rest is still owed next month. Salaries and amounts taken off are saved in the finance sheet (tabs "Staff Salary" and "Advance Deductions").</p>
+  </section>
 </main>
 
 <!-- ============ REPORTS (statement + Bicasso card sales) ============ -->

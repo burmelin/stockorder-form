@@ -246,7 +246,9 @@ function classifyMovement(m, account) {
   }
   if (type !== 'PAYOUT') return null;
   if (/collect|sonu|received by|brought/.test(c)) return { category: 'Collection (to Palladium)', cashOut: amount, note: comment };
-  if (/salar/.test(c)) return { category: 'Salary', cashOut: amount, note: comment };
+  // A salary advance ("Kumar Advance") is salary paid early: Finance → Staff finds it by the
+  // word "advance" and the person's name in the note, and keeps track of what they owe.
+  if (/salar|advance/.test(c)) return { category: 'Salary', cashOut: amount, note: comment };
   if (c.includes('refund')) return { refund: true, amount, note: comment };
   // Other words staff can put in the note to pick an expense category. Home/house comes
   // before rent: "House rent" is the owner's home, not a shop's rent.

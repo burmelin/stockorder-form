@@ -9,7 +9,7 @@ Four tabs, in the same Burmelin look as the staff app (on a computer they sit do
 - **Add** — **Day sheet** (one shop, one day: sales, collection, expenses; a green dot marks a shop
   that already has entries that day) and **One-off entry**, a smart form that writes rows straight
   into Master Entry, following the same double-entry rules as the sheet
-- **Staff** — Terminal 21 and Nana commission for any month, with days off and the amount to pay
+- **Staff** — Terminal 21 and Nana commission for any month, with days off and the amount to pay, and each person's salary, advances and pay
 - **Reports** — the statement (share as PDF or print) and Bicasso card sales for any dates
 - **Loyverse sync** — each shop's daily sales are pulled from Loyverse automatically (see the Loyverse section below)
 
@@ -116,6 +116,23 @@ The **Staff** tab shows, for any month (this month updates every day):
   remembered on that phone only.
 
 ---
+
+## Salary and advances
+
+At the bottom of the **Staff** tab, for the month picked:
+
+- **Salary:** type each shop person's monthly salary once (saved in the finance sheet, tab
+  **Staff Salary**).
+- **Advances:** an advance is a **Salary** row whose note has the word *advance* and the
+  person's name. Staff paying one from a shop drawer type it as the Loyverse pay-out note,
+  e.g. `Kumar Advance`, and the daily import books it as Salary. An advance the owner pays from
+  Palladium's cash or the bank goes in with **Add an advance you paid**. An advance counts as
+  salary on the day it's paid (it is salary paid early), so salary spending still adds up to
+  the full salaries. A note with no name it knows shows as **Whose advance?**: fix the note in
+  Master Entry.
+- **Take off:** on payday type how much of what the person owes to take off this month (any
+  amount, up to what they owe; saved in tab **Advance Deductions**). Pay = salary − that
+  amount, and the rest is still owed next month.
 
 ## Daily statement
 

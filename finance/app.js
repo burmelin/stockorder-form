@@ -1097,6 +1097,7 @@ async function openCommission(month) {
   $('commSummary').innerHTML = ''; $('commStaff').innerHTML = ''; $('commDays').innerHTML = '';
   $('commNanaSummary').innerHTML = ''; $('commNanaStaff').innerHTML = ''; $('commStaffNote').hidden = true;
   $('commTotal').textContent = '—'; $('commNanaTotal').textContent = '—';
+  loadAdvances(month);
   try {
     COMM = await fetchCommission(month);
     COMM.daysOff = COMM.daysOff || { leave: {}, saved: {} };
@@ -1193,6 +1194,127 @@ function onDaysOffStep(e) {
 ['commStaff', 'commNanaStaff'].forEach((id) => {
   $(id).addEventListener('change', onDaysOff);
   $(id).addEventListener('click', onDaysOffStep);
+});
+
+// ================= Salary and advances =================
+// Each shop person's monthly salary, the advances they took (Salary rows with "advance" and
+// their name in the note), what they owe, how much to take off this payday and the pay.
+// The server does the counting (api/_advances.js); salaries and amounts taken off are saved
+// in the finance sheet so every phone shows the same.
+let ADV = null;
+async function loadAdvances(month) {
+  $('advStaff').innerHTML = '<li><div class="row"><span class="name">Loading…</span></div></li>';
+  $('advList').innerHTML = ''; $('advTotal').textContent = '—'; $('advNote').hidden = true;
+  try {
+    const resp = await api(`/api/advances?month=${month}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    if ($('commMonth').value !== month) return;   // the month changed while loading
+    ADV = data;
+    renderAdvances();
+  } catch (err) {
+    $('advStaff').innerHTML = `<li><div class="row"><span class="name">Could not load: ${esc(err.message)}</span></div></li>`;
+  }
+}
+
+const advSub = (p) => (p.owes
+  ? `owes ${fmt(p.owes)}${p.deduct ? `, ${fmt(p.owesAfter)} left` : ''}`
+  : 'owes nothing');
+function advTotal() {
+  const missing = ADV.staff.filter((p) => !p.salary).length;
+  $('advTotal').textContent = fmt(ADV.staff.reduce((n, p) => n + p.pay, 0));
+  $('advMissing').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no salary typed yet` : '';
+}
+function renderAdvances() {
+  const a = ADV;
+  $('advNote').textContent = a.staffNote || '';
+  $('advNote').hidden = !a.staffNote;
+  if (!a.staff.length) {
+    $('advStaff').innerHTML = '<li><div class="row"><span class="name">No staff found<span class="sub">Add them in Burmelin Office: Settings → Staff.</span></span></div></li>';
+  } else {
+    $('advStaff').innerHTML = a.staff.map((p, i) => {
+      return `<li><div class="row adv-row">
+        <span class="name">${esc(p.name)}<span class="sub ${p.owesAfter ? 'overdue' : ''}">${advSub(p)}</span></span>
+        <input type="number" inputmode="numeric" min="0" step="1" class="adv-salary" data-i="${i}" value="${p.salary || ''}" placeholder="0" aria-label="Monthly salary for ${esc(p.name)}">
+        <input type="number" inputmode="numeric" min="0" step="1" class="adv-deduct" data-i="${i}" value="${p.deduct || ''}" placeholder="0" ${p.owes ? '' : 'disabled'} aria-label="Advance to take off ${esc(p.name)}'s pay">
+        <span class="amount">${p.salary ? fmt(p.pay) : '—'}</span>
+      </div></li>`;
+    }).join('');
+  }
+  advTotal();
+
+  const items = a.staff.flatMap((p) => p.items.map((it) => ({ ...it, who: p.name })))
+    .concat(a.unmatched.map((it) => ({ ...it, who: '' })))
+    .sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : x.row - y.row));
+  $('advList').innerHTML = items.length ? items.map((it) => `
+    <li><div class="row"><span class="name">${it.who ? esc(it.who) : '<span class="overdue">Whose advance?</span>'}
+      <span class="sub ${it.who ? '' : 'overdue'}">${fmtDate(it.date)} · ${esc(it.shop)} · “${esc(String(it.notes).replace(/ · \d\d:\d\d$/, ''))}”${it.who ? '' : ` · no name found: fix the note in Master Entry row ${it.row}`}</span></span>
+      <span class="amount">${fmt(it.amount)}</span></div></li>`).join('')
+    : '<li><div class="row"><span class="name sub">No advances this month.</span></div></li>';
+
+  const sel = $('advName');
+  const was = sel.value;
+  sel.innerHTML = a.staff.map((p) => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+  if (was) sel.value = was;
+  if (!$('advDate').value) $('advDate').value = todayLocalISO();
+}
+
+const advSaving = {};
+function onAdvanceInput(e) {
+  const el = e.target.closest('.adv-salary, .adv-deduct');
+  if (!el || !ADV) return;
+  const p = ADV.staff[+el.dataset.i];
+  const amount = Math.max(0, Math.round(parseFloat(el.value) || 0));
+  const kind = el.classList.contains('adv-salary') ? 'salary' : 'deduct';
+  if (kind === 'salary') p.salary = amount;
+  else p.deduct = Math.min(amount, p.owes);
+  p.pay = Math.max(0, p.salary - p.deduct);
+  p.owesAfter = p.owes - p.deduct;
+  const month = ADV.month, key = kind + '|' + p.name;
+  clearTimeout(advSaving[key]);
+  advSaving[key] = setTimeout(async () => {
+    try {
+      const resp = await api('/api/advances', { method: 'POST', body: JSON.stringify({ kind, month, name: p.name, amount: kind === 'salary' ? p.salary : p.deduct }) });
+      if (!resp.ok) throw new Error((await resp.json()).error || 'Server error');
+    } catch (err) {
+      $('advNote').textContent = `${kind === 'salary' ? 'Salary' : 'Amount to take off'} for ${p.name} was not saved (${err.message}). Type it again to retry.`;
+      $('advNote').hidden = false;
+    }
+  }, 700);
+  // Update this row and the total in place, so the cursor stays where it is
+  const row = el.closest('.adv-row');
+  const sub = row.querySelector('.sub');
+  sub.textContent = advSub(p);
+  sub.classList.toggle('overdue', !!p.owesAfter);
+  row.querySelector('.amount').textContent = p.salary ? fmt(p.pay) : '—';
+  if (kind === 'deduct' && e.type === 'change' && amount > p.owes) el.value = p.deduct || '';
+  advTotal();
+}
+$('advStaff').addEventListener('input', onAdvanceInput);
+$('advStaff').addEventListener('change', onAdvanceInput);
+
+// The owner paid an advance by hand (from Palladium's cash or the bank): a Salary row whose
+// note is "<name> Advance", so it's counted like the ones staff type in Loyverse.
+$('advForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!ADV) return;
+  const name = $('advName').value, amount = Math.round(parseFloat($('advAmount').value) || 0), date = $('advDate').value;
+  if (!name || amount <= 0 || !date) return showToast('Pick a person, an amount and a date', 'error', 'advToast');
+  const bank = $('advFrom').value === 'bank';
+  const btn = $('advSave');
+  btn.disabled = true;
+  try {
+    await saveJSON('/api/transaction', 'POST', { category: 'Salary', shop: 'Palladium', date, notes: `${name} Advance`,
+      cashOut: bank ? 0 : amount, bankOut: bank ? amount : 0 });
+    showToast(`Saved: ${name} advance ${fmt(amount)}`, 'success', 'advToast');
+    $('advAmount').value = '';
+    loadDashboardSoon();
+    loadAdvances(ADV.month);
+  } catch (err) {
+    showToast(err.message, 'error', 'advToast');
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 // ================= daily statement =================
