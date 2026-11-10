@@ -361,6 +361,13 @@ button, input, select, textarea { font-family: inherit; }
 .more summary { cursor: pointer; color: var(--blue); font-size: 14px; font-weight: 600; padding: 6px 0; }
 .more .row { font-size: 14px; }
 .more .rule-hint { margin: 2px 0 4px; }
+.bank-day > summary { list-style: none; cursor: pointer; }
+.bank-day > summary::-webkit-details-marker { display: none; }
+.bank-day > summary .name::before { content: '▸'; color: var(--blue); margin-right: 6px; font-size: 12px; }
+.bank-day[open] > summary .name::before { content: '▾'; }
+.bank-receipts { margin: 0 0 8px 18px; padding-left: 10px; border-left: 2px solid var(--sunk); }
+.bank-receipts .row { font-size: 13px; padding: 6px 0; }
+.bank-receipts .amount.overdue { color: var(--bad); }
 
 /* ---------- reports ---------- */
 .stmt-controls .lv-range { margin-bottom: 10px; }

@@ -2,7 +2,7 @@
 // guards that stop the same money being counted twice.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { dailyTotals, planSync, planMovements, loyverseClash, payoutClash, TAG } = require('../api/_loyverse');
+const { dailyTotals, cardReceipts, planSync, planMovements, loyverseClash, payoutClash, TAG } = require('../api/_loyverse');
 
 const STORES = new Map([['s1', 'Bicasso 1'], ['s2', 'Nana']]);
 const DAY = '2026-11-05';
@@ -103,4 +103,24 @@ test('a hand-typed cash expense asks first when Loyverse has pay-outs that day',
   const imported = [sheetRow({ category: 'Other Expense', cashOut: 300, notes: 'taxi · 10:00' })];
   assert.match(payoutClash(imported, [{ category: 'Other Expense', shop: 'Bicasso 1', date: DAY, cashOut: 300 }]), /Save your entries anyway/);
   assert.equal(payoutClash(imported, [{ category: 'Rent', shop: 'Bicasso 1', date: DAY, bankOut: 300 }]), null);
+});
+
+test('card receipts: one line per card / QR receipt, adding up to the day\'s Bank In', () => {
+  const qr = (n) => ({ type: 'OTHER', name: 'QR PromptPay', money_amount: n });
+  const receipts = [
+    receipt('s1', [card(500)], { receipt_number: '1-1001', receipt_date: '2026-11-05T08:30:00.000Z' }),
+    receipt('s1', [cash(1000)]),
+    receipt('s1', [cash(300), qr(700)], { receipt_number: '1-1002' }),
+    receipt('s1', [card(200)], { receipt_type: 'REFUND', receipt_number: '1-1003' }),
+    receipt('s1', [card(999)], { cancelled_at: AT }),
+    receipt('s1', [card(400)], { receipt_date: '2026-11-06T03:00:00.000Z' }),
+  ];
+  const lines = cardReceipts(receipts, STORES, DATES);
+  assert.deepEqual(lines.map((l) => [l.time, l.number, l.amount, l.methods.join()]), [
+    ['10:00', '1-1002', 700, 'QR PromptPay'],
+    ['10:00', '1-1003', -200, 'Card'],
+    ['15:30', '1-1001', 500, 'Card'],
+  ]);
+  const { totals } = dailyTotals(receipts, STORES, DATES);
+  assert.equal(lines.reduce((n, l) => n + l.amount, 0), totals[0].bank);
 });
