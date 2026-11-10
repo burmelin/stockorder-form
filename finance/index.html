@@ -289,6 +289,46 @@
       <p class="rule-hint comm-note">Sales = cash + card through the neighbour's machine. No daily bonus.</p>
     </section>
   </div>
+
+  <section class="card pay-card">
+    <h2>Payday <span class="label">salary + commission − advance</span></h2>
+    <p id="payStatus" class="rule-hint pay-status"></p>
+    <ul id="payList" class="rows"></ul>
+    <div class="row total-row"><span>Total to pay</span><strong id="payTotal" class="total-big">&mdash;</strong></div>
+    <button type="button" id="payMark" class="save-btn pay-mark" hidden>Pay all</button>
+    <div id="payToast" class="toast" hidden></div>
+    <p class="rule-hint comm-note">Type how much of the advance to cut (any amount up to what they owe; the rest waits for next month), check the pay, then tap Pay. Their salary, commission and bonus, advance cut and pay are saved with the date in the finance sheet's "Payroll" tab, so the month keeps a record even if old sales are edited later. You can pay people on different days. If someone's numbers change after they were paid, the new amount shows in red with an Update button.</p>
+  </section>
+
+  <section class="card adv-card">
+    <h2>Salaries and advances <span class="label">set once, kept every month</span></h2>
+    <p id="advNote" class="rule-hint comm-staff-note" hidden></p>
+    <div class="adv-head" aria-hidden="true"><span>Person</span><span>Monthly salary</span></div>
+    <ul id="advStaff" class="rows"></ul>
+    <p id="advMissing" class="rule-hint adv-missing"></p>
+
+    <span class="label comm-list-label adv-list-label">Advances this month</span>
+    <ul id="advList" class="rows"></ul>
+
+    <details class="more" id="advAddBox">
+      <summary>Add an advance you paid</summary>
+      <form id="advForm" class="form adv-form" autocomplete="off">
+        <label><span>Person</span><select id="advName" required></select></label>
+        <label><span>Amount</span><input type="number" inputmode="numeric" min="1" step="1" id="advAmount" required></label>
+        <label><span>Date</span><input type="date" id="advDate" required></label>
+        <label><span>Paid from</span>
+          <select id="advFrom">
+            <option value="cash">Cash at Palladium</option>
+            <option value="bank">Bank transfer</option>
+          </select>
+        </label>
+        <button type="submit" id="advSave" class="save-btn">Save advance</button>
+      </form>
+      <div id="advToast" class="toast" hidden></div>
+    </details>
+    <p class="rule-hint comm-note">An advance from a shop drawer comes in by itself: staff type the name and "Advance" as the Loyverse pay-out note, e.g. <em>Kumar Advance</em>. It counts as salary on the day it's paid. Salaries and advance cuts are saved in the finance sheet (tabs "Staff Salary" and "Advance Deductions").</p>
+  </section>
+
 </main>
 
 <!-- ============ REPORTS (statement + Bicasso card sales) ============ -->

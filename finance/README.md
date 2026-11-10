@@ -9,7 +9,7 @@ Four tabs, in the same Burmelin look as the staff app (on a computer they sit do
 - **Add** — **Day sheet** (one shop, one day: sales, collection, expenses; a green dot marks a shop
   that already has entries that day) and **One-off entry**, a smart form that writes rows straight
   into Master Entry, following the same double-entry rules as the sheet
-- **Staff** — Terminal 21 and Nana commission for any month, with days off and the amount to pay
+- **Staff** — Terminal 21 and Nana commission for any month, with days off and the amount to pay, and each person's salary, advances and pay
 - **Reports** — the statement (share as PDF or print) and Bicasso card sales for any dates
 - **Loyverse sync** — each shop's daily sales are pulled from Loyverse automatically (see the Loyverse section below)
 
@@ -116,6 +116,28 @@ The **Staff** tab shows, for any month (this month updates every day):
   remembered on that phone only.
 
 ---
+
+## Salary and advances
+
+At the bottom of the **Staff** tab, for the month picked:
+
+- **Salary:** type each staff member's monthly salary once, Palladium staff too (saved in the finance sheet, tab
+  **Staff Salary**).
+- **Advances:** an advance is a **Salary** row whose note has the word *advance* and the
+  person's name. Staff paying one from a shop drawer type it as the Loyverse pay-out note,
+  e.g. `Kumar Advance`, and the daily import books it as Salary. An advance the owner pays from
+  Palladium's cash or the bank goes in with **Add an advance you paid**. An advance counts as
+  salary on the day it's paid (it is salary paid early), so salary spending still adds up to
+  the full salaries. A note with no name it knows shows as **Whose advance?**: fix the note in
+  Master Entry.
+- **Payday** (above the salaries): one row per person showing salary + commission & bonus
+  (from the Terminal 21 and Nana cards) − advance cut = pay. Type the **Advance cut** (any
+  amount up to what they owe; the rest waits for next month, saved in tab **Advance
+  Deductions**), the pay updates, then tap **Pay**. Their amounts are saved with the date in tab
+  **Payroll** (Month, Name, Salary, Advance taken off, Commission, Pay, Marked paid), so the
+  month keeps a record even if old sales are edited later. People can be paid on different
+  days; paying one never changes the others. If a paid person's numbers change later, the new
+  amount shows in red with **Update**. **Pay all** does everyone not yet paid at once.
 
 ## Daily statement
 

@@ -23,6 +23,7 @@ app.all('/api/transactions', require('./api/transactions'));
 app.all('/api/batch', require('./api/batch'));
 app.all('/api/loyverse-sync', require('./api/loyverse-sync'));
 app.all('/api/commission', require('./api/commission'));
+app.all('/api/advances', require('./api/advances'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
