@@ -27,23 +27,94 @@ function staffFromStockRows(values) {
   return out;
 }
 
+// ---- days off ----
+// Approved leave (day off or sick leave) from the Stock sheet's Leave tab, counted per person
+// for the month: the starting number of days off. The owner can change it in the app; that
+// number is saved in the finance sheet's "Commission Days Off" tab (Month, Name, Days off), so
+// every phone shows the same.
+const DAYS_OFF_TAB = 'Commission Days Off';
+
+function leaveDaysFromRows(values, month) {
+  const head = (values[0] || []).map((h) => String(h).trim().toLowerCase());
+  const nameCol = head.indexOf('name'), dateCol = head.indexOf('date'), statusCol = head.indexOf('status');
+  const out = {};
+  if (nameCol < 0 || dateCol < 0 || statusCol < 0) return out;
+  const seen = new Set();
+  for (const r of values.slice(1)) {
+    const name = String(r[nameCol] || '').trim(), date = String(r[dateCol] || '').trim();
+    if (!name || String(r[statusCol] || '').trim() !== 'Approved' || date.slice(0, 7) !== month) continue;
+    const key = name + '|' + date;
+    if (seen.has(key)) continue;   // one day counts once, even if asked twice
+    seen.add(key);
+    out[name] = (out[name] || 0) + 1;
+  }
+  return out;
+}
+
+function savedDaysFromRows(values, month) {
+  const out = {};
+  for (const r of values) if (String(r[0] || '').trim() === month && String(r[1] || '').trim()) out[String(r[1]).trim()] = Math.max(0, parseInt(r[2], 10) || 0);
+  return out;
+}
+
+// POST { month, name, days }: save one person's days off for a month
+async function saveDaysOff(req, res) {
+  const b = req.body || {};
+  const month = String(b.month || ''), name = String(b.name || '').trim().slice(0, 100);
+  const days = Math.min(31, Math.max(0, parseInt(b.days, 10) || 0));
+  if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  if (MOCK) return res.json({ ok: true, mock: true });
+  try {
+    const sheets = getSheetsClient();
+    let values;
+    try {
+      values = (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${DAYS_OFF_TAB}'!A1:C` })).data.values || [];
+    } catch (err) {
+      if (!/Unable to parse range/i.test(err.message || '')) throw err;
+      await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: DAYS_OFF_TAB } } }] } });
+      values = [['Month', 'Name', 'Days off']];
+      await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `'${DAYS_OFF_TAB}'!A1:C1`, valueInputOption: 'RAW', requestBody: { values } });
+    }
+    const i = values.findIndex((r, n) => n > 0 && String(r[0] || '').trim() === month && String(r[1] || '').trim() === name);
+    if (i > 0) {
+      await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `'${DAYS_OFF_TAB}'!C${i + 1}`, valueInputOption: 'RAW', requestBody: { values: [[days]] } });
+    } else {
+      await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: `'${DAYS_OFF_TAB}'!A:C`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: [[month, name, days]] } });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save days off: ' + err.message });
+  }
+}
+
 module.exports = async function handler(req, res) {
   if (!(await checkPin(req, res))) return;
+  if (req.method === 'POST') return saveDaysOff(req, res);
   const month = String((req.query || {}).month || localDate(Date.now()).slice(0, 7));
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
 
   if (MOCK) {
     const rows = mockRows(month), staff = { bicasso: ['Pyone Cho', 'Sunil GTM', 'Kumar Giri'], nana: ['Bharati'] };
     return res.json({ ...commissionFor(rows, month, staff.bicasso.length), staff: staff.bicasso, bands: BONUS_BANDS,
-      nana: { ...nanaCommissionFor(rows, month, staff.nana.length), staff: staff.nana }, staffSource: 'stock', mock: true });
+      nana: { ...nanaCommissionFor(rows, month, staff.nana.length), staff: staff.nana }, staffSource: 'stock',
+      daysOff: { leave: { 'Sunil GTM': 3 }, saved: {} }, mock: true });
   }
 
   try {
     const sheets = getSheetsClient();
-    const [master, stock] = await Promise.all([
+    const soft = (p) => p.then((r) => r, (err) => ({ err }));
+    const [master, stock, leave, saved] = await Promise.all([
       readMasterEntry(sheets),
-      sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Staff'!A1:J60" }).then((r) => r, (err) => ({ err })),
+      soft(sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Staff'!A1:J60" })),
+      soft(sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Leave'!A1:J" })),
+      soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${DAYS_OFF_TAB}'!A2:C` })),
     ]);
+    const daysOff = {
+      leave: leave.err ? {} : leaveDaysFromRows(leave.data.values || [], month),
+      saved: saved.err ? {} : savedDaysFromRows(saved.data.values || [], month),
+    };
     let staff, staffSource = 'stock', staffNote = '';
     if (!stock.err) {
       staff = staffFromStockRows(stock.data.values || []);
@@ -57,7 +128,7 @@ module.exports = async function handler(req, res) {
     res.json({
       ...commissionFor(master.rows, month, staff.bicasso.length), staff: staff.bicasso, bands: BONUS_BANDS,
       nana: { ...nanaCommissionFor(master.rows, month, staff.nana.length), staff: staff.nana },
-      staffSource, staffNote, mock: false,
+      staffSource, staffNote, daysOff, mock: false,
     });
   } catch (err) {
     console.error(err);
@@ -66,6 +137,8 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.staffFromStockRows = staffFromStockRows;
+module.exports.leaveDaysFromRows = leaveDaysFromRows;
+module.exports.savedDaysFromRows = savedDaysFromRows;
 
 function mockRows(month) {
   const day = (d, shop, cash, bank) => ({ date: `${month}-${String(d).padStart(2, '0')}`, shop, category: 'Retail Sale', cashIn: cash, bankIn: bank, credit: 0 });

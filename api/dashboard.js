@@ -1,6 +1,6 @@
 // GET /api/dashboard — live totals computed from the Master Entry tab.
 // Mirrors the spreadsheet's own Dashboard formulas exactly.
-const { SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, checkPin, serialToDate, num, customerShopMap } = require('./_google');
+const { lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, checkPin, serialToDate, num, customerShopMap } = require('./_google');
 
 const COLLECTION = 'Collection (to Palladium)';
 
@@ -15,6 +15,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const sheets = getSheetsClient();
+    const syncing = process.env.LOYVERSE_TOKEN ? lastSync(sheets) : Promise.resolve(null);
     const resp = await sheets.spreadsheets.values.batchGet({
       spreadsheetId: SHEET_ID,
       ranges: ["'Master Entry'!A2:L", "'Lists'!A2:F30"],
@@ -88,6 +89,7 @@ module.exports = async function handler(req, res) {
       totalCredit: creditList.reduce((s, c) => s + c.balance, 0),
       lists: { shops, customers, customerShops, categories },
       loyverse: Boolean(process.env.LOYVERSE_TOKEN),
+      lastSync: await syncing,
       updatedAt: new Date().toISOString(),
       mock: false,
     });

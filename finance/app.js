@@ -149,6 +149,7 @@ async function loadDashboard() {
     $('dExpensesHint').textContent = d.loyverse ? 'only bank-paid, or missing in Loyverse' : 'add as many as you need';
     $('dNeighbourHint').textContent = d.loyverse ? "imported from Loyverse 'Card' pay-ins" : 'cash for earlier card sales';
     renderDashboard(d);
+    renderSyncStatus(d);
     populateForm();
     initBankCard();
     refreshSavedDots();
@@ -180,6 +181,26 @@ function renderDashboard(d) {
   renderCredit();
   $('totalCredit').textContent = fmt(d.totalCredit);
   $('updatedAt').textContent = 'Updated ' + new Date(d.updatedAt).toLocaleTimeString();
+}
+
+// "Last Loyverse import" line on Home. Red when the last run failed, or when nothing has run
+// for over a day and a half (the job runs every morning at 6:00), so a missed day is noticed.
+function renderSyncStatus(d) {
+  const el = $('syncStatus');
+  el.hidden = !d.loyverse;
+  if (!d.loyverse) return;
+  const s = d.lastSync;
+  if (!s) { el.className = 'sync-status'; el.textContent = 'Loyverse import: no run recorded yet'; return; }
+  const when = new Date(s.when);
+  const hours = (Date.now() - when.getTime()) / 3600000;
+  const stale = !(hours < 36);
+  const at = when.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  let text = `Last Loyverse import: ${at} · `;
+  if (!s.ok) text += `FAILED: ${s.message} · open Add → Day sheet → Check Loyverse to retry`;
+  else text += `OK${s.added || s.updated ? ` (${s.added} added, ${s.updated} updated)` : ''}${s.message && s.message !== 'nothing new' ? ` · ${s.message}` : ''}`;
+  if (s.ok && stale) text += ' · no import for over a day: check it ran';
+  el.className = 'sync-status' + (!s.ok || stale ? ' bad' : '');
+  el.textContent = text;
 }
 
 // Credit customers: the overdue ones with the most money owed first, three on Home until
@@ -967,10 +988,53 @@ async function fetchCommission(month) {
   return data;
 }
 
-// Days off are only needed at month end; remember what was typed per month on this phone.
-const offKey = (month, name) => `commOff:${month}:${name}`;
-function getOff(month, name) { try { return parseInt(localStorage.getItem(offKey(month, name)), 10) || 0; } catch (e) { return 0; } }
-function setOff(month, name, n) { try { localStorage.setItem(offKey(month, name), String(n)); } catch (e) { /* private mode: fine */ } }
+// Days off: what the owner set (saved in the finance sheet, the same on every phone), otherwise
+// the person's approved leave that month from the Leave screen.
+function getOff(month, name) {
+  const d = (COMM && COMM.month === month && COMM.daysOff) || { leave: {}, saved: {} };
+  if (name in d.saved) return d.saved[name];
+  return d.leave[name] || 0;
+}
+function offSource(name) {
+  const d = (COMM && COMM.daysOff) || { leave: {}, saved: {} };
+  if (name in d.saved) return 'set by you';
+  return d.leave[name] ? 'from approved leave' : '';
+}
+const offSaving = {};
+function setOff(month, name, n) {
+  if (!COMM || COMM.month !== month) return;
+  COMM.daysOff = COMM.daysOff || { leave: {}, saved: {} };
+  COMM.daysOff.saved[name] = n;
+  // Wait for the taps to settle, then save once
+  clearTimeout(offSaving[name]);
+  offSaving[name] = setTimeout(() => saveOff(month, name, n), 700);
+}
+async function saveOff(month, name, n) {
+  try {
+    const resp = await api('/api/commission', { method: 'POST', body: JSON.stringify({ month, name, days: n }) });
+    if (!resp.ok) throw new Error((await resp.json()).error || 'Server error');
+  } catch (err) {
+    const note = $('commStaffNote');
+    note.textContent = `Days off for ${name} were not saved (${err.message}). Change the number again to retry.`;
+    note.hidden = false;
+  }
+}
+// Days off typed before they were saved to the sheet lived only on that phone: move them over once.
+function moveOldDaysOff(c) {
+  const names = c.staff.concat(c.nana.staff);
+  for (const name of names) {
+    const key = `commOff:${c.month}:${name}`;
+    let old = null;
+    try { old = localStorage.getItem(key); } catch (e) { return; }
+    if (old === null) continue;
+    if (!(name in c.daysOff.saved)) {
+      const n = parseInt(old, 10) || 0;
+      c.daysOff.saved[name] = n;
+      saveOff(c.month, name, n);
+    }
+    try { localStorage.removeItem(key); } catch (e) { /* fine */ }
+  }
+}
 
 let COMM = null;
 async function openCommission(month) {
@@ -982,6 +1046,8 @@ async function openCommission(month) {
   $('commTotal').textContent = '—'; $('commNanaTotal').textContent = '—';
   try {
     COMM = await fetchCommission(month);
+    COMM.daysOff = COMM.daysOff || { leave: {}, saved: {} };
+    moveOldDaysOff(COMM);
     renderCommission();
   } catch (err) {
     $('commPeriod').textContent = 'Could not load: ' + err.message;
@@ -1027,7 +1093,7 @@ function commStaffRows(group, names, each) {
     const cut = Math.round((each / 30) * extra);
     total += each - cut;
     return `<li><div class="row comm-staff">
-      <span class="name">${esc(name)}<span class="sub ${extra ? 'overdue' : ''}">${extra ? `${extra} extra day${extra === 1 ? '' : 's'} off: −${fmt(cut)}` : 'no deduction'}</span></span>
+      <span class="name">${esc(name)}<span class="sub ${extra ? 'overdue' : ''}">${extra ? `${extra} extra day${extra === 1 ? '' : 's'} off: −${fmt(cut)}` : 'no deduction'}${offSource(name) ? ` · ${offSource(name)}` : ''}</span></span>
       <span class="stepper">
         <button type="button" data-step="-1" data-group="${group}" data-i="${i}" aria-label="One day off less">−</button>
         <input type="number" inputmode="numeric" min="0" max="31" class="comm-off" data-group="${group}" data-i="${i}" value="${off}" aria-label="Days off for ${esc(name)}">

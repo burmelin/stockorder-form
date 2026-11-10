@@ -192,7 +192,44 @@ async function creditShopError(entries) {
   return null;
 }
 
+// ---- Loyverse import log ----
+// Each import (the 6:00 job, or Save from Loyverse in the app) adds one line to a "Sync Log"
+// tab, so Home can say when the last import ran and whether it worked. The tab is made on
+// first use. A failure to log never fails the import itself.
+const SYNC_LOG = 'Sync Log';
+const SYNC_HEAD = ['When', 'Result', 'Dates', 'Added', 'Updated', 'Message'];
+
+async function logSync(sheets, entry) {
+  const row = [[new Date().toISOString(), entry.ok ? 'OK' : 'Failed', entry.dates || '', entry.added || 0, entry.updated || 0, String(entry.message || '').slice(0, 500)]];
+  const append = () => sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID, range: `'${SYNC_LOG}'!A:F`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: row },
+  });
+  try {
+    await append();
+  } catch (err) {
+    if (!/Unable to parse range/i.test(err.message || '')) { console.error('Sync log:', err.message); return; }
+    try {
+      await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: SYNC_LOG } } }] } });
+      await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `'${SYNC_LOG}'!A1:F1`, valueInputOption: 'RAW', requestBody: { values: [SYNC_HEAD] } });
+      await append();
+    } catch (e) { console.error('Sync log:', e.message); }
+  }
+}
+
+// The newest line of the Sync Log ({ when, ok, dates, added, updated, message }), or null.
+async function lastSync(sheets) {
+  try {
+    const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${SYNC_LOG}'!A2:F` });
+    const rows = (resp.data.values || []).filter((r) => r[0]);
+    const r = rows[rows.length - 1];
+    if (!r) return null;
+    return { when: String(r[0]), ok: r[1] === 'OK', dates: String(r[2] || ''), added: +r[3] || 0, updated: +r[4] || 0, message: String(r[5] || '') };
+  } catch (err) {
+    return null;   // no Sync Log tab yet
+  }
+}
+
 // Shown when a save would go past the bottom of Master Entry.
 const sheetFullError = (lastRow) => `Master Entry is full (row ${lastRow}). Add more rows at the bottom of the sheet, copying the last row's formulas.`;
 
-module.exports = { SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
+module.exports = { logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };

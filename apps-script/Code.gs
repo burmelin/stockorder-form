@@ -201,7 +201,7 @@ function handleApi(action, params, body) {
   } else if (body && body.auth && body.authStore && passwordOf(body.authStore) === body.auth) {
     renewFor = body.authStore;   // a phone still saving the password: switch it to a token
   }
-  if (READ_ACTIONS[action] && !isLoggedIn(body)) {
+  if ((READ_ACTIONS[action] || action === 'submitOrder') && !isLoggedIn(body)) {
     return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
   }
   var out;
@@ -209,7 +209,7 @@ function handleApi(action, params, body) {
     case 'getBusinessName': out = BUSINESS_NAME; break;
     case 'getInventory':    out = getInventory(); break;
     case 'getOrders':       out = getOrders(params.password); break;
-    case 'submitOrder':     out = submitOrder(body.order); break;
+    case 'submitOrder':     out = submitOrder(body.order, body); break;
     case 'sendInvoice':     out = sendInvoice(body.orderId, body.password); break;
     case 'deleteOrder':     out = deleteOrder(body.orderId, body.password); break;
     case 'editOrderItems':  out = editOrderItems(body.orderId, body.newItems, body.password); break;
@@ -245,6 +245,7 @@ function handleApi(action, params, body) {
     var token = issueToken(renewFor);
     if (token) out._token = token;
   }
+  ensureBackupTrigger();
   return jsonOut(out);
 }
 
@@ -327,8 +328,16 @@ function cellDateText(v) {
 }
 
 // orderData.orderToken: sent again unchanged on a retry, so a resend can't create a second order
-function submitOrder(orderData) {
+// Only a logged-in shop or Palladium can order (handleApi checks). A shop always orders for
+// itself, whatever the request says. No email goes to the "customer": anyone could type any
+// address there, which would let strangers send mail from this Gmail.
+function submitOrder(orderData, b) {
   orderData = orderData || {};
+  if (b && !isEmployee(b.auth) && RETAIL_STORES.indexOf(b.authStore) > -1) {
+    orderData.shopName = b.authStore;
+    orderData.customerName = b.authStore;
+  }
+  orderData.customerEmail = '';
   var items = orderData.items || [];
   if (!items.length) return { success: false, error: 'No items in the order.' };
   var token = String(orderData.orderToken || '');
@@ -391,7 +400,6 @@ function submitOrder(orderData) {
   }
 
   // Emails after the lock is released, so they never hold up other requests
-  try { sendConfirmationEmail(orderData, orderId, dateStr); } catch(e) {}
   try { notifyOwner(orderData, orderId, dateStr); } catch(e) {}
   return { success: true, orderId: orderId };
 }
@@ -739,31 +747,6 @@ function deductItemsFromWholesale(ss, items, lines, changes) {
   });
   Object.keys(changed).forEach(function(row) { sheet.getRange(Number(row) + 1, 6).setValue(data[row][5]); });
   return warnings;
-}
-
-// ─── INTERNAL: CONFIRMATION EMAIL TO CUSTOMER ─────────────────
-function sendConfirmationEmail(orderData, orderId, dateStr) {
-  if (!orderData.customerEmail) return;
-
-  var itemLines = (orderData.items || []).map(function(i) {
-    return '  • ' + i.product + '  |  ' + i.color + '  |  Size ' + i.size + '  |  Qty: ' + i.qty;
-  }).join('\n');
-
-  var body = 'Hi ' + orderData.customerName + ',\n\n'
-    + 'Thank you! We received your order.\n\n'
-    + 'Order ID : ' + orderId + '\n'
-    + 'Date     : ' + dateStr + '\n\n'
-    + 'Items:\n' + itemLines + '\n\n'
-    + (orderData.notes ? 'Notes: ' + orderData.notes + '\n\n' : '')
-    + 'We will prepare your order and send the invoice shortly.\n\n'
-    + BUSINESS_NAME;
-
-  GmailApp.sendEmail(
-    orderData.customerEmail,
-    'Order Received — ' + orderId + ' | ' + BUSINESS_NAME,
-    body,
-    { name: BUSINESS_NAME }
-  );
 }
 
 // ─── INTERNAL: NOTIFY OWNER OF NEW ORDER ──────────────────────
@@ -1479,21 +1462,31 @@ function getSalesReport(b, days) {
 }
 
 // ─── DAILY BACKUP ─────────────────────────────────────────────
-// Run setupDailyBackup() once from the Apps Script editor. It makes a copy now and then
-// every night, in a Drive folder "Burmelin Backups", keeping the newest 30 copies.
+// Every night a copy of this stock sheet AND the finance sheet goes into the Drive folder
+// "Burmelin Backups"; the newest 30 copies of each are kept. The nightly trigger installs
+// itself (checked once a day from a normal app request), so nobody has to run anything.
+// setupDailyBackup() can still be run by hand from the Apps Script editor.
 var BACKUP_FOLDER = 'Burmelin Backups';
 var BACKUP_KEEP   = 30;
+var FINANCE_SHEET_ID = '1UG4WQG3vOiytArJT1U03CdQPwjPlMb9-3wy1OGzoLmw';
+
+function backupOne(file, folder, stamp) {
+  var base = file.getName() + ' — backup ';
+  file.makeCopy(base + stamp, folder);
+  var files = [], f = folder.getFiles();
+  while (f.hasNext()) { var x = f.next(); if (x.getName().indexOf(base) === 0) files.push(x); }
+  files.sort(function(a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  files.slice(BACKUP_KEEP).forEach(function(old) { old.setTrashed(true); }); // stays in Drive's trash for 30 days
+}
 
 function dailyBackup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var it = DriveApp.getFoldersByName(BACKUP_FOLDER);
   var folder = it.hasNext() ? it.next() : DriveApp.createFolder(BACKUP_FOLDER);
   var stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
-  DriveApp.getFileById(ss.getId()).makeCopy(ss.getName() + ' — backup ' + stamp, folder);
-  var files = [], f = folder.getFiles();
-  while (f.hasNext()) files.push(f.next());
-  files.sort(function(a, b) { return b.getDateCreated() - a.getDateCreated(); });
-  files.slice(BACKUP_KEEP).forEach(function(old) { old.setTrashed(true); }); // stays in Drive's trash for 30 days
+  backupOne(DriveApp.getFileById(ss.getId()), folder, stamp);
+  try { backupOne(DriveApp.getFileById(FINANCE_SHEET_ID), folder, stamp); }
+  catch (e) { console.error('Finance sheet backup failed: ' + e); }
 }
 
 function setupDailyBackup() {
@@ -1502,6 +1495,22 @@ function setupDailyBackup() {
   });
   ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(23).create();
   dailyBackup();
+}
+
+// Called on app requests: at most once a day, makes sure the nightly backup trigger exists
+// (and makes a first backup when it had to create it). Never gets in the way of the request.
+function ensureBackupTrigger() {
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (PASSWORD_PROPS.BACKUP_CHECKED === today) return;
+  try {
+    PropertiesService.getScriptProperties().setProperty('BACKUP_CHECKED', today);
+    PASSWORD_PROPS.BACKUP_CHECKED = today;
+    var has = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'dailyBackup'; });
+    if (!has) {
+      ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(23).create();
+      dailyBackup();
+    }
+  } catch (e) { console.error('Backup trigger check failed: ' + e); }
 }
 
 // ─── OWNER LOGIN ──────────────────────────────────────────────

@@ -5,14 +5,15 @@
 // expense, neighbour payment), classified from the note staff typed in Loyverse.
 //
 //   ?date=YYYY-MM-DD   last day to sync (default: today, in LOYVERSE_TIMEZONE)
-//   ?days=N            how many days back from `date` (default 2 = yesterday + today, max 31)
+//   ?days=N            how many days back from `date` (default 2 = yesterday + today, max 31;
+//                      the daily job looks back 7 days, so a night it failed is caught up)
 //   ?dryRun=1          report what would be written without touching the sheet
 //
 // Safe to run any number of times: rows are tagged "Loyverse" in Entered By and are
 // updated in place on the next run, never duplicated. A Loyverse row someone corrected
 // by hand in the sheet is kept as it is (see planSync / planMovements). Vercel Cron calls it daily
 // (see vercel.json) with "Authorization: Bearer $CRON_SECRET".
-const { SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
+const { logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
 const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements } = require('./_loyverse');
 
 const MOCK_SHOPS = ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'];
@@ -38,7 +39,8 @@ module.exports = async function handler(req, res) {
   const today = localDate(Date.now());
   const to = String(q.date || today);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
-  const days = Math.min(Math.max(parseInt(q.days, 10) || 2, 1), 31);
+  const isCron = /vercel-cron/i.test(req.headers['user-agent'] || '');
+  const days = Math.min(Math.max(parseInt(q.days, 10) || (isCron ? 7 : 2), 1), 31);
   const from = addDays(to, -(days - 1));
   const dryRun = q.dryRun === true || q.dryRun === '1' || q.dryRun === 'true';
 
@@ -93,7 +95,14 @@ module.exports = async function handler(req, res) {
       results: plan, unmatchedStores: unmatchedCounts, warnings,
       added: dryRun ? 0 : toAdd.length, updated: dryRun ? 0 : toUpdate.length,
     };
-    if (dryRun || MOCK || (!toAdd.length && !toUpdate.length)) return res.json(result);
+    const datesText = from === to ? from : `${from} to ${to}`;
+    const kept = plan.filter((p) => p.action === 'skip').length;
+    const summary = [kept ? `${kept} left for you to check` : '', warnings.length ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ');
+    if (dryRun || MOCK) return res.json(result);
+    if (!toAdd.length && !toUpdate.length) {
+      await logSync(sheets, { ok: true, dates: datesText, message: summary || 'nothing new' });
+      return res.json(result);
+    }
 
     const credit = (p) => p.kind === 'credit';
     const movementRow = (p) => [
@@ -129,10 +138,14 @@ module.exports = async function handler(req, res) {
     });
     toAdd.forEach((p, i) => { p.row = nextRow + i; });
 
+    await logSync(sheets, { ok: true, dates: datesText, added: toAdd.length, updated: toUpdate.length, message: summary });
     console.log(`loyverse-sync ${from}..${to}: added ${toAdd.length}, updated ${toUpdate.length}, skipped ${plan.filter((p) => p.action === 'skip').length}`);
     res.json(result);
   } catch (err) {
     console.error(err);
+    if (!MOCK && !dryRun) {
+      try { await logSync(getSheetsClient(), { ok: false, dates: from === to ? from : `${from} to ${to}`, message: err.message }); } catch (e) { /* the key itself is broken */ }
+    }
     res.status(500).json({ error: 'Loyverse sync failed: ' + err.message });
   }
 };
