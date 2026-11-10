@@ -2,7 +2,7 @@
 // Used by the "Daily" screen to record a shop's sales + expenses for a date together.
 // Like /api/transaction, it writes columns A-D and F-L only; E (Type), M and N stay
 // as sheet formulas (left as null so the update never overwrites them).
-const { SHEET_ID, MOCK, getSheetsClient, checkPin, num, readMasterEntry, sheetFullError, creditShopError } = require('./_google');
+const { SHEET_ID, MOCK, getSheetsClient, checkPin, num, readMasterEntry, sheetFullError, creditShopError, verifyWritten } = require('./_google');
 const { loyverseClash, payoutClash } = require('./_loyverse');
 
 // Which money fields each category is allowed to use (mirrors api/transaction.js)
@@ -122,6 +122,8 @@ module.exports = async function handler(req, res) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: rowValues },
     });
+    const lost = await verifyWritten(sheets, startRow, rowValues);
+    if (lost) return res.status(409).json({ error: lost });
 
     res.json({ ok: true, count: rowValues.length, startRow, endRow });
   } catch (err) {

@@ -4,7 +4,8 @@
   "private": true,
   "description": "Burmelin: staff app (stock, orders, leave) and finance app (/finance)",
   "scripts": {
-    "dev": "node dev-server.js"
+    "dev": "node dev-server.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "googleapis": "^140.0.0"

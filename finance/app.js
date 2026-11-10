@@ -99,6 +99,8 @@ function setTab(name) {
 function dropEdit() {
   if (editingRow === null) return;
   editingRow = null;
+  editingTx = null;
+  $('deleteBtn').hidden = true;
   $('saveBtn').textContent = 'Save Transaction';
   $('editBanner').hidden = true;
   $('fCategory').value = '';
@@ -573,7 +575,7 @@ $('txForm').addEventListener('submit', async (e) => {
   if (!any) return showToast('Enter an amount', 'error');
 
   const isEdit = editingRow !== null;
-  if (isEdit) body.row = editingRow;
+  if (isEdit) { body.row = editingRow; body.original = originalOf(editingTx); }
 
   const btn = $('saveBtn');
   btn.disabled = true; btn.textContent = isEdit ? 'Updating…' : 'Saving…';
@@ -611,9 +613,19 @@ function showToast(msg, kind, id = 'toast') {
 
 // ---- edit transaction ----
 let editingRow = null;
+let editingTx = null;   // the entry as the app showed it, so the server can check the row still holds it
+
+// What the server compares with the sheet row before changing or deleting it
+function originalOf(tx) {
+  if (!tx) return null;
+  const { date, shop, customer, category, cashIn, bankIn, cashOut, bankOut, creditAmount } = tx;
+  return { date, shop, customer, category, cashIn, bankIn, cashOut, bankOut, creditAmount };
+}
 
 function startEdit(tx) {
   editingRow = tx.row;
+  editingTx = tx;
+  $('deleteBtn').hidden = false;
   setTab('add');
   addSub = 'record';
   showPage('record');
@@ -644,6 +656,8 @@ function startEdit(tx) {
 
 function cancelEdit() {
   editingRow = null;
+  editingTx = null;
+  $('deleteBtn').hidden = true;
   $('saveBtn').textContent = 'Save Transaction';
   $('editBanner').hidden = true;
   $('fCategory').value = '';
@@ -661,6 +675,27 @@ function cancelEdit() {
 }
 
 $('cancelEdit').addEventListener('click', cancelEdit);
+
+// Delete the entry being edited (instead of deleting rows in the sheet by hand)
+$('deleteBtn').addEventListener('click', async () => {
+  if (editingRow === null || !editingTx) return;
+  const t = editingTx;
+  const amount = t.cashIn + t.bankIn + t.cashOut + t.bankOut + t.creditAmount;
+  if (!confirm(`Delete this entry?\n\n${t.category} · ${t.shop} · ${fmtDate(t.date)} · ${fmt(amount)}\n\nIt is removed from the sheet.`)) return;
+  const btn = $('deleteBtn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    const data = await saveJSON('/api/transaction', 'DELETE', { row: editingRow, original: originalOf(t) });
+    showToast(`Deleted ✓ ${t.category} — ${t.shop}${data.mock ? ' (sample mode)' : ''}`, 'success');
+    TX = null;
+    cancelEdit();
+    loadDashboardSoon();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Delete entry';
+  }
+});
 
 $('detailList').addEventListener('click', (e) => {
   const el = e.target.closest('[data-row]');
