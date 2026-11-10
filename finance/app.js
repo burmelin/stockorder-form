@@ -299,10 +299,59 @@ async function loadBankCard() {
   $('bankDays').textContent = byDay.size ? `${byDay.size} day${byDay.size === 1 ? '' : 's'} with card sales` : 'no card sales in these dates';
   const days = [...byDay].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   $('bankDaily').hidden = !days.length;
+  BANK_DAYS = new Map(days);
   $('bankDayList').innerHTML = days.map(([date, d]) => `
-    <li><div class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span></span>
-      <span class="amount">${fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></div></li>`).join('');
+    <li><details class="bank-day" data-date="${date}"><summary class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span></span>
+      <span class="amount">${fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></summary>
+      <ul class="rows bank-receipts"></ul></details></li>`).join('');
 }
+
+// Tap a day: its single card / QR receipts, read live from Loyverse (the sheet keeps only
+// the day's total). Fetched once per day and kept until the page reloads.
+let BANK_DAYS = new Map();
+const CARD_RECEIPTS = new Map();
+async function loadCardReceipts(date) {
+  if (CARD_RECEIPTS.has(date)) return CARD_RECEIPTS.get(date);
+  const p = (async () => {
+    const resp = await api(`/api/card-receipts?from=${date}&to=${date}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    return data.receipts;
+  })();
+  CARD_RECEIPTS.set(date, p);
+  p.catch(() => CARD_RECEIPTS.delete(date));
+  return p;
+}
+async function showCardReceipts(det) {
+  const date = det.dataset.date;
+  const list = det.querySelector('.bank-receipts');
+  if (list.dataset.done) return;
+  list.innerHTML = '<li><div class="row"><span class="name sub">Loading receipts from Loyverse…</span></div></li>';
+  let lines;
+  try { lines = await loadCardReceipts(date); } catch (err) {
+    list.innerHTML = `<li><div class="row"><span class="name sub overdue">Could not load receipts: ${esc(err.message)}</span></div></li>`;
+    return;
+  }
+  list.dataset.done = '1';
+  if (!lines.length) {
+    list.innerHTML = '<li><div class="row"><span class="name sub">No card / QR receipts in Loyverse for this day</span></div></li>';
+    return;
+  }
+  // If someone corrected the day's Bank In by hand, the receipts won't add up to it: say so.
+  const sheet = BANK_DAYS.get(date) || {};
+  const notes = BANK_SHOPS.map((s) => {
+    const sum = lines.filter((l) => l.shop === s).reduce((n, l) => n + l.amount, 0);
+    return Math.abs(sum - (sheet[s] || 0)) > 0.5 ? `${s}: receipts add up to ${fmt(sum)}, the sheet has ${fmt(sheet[s] || 0)}` : '';
+  }).filter(Boolean);
+  list.innerHTML = lines.map((l) => `
+    <li><div class="row"><span class="name">${esc(l.time)} · ${esc(l.shop.replace('Bicasso ', 'B'))}<span class="sub">${l.number ? `#${esc(l.number)} · ` : ''}${esc(l.methods.join(', '))}${l.refund ? ' · refund' : ''}</span></span>
+      <span class="amount${l.refund ? ' overdue' : ''}">${l.refund ? '−' : ''}${fmt(Math.abs(l.amount))}</span></div></li>`).join('')
+    + `<li><div class="row"><span class="name sub">${lines.length} receipt${lines.length === 1 ? '' : 's'}</span></div></li>`
+    + notes.map((n) => `<li><div class="row"><span class="name sub overdue">${esc(n)}</span></div></li>`).join('');
+}
+$('bankDayList').addEventListener('toggle', (e) => {
+  if (e.target.matches('.bank-day') && e.target.open) showCardReceipts(e.target);
+}, true);
 $('bankFrom').addEventListener('change', loadBankCard);
 $('bankTo').addEventListener('change', loadBankCard);
 
