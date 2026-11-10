@@ -1540,9 +1540,11 @@ var LEAVE_SHEET    = 'Leave';
 var LEAVE_HEADERS  = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
 var LEAVE_TYPES    = { dayoff: 'Day off', sick: 'Sick leave' };
 var LEAVE_HALVES   = { morning: 'Morning', afternoon: 'Afternoon' };
+// The hours of each half day, shown in the app and in the email. Change them here.
+var HALF_DAY_TIMES = { morning: '9:00 AM – 1:00 PM', afternoon: '1:00 PM – 6:00 PM' };
 var WORK_PLACES    = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
 var WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-var LEAVE_NOTICE_DAYS = 3;     // a day off must be asked at least this many days ahead
+var LEAVE_NOTICE_DAYS = 3;     // a full day off must be asked at least this many days ahead (a half day can be today)
 var SICK_MAX_DAYS     = 7;     // one sick-leave request covers at most this many days
 var DAYOFF_MAX_DAYS   = 14;    // one day-off request covers at most this many days in a row
 var PIN_MIN           = 4;
@@ -1762,7 +1764,8 @@ function leaveMine(b) {
   var mine = groupLeave(rows.filter(function(l) { return l.date >= from; })).reverse();
   var used = {};
   rows.forEach(function(l) { if (l.type === 'dayoff' && isActiveLeave(l)) used[l.date.slice(0, 7)] = (used[l.date.slice(0, 7)] || 0) + leaveAmount(l); });
-  var out = { success: true, me: staffOut(s), requests: mine, daysOffUsed: used, today: today, earliestDayOff: addDaysKey(today, LEAVE_NOTICE_DAYS) };
+  var out = { success: true, me: staffOut(s), requests: mine, daysOffUsed: used, today: today, earliestDayOff: addDaysKey(today, LEAVE_NOTICE_DAYS),
+              halfTimes: HALF_DAY_TIMES };
   if (Date.now() - who.t > DAY_MS) out.staffToken = issueStaffToken(s);
   return out;
 }
@@ -1778,7 +1781,7 @@ function leaveRequest(b, type, dates, reason, half) {
   if (!dates.length) return { success: false, error: 'Choose the date.' };
   if (half && dates.length > 1) return { success: false, error: 'A half day is for one date only.' };
   if (type === 'dayoff' && dates.length > DAYOFF_MAX_DAYS) return { success: false, error: 'One day-off request can cover up to ' + DAYOFF_MAX_DAYS + ' days.' };
-  var amount = half ? 0.5 : 1, what = LEAVE_TYPES[type] + (half ? ' (' + LEAVE_HALVES[half].toLowerCase() + ')' : '');
+  var amount = half ? 0.5 : 1, what = LEAVE_TYPES[type] + (half ? ' (' + LEAVE_HALVES[half].toLowerCase() + ', ' + HALF_DAY_TIMES[half] + ')' : '');
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
   var s, id, warning = null;
@@ -1790,9 +1793,9 @@ function leaveRequest(b, type, dates, reason, half) {
     var today = todayKey(), leave = readLeave(ss);
     if (type === 'dayoff') {
       if (s.dayOffRule === 'fixed') return { success: false, error: 'Your day off is every ' + s.fixedDayOff + '. You can only request sick leave here.' };
-      var earliest = addDaysKey(today, LEAVE_NOTICE_DAYS);
+      var earliest = half ? today : addDaysKey(today, LEAVE_NOTICE_DAYS);
       for (var i = 0; i < dates.length; i++) {
-        if (dates[i] < earliest) return { success: false, error: 'A day off must be asked at least ' + LEAVE_NOTICE_DAYS + ' days ahead. The earliest you can choose is ' + prettyDay(earliest) + '.' };
+        if (dates[i] < earliest) return { success: false, error: half ? 'A half day can be today at the earliest.' : 'A day off must be asked at least ' + LEAVE_NOTICE_DAYS + ' days ahead. The earliest you can choose is ' + prettyDay(earliest) + '.' };
       }
     } else {
       if (dates[0] < today) return { success: false, error: 'Sick leave can start today at the earliest.' };
@@ -1883,7 +1886,7 @@ function ownerLeave(b) {
     return pa !== pb ? pa - pb : (a.dates[0] < b.dates[0] ? (pa ? 1 : -1) : (pa ? -1 : 1));
   });
   return { success: true, today: todayKey(), requests: requests, staff: staff.map(ownerStaffOut),
-           places: WORK_PLACES, weekdays: WEEKDAYS,
+           places: WORK_PLACES, weekdays: WEEKDAYS, halfTimes: HALF_DAY_TIMES,
            pending: requests.filter(function(r) { return r.status === 'Pending'; }).length };
 }
 

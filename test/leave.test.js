@@ -103,6 +103,15 @@ test('a half day is one date only, and must be morning or afternoon', () => {
   assert.match(ctx.leaveRequest({}, 'sick', ['2026-11-10'], '', 'evening').error, /morning or afternoon/);
 });
 
+test('a half day off can be today; a full day off still needs 3 days notice; the time is sent', () => {
+  const { ctx } = load([HEAD10]);
+  const r = ctx.leaveRequest({}, 'dayoff', ['2026-11-10'], '', 'afternoon');
+  assert.equal(r.success, true, r.error);
+  assert.equal(r.halfTimes.afternoon, ctx.HALF_DAY_TIMES.afternoon);
+  assert.match(ctx.leaveRequest({}, 'dayoff', ['2026-11-11'], '', '').error, /3 days ahead/);
+  assert.match(ctx.leaveRequest({}, 'dayoff', ['2026-11-09'], '', 'morning').error, /today at the earliest/);
+});
+
 test('a day off over 14 days in a row is refused', () => {
   const { ctx } = load([HEAD10]);
   const dates = Array.from({ length: 15 }, (_, i) => `2026-12-${String(i + 1).padStart(2, '0')}`);

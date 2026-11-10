@@ -2725,6 +2725,7 @@ var LEAVE_TYPE_LABEL = { dayoff: 'Day off', sick: 'Sick leave' };
 var LEAVE_HALF_LABEL = { morning: 'Morning', afternoon: 'Afternoon' };
 var LEAVE_LEN = 'full';                    // 'full' (one or more whole days) or 'half'
 var LEAVE_HALF = 'morning';
+var HALF_TIMES = { morning: '', afternoon: '' };   // the hours of each half, from the server
 
 function lvEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function lvDay(k) { var d = new Date(k + 'T12:00:00Z'); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]; }
@@ -2732,7 +2733,10 @@ function lvDays(list) {
   return list.length > 2 ? lvDay(list[0]) + ' – ' + lvDay(list[list.length - 1]) + ' (' + list.length + ' days)' : list.map(lvDay).join(', ');
 }
 // The days of a request, with "Morning" / "Afternoon" for a half day
-function lvWhen(q) { return q.half ? lvDay(q.dates[0]) + ' · ' + (LEAVE_HALF_LABEL[q.half] || '') + ' (half day)' : lvDays(q.dates); }
+function lvWhen(q) {
+  if (!q.half) return lvDays(q.dates);
+  return lvDay(q.dates[0]) + ' · ' + (LEAVE_HALF_LABEL[q.half] || '') + (HALF_TIMES[q.half] ? ', ' + HALF_TIMES[q.half] : ' (half day)');
+}
 function lvAddDays(k, n) { var d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 function lvStatus(st) { return '<span class="lv-st ' + lvEsc(st) + '">' + (LEAVE_STATUS[st] || lvEsc(st)) + '</span>'; }
 function leaveSaved() { try { return JSON.parse(localStorage.getItem(LEAVE_KEY) || 'null'); } catch (e) { return null; } }
@@ -2827,6 +2831,7 @@ function leaveSetLen(len) {
 }
 function leaveSetHalf(h) {
   LEAVE_HALF = h;
+  var t = document.getElementById('lv-halftime'); if (t) t.textContent = HALF_TIMES[h] ? 'Off ' + HALF_TIMES[h] : '';
   document.querySelectorAll('[data-lvhalf]').forEach(function(b) { b.classList.toggle('active', b.dataset.lvhalf === h); });
 }
 function leaveFromChanged() {
@@ -2844,6 +2849,7 @@ function leaveCount() {
 
 function leaveRender() {
   var r = LEAVE_ME; if (!r) return;
+  if (r.halfTimes) HALF_TIMES = r.halfTimes;
   var me = r.me, fixed = me.dayOffRule === 'fixed';
   if (fixed) LEAVE_TYPE = 'sick';
   var month = r.today.slice(0, 7), next = lvAddDays(month + '-28', 7).slice(0, 7);
@@ -2875,11 +2881,12 @@ function leaveRender() {
     + '<div class="lv-hint">For one day, leave From and To the same. For several days in a row, choose the last day in To.</div></div>';
   // Half day: one date, morning or afternoon
   h += '<div id="lv-half"' + (LEAVE_LEN === 'half' ? '' : ' style="display:none"') + '>'
-    + '<div class="form-group"><label for="lv-date">Date</label><input type="date" id="lv-date" min="' + first + '" value="' + first + '"></div>'
+    + '<div class="form-group"><label for="lv-date">Date</label><input type="date" id="lv-date" min="' + r.today + '" value="' + r.today + '"></div>'
     + '<div class="ms-tabs rp-tabs lv-len">' + tab('lvhalf', 'morning', LEAVE_HALF, 'leaveSetHalf', 'Morning') + tab('lvhalf', 'afternoon', LEAVE_HALF, 'leaveSetHalf', 'Afternoon') + '</div>'
-    + '<div class="lv-hint">A half day counts as 0.5 of a day.</div></div>';
+    + '<div class="lv-count" id="lv-halftime">' + (HALF_TIMES[LEAVE_HALF] ? 'Off ' + HALF_TIMES[LEAVE_HALF] : '') + '</div>'
+    + '<div class="lv-hint">A half day can be today and counts as 0.5 of a day.</div></div>';
   h += LEAVE_TYPE === 'dayoff'
-    ? '<div class="lv-hint">Ask at least 3 days ahead. Only one Bicasso person can be off on the same day. Up to 14 days in one request.</div>'
+    ? '<div class="lv-hint">Ask for full days at least 3 days ahead. Only one Bicasso person can be off on the same day. Up to 14 days in one request.</div>'
     : '<div class="lv-hint">Sick leave can start today. Up to 7 days in one request.</div>';
   h += '<div class="form-group" style="margin-top:12px"><label for="lv-reason">Reason (optional)</label><textarea id="lv-reason" rows="2" maxlength="300"></textarea></div>'
     + '<div id="lv-err" class="lv-err"></div>'
@@ -3078,6 +3085,7 @@ function ownerRemoveStaff() {
 
 function ownerRender() {
   var r = OWNER_DATA, today = r.today;
+  if (r.halfTimes) HALF_TIMES = r.halfTimes;
   var pending = r.requests.filter(function(q) { return q.status === 'Pending'; });
   var upcoming = r.requests.filter(function(q) { return q.status === 'Approved' && q.dates[q.dates.length - 1] >= today; });
   var past = r.requests.filter(function(q) { return q.status !== 'Pending' && upcoming.indexOf(q) < 0; });
@@ -3106,7 +3114,7 @@ function ownerRender() {
     + (dayKeys.length ? dayKeys.map(function(d) {
         return '<div class="lv-day"><span class="lv-day-date">' + lvDay(d) + '</span><span>'
           + days[d].map(function(q) {
-              var tags = [q.type === 'sick' ? 'sick' : '', q.half ? (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() : ''].filter(Boolean);
+              var tags = [q.type === 'sick' ? 'sick' : '', q.half ? (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() + (HALF_TIMES[q.half] ? ' ' + HALF_TIMES[q.half] : '') : ''].filter(Boolean);
               return lvEsc(q.name) + (tags.length ? ' <i>(' + tags.join(', ') + ')</i>' : '');
             }).join(', ') + '</span></div>';
       }).join('') : '<div class="hist-empty" style="padding:4px 0">Nobody is off in the coming days.</div>')
