@@ -144,7 +144,7 @@ in this project too, moved from `burmelinco-hash/burmelinfinance-`:
 - `vercel.json` runs the daily Loyverse sync (`/api/loyverse-sync`, 06:00 Bangkok).
 - Setup, PIN and Loyverse details: [finance/README.md](finance/README.md).
 - Its settings live in this Vercel project's **Environment Variables**: `SHEET_ID`,
-  `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `APP_PIN`, `LOYVERSE_TOKEN`, `CRON_SECRET`,
+  `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `LOYVERSE_TOKEN`, `CRON_SECRET`,
   `LOYVERSE_STORE_MAP` (and optionally `LOYVERSE_TIMEZONE`, `LOYVERSE_PAYMENT_MAP`, `STOCK_SHEET_ID`).
   Without them the finance page runs on sample data and saves nothing.
 - Commission staff come from the Stock sheet's **Staff** tab; the finance robot account has Viewer

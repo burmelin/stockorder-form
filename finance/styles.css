@@ -448,3 +448,9 @@ button, input, select, textarea { font-family: inherit; }
   .daily-foot { margin: 8px -28px -32px; padding: 12px 28px; bottom: -32px; }
   .toast { bottom: 40px; left: calc(50% + 105px); }
 }
+
+.owner-gate { position: fixed; inset: 0; overflow: auto; background: var(--linen, #F4F0E8); padding: calc(24px + env(safe-area-inset-top)) 16px 24px; }
+.owner-gate .card { max-width: 440px; margin: 0 auto; }
+.owner-gate .rule-hint { margin-top: 12px; }
+.owner-gate ol { margin: 8px 0 16px; padding-left: 20px; line-height: 1.7; }
+.owner-gate-btn { display: block; text-align: center; text-decoration: none; }

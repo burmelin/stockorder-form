@@ -50,7 +50,6 @@ This creates a "robot" Google account the app uses to read/write your sheet.
    | `SHEET_ID` | `1UG4WQG3vOiytArJT1U03CdQPwjPlMb9-3wy1OGzoLmw` |
    | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | the `client_email` from the JSON |
    | `GOOGLE_PRIVATE_KEY` | the `private_key` from the JSON (paste the whole thing, including BEGIN/END lines) |
-   | `APP_PIN` | *(optional fallback)* the app's PIN now lives in the sheet — see "The app PIN" below |
 
 4. Redeploy so the variables take effect: `npx vercel --prod` again.
 5. Open the URL it gives you in Safari → Share button → **Add to Home Screen**. Done — it now
@@ -85,7 +84,6 @@ saves don't write). To test against the real sheet locally, create a `.env` file
 SHEET_ID=1UG4WQG3vOiytArJT1U03CdQPwjPlMb9-3wy1OGzoLmw
 GOOGLE_SERVICE_ACCOUNT_EMAIL=sheet-writer@....iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-APP_PIN=4832
 ```
 
 **Never commit or share the private key or `.env` file.**
@@ -138,19 +136,15 @@ Files, Print); on a computer it downloads. **Print** prints it on A4.
 
 ## Opening Finance from the admin login
 
-Log in to the staff app as **Settings** (the owner's login) and tap **Finance** at the top:
-Finance opens with no PIN. The finance server asks the staff app's Apps Script server whether
-that login is the owner's, so shop logins (Bicasso, Nana, Palladium) still get the PIN question.
-Logging out of Settings, or changing the Settings password, takes this away again (within 5
-minutes). The PIN below keeps working for anyone who uses it.
+Finance opens only for the owner: log in to the staff app as **Owner** (the Settings
+password) and tap **Finance**. The finance server asks the staff app's Apps Script server
+whether that login is the owner's, so shop logins (Bicasso, Nana, Palladium) are refused.
+Logging out, or changing the Settings password, takes access away again (within 5 minutes).
+Finance renews the login once a day, so it doesn't run out while only Finance is used.
 
-## The app PIN
-
-The PIN is in the finance Google Sheet: **Lists tab, cell K2** (labelled *App PIN* in K1).
-Change it there whenever you like; the app checks it on every request, so the new PIN works
-straight away and each phone asks for it once. If K2 is ever left empty, the `APP_PIN`
-setting in Vercel is used instead, so the app is never left open by accident. Keep the
-link private anyway: the PIN is the only thing between the internet and your finances.
+There is no finance PIN any more (it had no limit on guesses). The old Lists!K2 cell and the
+`APP_PIN` setting are ignored and can be cleared. The daily Loyverse job gets in with
+`CRON_SECRET`, which must be set in Vercel.
 
 ---
 

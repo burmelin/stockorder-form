@@ -26,6 +26,21 @@
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></symbol>
 </svg>
 
+<!-- Shown instead of the app when this phone has no owner login -->
+<div id="ownerGate" class="owner-gate" hidden>
+  <div class="card">
+    <h2>Finance needs the owner login</h2>
+    <ol>
+      <li>Open <b>Burmelin Office</b>.</li>
+      <li>If a shop is logged in, log out first.</li>
+      <li>Choose <b>Owner</b> and type the Settings password.</li>
+      <li>Tap <b>Finance</b>.</li>
+    </ol>
+    <a class="save-btn owner-gate-btn" href="/">Open Burmelin Office</a>
+    <p class="rule-hint">Forgot the password? Type a new one in the Google Sheet's Logins tab, row "Owner", then log in with it.</p>
+  </div>
+</div>
+
 <!-- App shell, built like the staff app (#screen-app): body stays 100vh, this fixed box fills the screen -->
 <div id="shell">
 <header class="topbar">

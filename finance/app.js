@@ -42,29 +42,47 @@ function neighbourAccount(shop) {
 
 // ---- Who may open Finance ----
 // Signed in to the staff app through its admin login ("Settings")? Its token, kept by the
-// staff app on this same site, lets Finance in with no PIN. Shop logins don't count.
+// staff app on this same site, is the only way into Finance. Shop logins don't count.
 function ownerToken() {
   try {
     const s = JSON.parse(localStorage.getItem('burmelin_session') || 'null');
     return s && s.isOwner && s.token ? String(s.token) : '';
   } catch (e) { return ''; }
 }
-// Otherwise the finance PIN (in the finance sheet: Lists tab, cell K2)
-function getPin() { return localStorage.getItem('appPin') || ''; }
+// No owner login on this phone (or it ran out): show how to sign in, instead of the app.
+function showOwnerGate() {
+  $('ownerGate').hidden = false;
+  $('shell').hidden = true;
+}
 async function api(path, opts = {}) {
-  opts.headers = Object.assign({ 'Content-Type': 'application/json', 'x-app-pin': getPin() }, opts.headers);
+  opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers);
   const owner = ownerToken();
   if (owner) opts.headers['x-owner-token'] = owner;
-  let resp = await fetch(path, opts);
+  const resp = await fetch(path, opts);
   if (resp.status === 401) {
-    const pin = prompt('Enter your PIN (it is in your finance Google Sheet: Lists tab, cell K2)');
-    if (pin === null) throw new Error('PIN required');
-    localStorage.setItem('appPin', pin);
-    opts.headers['x-app-pin'] = pin;
-    resp = await fetch(path, opts);
-    if (resp.status === 401) { localStorage.removeItem('appPin'); throw new Error('Wrong PIN'); }
+    showOwnerGate();
+    throw new Error('Owner login required');
   }
   return resp;
+}
+
+// The owner login lasts 30 days from when it was last renewed, and the staff app renews it
+// when it's used. Someone who only opens Finance would be signed out after 30 days, so Finance
+// renews it too, at most once a day, by asking the staff app's server.
+const OFFICE_API = 'https://script.google.com/macros/s/AKfycby-5YfvPpePbg1ni36sL5AI-DelH_I5qHgm1mkmAKqBSsopJPn-YWi24kXDMPMFkD-v/exec';
+async function renewOwnerToken() {
+  try {
+    const s = JSON.parse(localStorage.getItem('burmelin_session') || 'null');
+    if (!s || !s.isOwner || !s.token) return;
+    const issued = JSON.parse(atob(String(s.token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).t;
+    if (!(Date.now() - issued > 86400000)) return;
+    const resp = await fetch(OFFICE_API, { method: 'POST', body: JSON.stringify({ action: 'verifyOwner', token: s.token }) });
+    const data = await resp.json();
+    if (data && data._token) {
+      s.token = data._token;
+      localStorage.setItem('burmelin_session', JSON.stringify(s));
+    }
+  } catch (e) { /* offline or an old token: the next request says if a login is needed */ }
 }
 
 // Saves through the API; when the server asks for confirmation (e.g. Loyverse already
@@ -1395,4 +1413,6 @@ $('officeLink').hidden = !ownerToken();
 
 
 // go
-loadDashboard();
+localStorage.removeItem('appPin');   // the old finance PIN is not used any more
+if (!ownerToken()) showOwnerGate();
+else renewOwnerToken().finally(loadDashboard);
