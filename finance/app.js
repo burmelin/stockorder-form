@@ -1081,7 +1081,7 @@ function moveOldDaysOff(c) {
     try { old = localStorage.getItem(key); } catch (e) { return; }
     if (old === null) continue;
     if (!(name in c.daysOff.saved)) {
-      const n = parseInt(old, 10) || 0;
+      const n = Math.max(0, Math.round((parseFloat(old) || 0) * 2) / 2);
       c.daysOff.saved[name] = n;
       saveOff(c.month, name, n);
     }
@@ -1149,7 +1149,7 @@ function commStaffRows(group, names, each) {
       <span class="name">${esc(name)}<span class="sub ${extra ? 'overdue' : ''}">${extra ? `${extra} extra day${extra === 1 ? '' : 's'} off: −${fmt(cut)}` : 'no deduction'}${offSource(name) ? ` · ${offSource(name)}` : ''}</span></span>
       <span class="stepper">
         <button type="button" data-step="-1" data-group="${group}" data-i="${i}" aria-label="One day off less">−</button>
-        <input type="number" inputmode="numeric" min="0" max="31" class="comm-off" data-group="${group}" data-i="${i}" value="${off}" aria-label="Days off for ${esc(name)}">
+        <input type="number" inputmode="decimal" min="0" max="31" step="0.5" class="comm-off" data-group="${group}" data-i="${i}" value="${off}" aria-label="Days off for ${esc(name)}">
         <button type="button" data-step="1" data-group="${group}" data-i="${i}" aria-label="One day off more">+</button>
       </span>
       <span class="amount">${fmt(each - cut)}</span>
@@ -1179,7 +1179,7 @@ function onDaysOff(e) {
   const el = e.target.closest('.comm-off');
   if (!el || !COMM) return;
   const names = el.dataset.group === 'nana' ? COMM.nana.staff : COMM.staff;
-  setOff(COMM.month, names[+el.dataset.i], Math.min(31, Math.max(0, parseInt(el.value, 10) || 0)));
+  setOff(COMM.month, names[+el.dataset.i], Math.min(31, Math.max(0, Math.round((parseFloat(el.value) || 0) * 2) / 2)));
   renderCommissionStaff();
 }
 function onDaysOffStep(e) {
