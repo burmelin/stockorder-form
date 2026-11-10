@@ -45,9 +45,8 @@ function getSheetsClient() {
   return google.sheets({ version: 'v4', auth });
 }
 
-// The app PIN lives in the finance sheet (Lists tab, cell K2) so the owner can see and
-// change it there. If that cell is empty the APP_PIN env var is used instead, so clearing
-// it never leaves the app open by accident; with neither set, there is no PIN.
+// The old finance PIN (finance sheet, Lists!K2, or APP_PIN). No longer used to let anyone in:
+// Finance is owner-login only. Kept so nothing that still reads it breaks.
 async function currentPin() {
   if (!MOCK) {
     const resp = await getSheetsClient().spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "'Lists'!K2" });
@@ -104,19 +103,14 @@ async function askOwner(token) {
   return true;
 }
 
-// Gate for every finance request: the admin login (above), or the finance PIN in x-app-pin.
+// Gate for every finance request: only the owner, signed in through the staff app's admin
+// login (above). There is no PIN any more: a PIN had no limit on guesses. In sample mode (no
+// Google key, on a computer) the gate is open so the app can be tried out.
+// (Still named checkPin so every route keeps the same one-line check.)
 async function checkPin(req, res) {
+  if (MOCK) return true;
   if (await isOwnerRequest(req)) return true;
-  let pin;
-  try {
-    pin = await currentPin();
-  } catch (err) {
-    res.status(500).json({ error: 'Could not check the PIN: ' + err.message });
-    return false;
-  }
-  if (!pin) return true;
-  if (String(req.headers['x-app-pin'] || '').trim() === pin) return true;
-  res.status(401).json({ error: 'PIN required' });
+  res.status(401).json({ error: 'Owner login required', needOwner: true });
   return false;
 }
 

@@ -21,8 +21,8 @@ const MOCK_SHOPS = ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'];
 async function authorized(req, res) {
   const secret = process.env.CRON_SECRET;
   if (secret && req.headers.authorization === `Bearer ${secret}`) return true;
-  if (!secret && /vercel-cron/i.test(req.headers['user-agent'] || '') && (await currentPin().catch(() => ''))) {
-    res.status(401).json({ error: 'Set CRON_SECRET in Vercel so the daily sync can get past the app PIN' });
+  if (!MOCK && !secret && /vercel-cron/i.test(req.headers['user-agent'] || '')) {
+    res.status(401).json({ error: 'Set CRON_SECRET in Vercel so the daily sync can run without the owner login' });
     return false;
   }
   return checkPin(req, res);
