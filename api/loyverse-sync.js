@@ -13,7 +13,7 @@
 // updated in place on the next run, never duplicated. A Loyverse row someone corrected
 // by hand in the sheet is kept as it is (see planSync / planMovements). Vercel Cron calls it daily
 // (see vercel.json) with "Authorization: Bearer $CRON_SECRET".
-const { logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
+const { verifyWritten, logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
 const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements } = require('./_loyverse');
 
 const MOCK_SHOPS = ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'];
@@ -137,6 +137,10 @@ module.exports = async function handler(req, res) {
       requestBody: { valueInputOption: 'USER_ENTERED', data },
     });
     toAdd.forEach((p, i) => { p.row = nextRow + i; });
+    if (toAdd.length) {
+      const lost = await verifyWritten(sheets, nextRow, toAdd.map(rowFor));
+      if (lost) throw new Error(lost + ' (the next import adds them again)');
+    }
 
     await logSync(sheets, { ok: true, dates: datesText, added: toAdd.length, updated: toUpdate.length, message: summary });
     console.log(`loyverse-sync ${from}..${to}: added ${toAdd.length}, updated ${toUpdate.length}, skipped ${plan.filter((p) => p.action === 'skip').length}`);

@@ -448,3 +448,6 @@ button, input, select, textarea { font-family: inherit; }
   .daily-foot { margin: 8px -28px -32px; padding: 12px 28px; bottom: -32px; }
   .toast { bottom: 40px; left: calc(50% + 105px); }
 }
+
+.delete-btn { display: block; width: 100%; margin-top: 10px; padding: 12px; background: none; border: 1px solid var(--bad); color: var(--bad); border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.delete-btn:disabled { opacity: .6; }

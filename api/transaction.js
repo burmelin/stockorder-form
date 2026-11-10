@@ -1,6 +1,6 @@
 // POST /api/transaction — appends one row to the Master Entry tab.
 // Writes columns A-D and F-L only; E (Type), M and N are formulas that stay untouched.
-const { SHEET_ID, MOCK, getSheetsClient, checkPin, num, readMasterEntry, sheetFullError, creditShopError } = require('./_google');
+const { SHEET_ID, MOCK, getSheetsClient, checkPin, num, readMasterEntry, sheetFullError, creditShopError, rowMismatch, verifyWritten, masterSheetId } = require('./_google');
 const { loyverseClash, payoutClash } = require('./_loyverse');
 
 // Which money fields each category is allowed to use (mirrors the sheet's README rules)
@@ -31,7 +31,8 @@ const NEEDS_CUSTOMER = ['Credit Sale', 'Customer Payment'];
 module.exports = async function handler(req, res) {
   if (!(await checkPin(req, res))) return;
   if (req.method === 'PUT') return handleUpdate(req, res);
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST or PUT only' });
+  if (req.method === 'DELETE') return handleDelete(req, res);
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST, PUT or DELETE only' });
 
   const b = req.body || {};
   const category = String(b.category || '');
@@ -107,6 +108,8 @@ module.exports = async function handler(req, res) {
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: rowValues },
     });
+    const lost = await verifyWritten(sheets, targetRow, rowValues);
+    if (lost) return res.status(409).json({ error: lost });
 
     res.json({ ok: true, row: targetRow });
   } catch (err) {
@@ -158,6 +161,8 @@ async function handleUpdate(req, res) {
 
   try {
     const sheets = getSheetsClient();
+    const changed = await rowMismatch(sheets, row, b.original);
+    if (changed) return res.status(409).json({ error: changed });
     const rowValues = [[
       sheetDate, shop,
       NEEDS_CUSTOMER.includes(category) ? customer : '',
@@ -178,5 +183,28 @@ async function handleUpdate(req, res) {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update spreadsheet: ' + err.message });
+  }
+}
+
+// DELETE { row, original }: removes one entry's row from Master Entry, after checking the row
+// still holds that entry. The rows below move up, as when a row is deleted in the sheet.
+async function handleDelete(req, res) {
+  const b = req.body || {};
+  const row = parseInt(b.row, 10);
+  if (!row || row < 2) return res.status(400).json({ error: 'Invalid row number' });
+  if (MOCK) return res.json({ ok: true, mock: true, row });
+  try {
+    const sheets = getSheetsClient();
+    const changed = await rowMismatch(sheets, row, b.original);
+    if (changed) return res.status(409).json({ error: changed });
+    const sheetId = await masterSheetId(sheets);
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: { requests: [{ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: row - 1, endIndex: row } } }] },
+    });
+    res.json({ ok: true, row });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete from spreadsheet: ' + err.message });
   }
 }

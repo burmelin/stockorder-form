@@ -192,6 +192,51 @@ async function creditShopError(entries) {
   return null;
 }
 
+// ---- safe writes to Master Entry ----
+// Editing or deleting goes by row number. If rows were deleted in the sheet after the app
+// loaded its list, that number can point at a different entry, so the app sends the entry
+// as it showed it and we check the row still holds it before touching anything.
+const round2 = (n) => Math.round(num(n) * 100) / 100;
+async function rowMismatch(sheets, row, original) {
+  if (!original || typeof original !== 'object') return 'Finance needs a reload before it can change entries. Pull down or tap ↻, then try again.';
+  const resp = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID, range: `'Master Entry'!A${row}:J${row}`,
+    valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'SERIAL_NUMBER',
+  });
+  const r = (resp.data.values || [])[0] || [];
+  const now = {
+    date: typeof r[0] === 'number' ? serialToDate(r[0]).toISOString().slice(0, 10) : String(r[0] ?? ''),
+    shop: String(r[1] || ''), customer: String(r[2] || ''), category: String(r[3] || ''),
+    cashIn: round2(r[5]), bankIn: round2(r[6]), cashOut: round2(r[7]), bankOut: round2(r[8]), creditAmount: round2(r[9]),
+  };
+  const same = ['date', 'shop', 'customer', 'category'].every((k) => now[k] === String(original[k] ?? ''))
+    && ['cashIn', 'bankIn', 'cashOut', 'bankOut', 'creditAmount'].every((k) => now[k] === round2(original[k]));
+  if (same) return null;
+  const what = now.category ? `${now.category}, ${now.shop}, ${now.date}` : 'nothing';
+  return `Row ${row} of the sheet changed since Finance loaded it (it now holds ${what}). Nothing was changed. Tap ↻ to reload, then try again.`;
+}
+
+// After adding rows: read them back. If another save landed on the same rows at the same
+// moment, ours were overwritten; say so instead of reporting a save that isn't there.
+// (Columns B, D, K: shop, category, entered by. Notes are left out: the sheet may turn a
+// note such as "1,500" into a number, which would look like a clash when there is none.)
+async function verifyWritten(sheets, startRow, rows) {
+  await new Promise((r) => setTimeout(r, 700));
+  const endRow = startRow + rows.length - 1;
+  const resp = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'Master Entry'!A${startRow}:K${endRow}` });
+  const got = resp.data.values || [];
+  const bad = rows.findIndex((w, i) => [1, 3, 10].some((c) => String((got[i] || [])[c] ?? '') !== String(w[c] ?? '')));
+  if (bad < 0) return null;
+  return `Another save landed on row ${startRow + bad} at the same moment, so this one was not kept. Tap ↻ to reload, check the entries, and save again.`;
+}
+
+async function masterSheetId(sheets) {
+  const resp = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: 'sheets.properties(sheetId,title)' });
+  const sh = (resp.data.sheets || []).find((x) => x.properties.title === 'Master Entry');
+  if (!sh) throw new Error('No Master Entry tab');
+  return sh.properties.sheetId;
+}
+
 // ---- Loyverse import log ----
 // Each import (the 6:00 job, or Save from Loyverse in the app) adds one line to a "Sync Log"
 // tab, so Home can say when the last import ran and whether it worked. The tab is made on
@@ -232,4 +277,4 @@ async function lastSync(sheets) {
 // Shown when a save would go past the bottom of Master Entry.
 const sheetFullError = (lastRow) => `Master Entry is full (row ${lastRow}). Add more rows at the bottom of the sheet, copying the last row's formulas.`;
 
-module.exports = { logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
+module.exports = { rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
