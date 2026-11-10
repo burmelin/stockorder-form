@@ -29,14 +29,17 @@ function staffFromStockRows(values) {
 
 // ---- days off ----
 // Approved leave (day off or sick leave) from the Stock sheet's Leave tab, counted per person
-// for the month: the starting number of days off. The owner can change it in the app; that
+// for the month: the starting number of days off. A half day (Morning / Afternoon in the
+// "Half day" column) counts as 0.5. The owner can change it in the app; that
 // number is saved in the finance sheet's "Commission Days Off" tab (Month, Name, Days off), so
 // every phone shows the same.
 const DAYS_OFF_TAB = 'Commission Days Off';
+// Days off go in half-day steps
+const halfSteps = (v) => Math.min(31, Math.max(0, Math.round((parseFloat(v) || 0) * 2) / 2));
 
 function leaveDaysFromRows(values, month) {
   const head = (values[0] || []).map((h) => String(h).trim().toLowerCase());
-  const nameCol = head.indexOf('name'), dateCol = head.indexOf('date'), statusCol = head.indexOf('status');
+  const nameCol = head.indexOf('name'), dateCol = head.indexOf('date'), statusCol = head.indexOf('status'), halfCol = head.indexOf('half day');
   const out = {};
   if (nameCol < 0 || dateCol < 0 || statusCol < 0) return out;
   const seen = new Set();
@@ -46,14 +49,15 @@ function leaveDaysFromRows(values, month) {
     const key = name + '|' + date;
     if (seen.has(key)) continue;   // one day counts once, even if asked twice
     seen.add(key);
-    out[name] = (out[name] || 0) + 1;
+    const half = halfCol > -1 && /^(morning|afternoon)$/i.test(String(r[halfCol] || '').trim());
+    out[name] = (out[name] || 0) + (half ? 0.5 : 1);
   }
   return out;
 }
 
 function savedDaysFromRows(values, month) {
   const out = {};
-  for (const r of values) if (String(r[0] || '').trim() === month && String(r[1] || '').trim()) out[String(r[1]).trim()] = Math.max(0, parseInt(r[2], 10) || 0);
+  for (const r of values) if (String(r[0] || '').trim() === month && String(r[1] || '').trim()) out[String(r[1]).trim()] = halfSteps(r[2]);
   return out;
 }
 
@@ -61,7 +65,7 @@ function savedDaysFromRows(values, month) {
 async function saveDaysOff(req, res) {
   const b = req.body || {};
   const month = String(b.month || ''), name = String(b.name || '').trim().slice(0, 100);
-  const days = Math.min(31, Math.max(0, parseInt(b.days, 10) || 0));
+  const days = halfSteps(b.days);
   if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
   if (!name) return res.status(400).json({ error: 'name is required' });
   if (MOCK) return res.json({ ok: true, mock: true });
@@ -108,7 +112,7 @@ module.exports = async function handler(req, res) {
     const [master, stock, leave, saved] = await Promise.all([
       readMasterEntry(sheets),
       soft(sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Staff'!A1:J60" })),
-      soft(sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Leave'!A1:J" })),
+      soft(sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Leave'!A1:K" })),
       soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${DAYS_OFF_TAB}'!A2:C` })),
     ]);
     const daysOff = {

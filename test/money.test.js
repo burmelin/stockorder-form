@@ -71,3 +71,14 @@ test('days off: approved leave in the month, each day once; saved numbers win', 
   assert.deepEqual(leaveDaysFromRows(rows, '2026-11'), { Sunil: 2 });
   assert.deepEqual(savedDaysFromRows([['2026-11', 'Sunil', '4'], ['2026-10', 'Kumar', '1']], '2026-11'), { Sunil: 4 });
 });
+
+test('days off: a half day of approved leave counts 0.5; saved half days are kept', () => {
+  const head = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
+  const rows = [head,
+    ['a', '', '1', 'Sunil', 'Day off', '2026-11-03', '', 'Approved', '', '', 'Morning'],
+    ['b', '', '1', 'Sunil', 'Day off', '2026-11-06', '', 'Approved', '', '', ''],
+    ['c', '', '1', 'Sunil', 'Sick leave', '2026-11-07', '', 'Approved'],
+    ['d', '', '2', 'Kumar', 'Day off', '2026-11-08', '', 'Approved', '', '', 'Afternoon']];
+  assert.deepEqual(leaveDaysFromRows(rows, '2026-11'), { Sunil: 2.5, Kumar: 0.5 });
+  assert.deepEqual(savedDaysFromRows([['2026-11', 'Sunil', '1.5'], ['2026-11', 'Kumar', '0.3']], '2026-11'), { Sunil: 1.5, Kumar: 0.5 });
+});

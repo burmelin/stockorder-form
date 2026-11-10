@@ -231,7 +231,7 @@ function handleApi(action, params, body) {
     case 'leaveStaffList':       out = leaveStaffList(body); break;
     case 'leaveSignIn':          out = leaveSignIn(body, body.staffId, body.pin); break;
     case 'leaveMine':            out = leaveMine(body); break;
-    case 'leaveRequest':         out = leaveRequest(body, body.type, body.dates, body.reason); break;
+    case 'leaveRequest':         out = leaveRequest(body, body.type, body.dates, body.reason, body.half); break;
     case 'leaveCancel':          out = leaveCancel(body, body.requestId); break;
     case 'ownerLeave':           out = ownerLeave(body); break;
     case 'ownerDecideLeave':     out = ownerDecideLeave(body, body.requestId, body.decision, body.note); break;
@@ -1535,12 +1535,16 @@ function verifyOwner(password) {
 // Password hash/salt the first time it's used, and the cell is cleared.
 var STAFF_SHEET    = 'Staff';
 var LEAVE_SHEET    = 'Leave';
-var LEAVE_HEADERS  = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note'];
+// "Half day" (column K) is empty for a full day, or Morning / Afternoon. Older rows have no
+// column K and count as full days.
+var LEAVE_HEADERS  = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
 var LEAVE_TYPES    = { dayoff: 'Day off', sick: 'Sick leave' };
+var LEAVE_HALVES   = { morning: 'Morning', afternoon: 'Afternoon' };
 var WORK_PLACES    = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
 var WEEKDAYS       = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 var LEAVE_NOTICE_DAYS = 3;     // a day off must be asked at least this many days ahead
 var SICK_MAX_DAYS     = 7;     // one sick-leave request covers at most this many days
+var DAYOFF_MAX_DAYS   = 14;    // one day-off request covers at most this many days in a row
 var PIN_MIN           = 4;
 var PIN_TRIES         = 5;     // wrong PINs in a row before a 10-minute pause
 
@@ -1551,6 +1555,7 @@ function hashPin(salt, pin) {
 function todayKey() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'); }
 function addDaysKey(key, n) { var d = new Date(key + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 function weekdayOf(key) { return WEEKDAYS[new Date(key + 'T12:00:00Z').getUTCDay()]; }
+function prettyMonth(m) { return ['January','February','March','April','May','June','July','August','September','October','November','December'][parseInt(m.slice(5, 7), 10) - 1]; }
 function prettyDay(key) {
   var d = new Date(key + 'T12:00:00Z');
   return WEEKDAYS[d.getUTCDay()].slice(0, 3) + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
@@ -1607,27 +1612,40 @@ function leaveSheet(ss) {
       .setFontWeight('bold').setBackground('#0054A5').setFontColor('#ffffff');
     sh.setFrozenRows(1);
   }
+  // Sheets made before half days: add the "Half day" column
+  var n = LEAVE_HEADERS.length;
+  if (sh.getMaxColumns() < n) sh.insertColumnsAfter(sh.getMaxColumns(), n - sh.getMaxColumns());
+  if (!String(sh.getRange(1, n).getValue()).trim()) {
+    sh.getRange(1, n).setValue(LEAVE_HEADERS[n - 1]).setFontWeight('bold').setBackground('#0054A5').setFontColor('#ffffff');
+  }
   return sh;
 }
+// How much of a day one leave row takes: 1, or 0.5 for a half day
+function leaveAmount(l) { return l.half ? 0.5 : 1; }
 function readLeave(ss) {
   var sh = ss.getSheetByName(LEAVE_SHEET);
   if (!sh || sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 1, sh.getLastRow() - 1, LEAVE_HEADERS.length).getValues().map(function(r, i) {
+  var cols = Math.min(LEAVE_HEADERS.length, sh.getMaxColumns());
+  return sh.getRange(2, 1, sh.getLastRow() - 1, cols).getValues().map(function(r, i) {
+    var half = String(r[10] || '').trim().toLowerCase();
     return { row: i + 2, id: String(r[0]), requested: r[1] instanceof Date ? cellDateText(r[1]) : String(r[1] || ''),
              staffId: String(r[2]), name: String(r[3]), type: String(r[4]) === 'Sick leave' ? 'sick' : 'dayoff',
              date: dateKeyOf(r[5]), reason: String(r[6] || ''), status: String(r[7] || 'Pending'),
-             decided: r[8] instanceof Date ? cellDateText(r[8]) : String(r[8] || ''), note: String(r[9] || '') };
+             decided: r[8] instanceof Date ? cellDateText(r[8]) : String(r[8] || ''), note: String(r[9] || ''),
+             half: LEAVE_HALVES[half] ? half : '' };
   }).filter(function(l) { return l.id && l.date; });
 }
 function isActiveLeave(l) { return l.status === 'Pending' || l.status === 'Approved'; }
 
-// One entry per request (a sick-leave request can cover several days)
+// One entry per request (a request can cover several days in a row)
 function groupLeave(rows) {
   var by = {}, order = [];
   rows.forEach(function(l) {
     if (!by[l.id]) { by[l.id] = { id: l.id, staffId: l.staffId, name: l.name, type: l.type, dates: [], reason: l.reason,
-                                  status: l.status, requested: l.requested, decided: l.decided, note: l.note }; order.push(l.id); }
+                                  status: l.status, requested: l.requested, decided: l.decided, note: l.note,
+                                  half: l.half, days: 0 }; order.push(l.id); }
     by[l.id].dates.push(l.date);
+    by[l.id].days += leaveAmount(l);
   });
   return order.map(function(id) { by[id].dates.sort(); return by[id]; });
 }
@@ -1743,19 +1761,24 @@ function leaveMine(b) {
   var rows = readLeave(ss).filter(function(l) { return l.staffId === s.id; });
   var mine = groupLeave(rows.filter(function(l) { return l.date >= from; })).reverse();
   var used = {};
-  rows.forEach(function(l) { if (l.type === 'dayoff' && isActiveLeave(l)) used[l.date.slice(0, 7)] = (used[l.date.slice(0, 7)] || 0) + 1; });
+  rows.forEach(function(l) { if (l.type === 'dayoff' && isActiveLeave(l)) used[l.date.slice(0, 7)] = (used[l.date.slice(0, 7)] || 0) + leaveAmount(l); });
   var out = { success: true, me: staffOut(s), requests: mine, daysOffUsed: used, today: today, earliestDayOff: addDaysKey(today, LEAVE_NOTICE_DAYS) };
   if (Date.now() - who.t > DAY_MS) out.staffToken = issueStaffToken(s);
   return out;
 }
 
-// type: 'dayoff' | 'sick'; dates: ['yyyy-MM-dd', …]
-function leaveRequest(b, type, dates, reason) {
+// type: 'dayoff' | 'sick'; dates: ['yyyy-MM-dd', …] (days in a row); half: '' | 'morning' | 'afternoon'
+function leaveRequest(b, type, dates, reason, half) {
   if (!LEAVE_TYPES[type]) return { success: false, error: 'Choose day off or sick leave.' };
+  half = String(half || '').toLowerCase();
+  if (half && !LEAVE_HALVES[half]) return { success: false, error: 'Choose morning or afternoon.' };
   dates = (dates || []).map(String).filter(function(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
     .filter(function(d, i, a) { return a.indexOf(d) === i; }).sort();
   reason = String(reason || '').trim().slice(0, 300);
   if (!dates.length) return { success: false, error: 'Choose the date.' };
+  if (half && dates.length > 1) return { success: false, error: 'A half day is for one date only.' };
+  if (type === 'dayoff' && dates.length > DAYOFF_MAX_DAYS) return { success: false, error: 'One day-off request can cover up to ' + DAYOFF_MAX_DAYS + ' days.' };
+  var amount = half ? 0.5 : 1, what = LEAVE_TYPES[type] + (half ? ' (' + LEAVE_HALVES[half].toLowerCase() + ')' : '');
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
   var s, id, warning = null;
@@ -1787,18 +1810,19 @@ function leaveRequest(b, type, dates, reason) {
     }
     if (type === 'dayoff') {
       var perMonth = {};
-      dates.forEach(function(d) { perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + 1; });
+      dates.forEach(function(d) { perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + amount; });
       for (var month in perMonth) {
-        var used = leave.filter(function(l) { return l.staffId === s.id && l.type === 'dayoff' && isActiveLeave(l) && l.date.slice(0, 7) === month; }).length;
+        var used = leave.filter(function(l) { return l.staffId === s.id && l.type === 'dayoff' && isActiveLeave(l) && l.date.slice(0, 7) === month; })
+          .reduce(function(t, l) { return t + leaveAmount(l); }, 0);
         if (used + perMonth[month] > s.daysOffPerMonth) {
-          return { success: false, error: 'You can take ' + s.daysOffPerMonth + ' days off a month, and you already have ' + used + ' in that month.' };
+          return { success: false, error: 'You can take ' + s.daysOffPerMonth + ' days off a month, and you already have ' + used + ' in ' + prettyMonth(month) + '.' };
         }
       }
       // Staff choose the day only if the shops stay covered; check one day at a time, together
       var planned = leave.slice();
       for (var k = 0; k < dates.length; k++) {
         var gap = coverageGap(dates[k], staff, planned, s.id);
-        if (gap) return { success: false, error: 'That day is taken: ' + gap + '. Choose another day.' };
+        if (gap) return { success: false, error: (dates.length > 1 ? prettyDay(dates[k]) + ' is taken: ' : 'That day is taken: ') + gap + '. Choose other days.' };
         planned.push({ staffId: s.id, date: dates[k], status: 'Pending' });
       }
     } else {
@@ -1806,7 +1830,7 @@ function leaveRequest(b, type, dates, reason) {
     }
     var sh = leaveSheet(ss), now = new Date(), start = sh.getLastRow() + 1;
     id = 'L' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4).toUpperCase();
-    var rows = dates.map(function(d) { return [id, now, s.id, s.name, LEAVE_TYPES[type], d, reason, 'Pending', '', '']; });
+    var rows = dates.map(function(d) { return [id, now, s.id, s.name, LEAVE_TYPES[type], d, reason, 'Pending', '', '', half ? LEAVE_HALVES[half] : '']; });
     sh.getRange(start, 6, rows.length, 1).setNumberFormat('@');
     sh.getRange(start, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
     sh.getRange(start, 2, rows.length, 1).setNumberFormat(DATE_FMT);
@@ -1815,8 +1839,9 @@ function leaveRequest(b, type, dates, reason) {
   // Tell the owner (after the lock, so email never holds up other requests)
   try {
     var to = Session.getEffectiveUser().getEmail();
-    if (to) GmailApp.sendEmail(to, 'Leave request: ' + s.name + ', ' + LEAVE_TYPES[type] + ', ' + dates.map(prettyDay).join(', '),
-      s.name + ' asked for ' + LEAVE_TYPES[type].toLowerCase() + ' on ' + dates.map(prettyDay).join(', ') + '.\n'
+    var when = dates.length > 2 ? prettyDay(dates[0]) + ' to ' + prettyDay(dates[dates.length - 1]) + ' (' + dates.length + ' days)' : dates.map(prettyDay).join(', ');
+    if (to) GmailApp.sendEmail(to, 'Leave request: ' + s.name + ', ' + what + ', ' + when,
+      s.name + ' asked for ' + what.toLowerCase() + ' on ' + when + '.\n'
       + (reason ? 'Reason: ' + reason + '\n' : '') + (warning ? '\nNote: ' + warning + '.\n' : '')
       + '\nApprove or decline it in the app: on the login screen choose Settings. https://stockorder-form.vercel.app',
       { name: BUSINESS_NAME + ' – Leave' });

@@ -380,6 +380,8 @@ tbody tr:last-child td{border-bottom:none}
 .lv-allow b{display:block;font-family:var(--f-display);font-size:1.4rem;color:var(--ink)}
 .lv-allow span{font-size:.62rem;font-weight:700;color:var(--stone);text-transform:uppercase;letter-spacing:.14em}
 .lv-hint{font-size:.76rem;color:var(--stone);margin-top:4px;line-height:1.45}
+.lv-len{margin-bottom:12px}
+.lv-count{font-size:.82rem;font-weight:700;color:var(--deep);margin:-4px 0 2px;min-height:4px}
 .lv-err{color:var(--bad);font-size:.86rem;min-height:18px;margin:4px 0 8px}
 .lv-req{padding:11px 0;border-bottom:1px solid #ECE8E1}
 .lv-req:last-child{border-bottom:none}
@@ -1101,7 +1103,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
   var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
   var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -2720,12 +2722,17 @@ var LEAVE_TYPE = 'dayoff';
 var LEAVE_PICK = null;                     // { id, name } chosen on "Who are you?"
 var LEAVE_STATUS = { Pending: 'Waiting', Approved: 'Approved', Declined: 'Declined', Cancelled: 'Cancelled' };
 var LEAVE_TYPE_LABEL = { dayoff: 'Day off', sick: 'Sick leave' };
+var LEAVE_HALF_LABEL = { morning: 'Morning', afternoon: 'Afternoon' };
+var LEAVE_LEN = 'full';                    // 'full' (one or more whole days) or 'half'
+var LEAVE_HALF = 'morning';
 
 function lvEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function lvDay(k) { var d = new Date(k + 'T12:00:00Z'); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MONTHS[d.getUTCMonth()]; }
 function lvDays(list) {
   return list.length > 2 ? lvDay(list[0]) + ' – ' + lvDay(list[list.length - 1]) + ' (' + list.length + ' days)' : list.map(lvDay).join(', ');
 }
+// The days of a request, with "Morning" / "Afternoon" for a half day
+function lvWhen(q) { return q.half ? lvDay(q.dates[0]) + ' · ' + (LEAVE_HALF_LABEL[q.half] || '') + ' (half day)' : lvDays(q.dates); }
 function lvAddDays(k, n) { var d = new Date(k + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 function lvStatus(st) { return '<span class="lv-st ' + lvEsc(st) + '">' + (LEAVE_STATUS[st] || lvEsc(st)) + '</span>'; }
 function leaveSaved() { try { return JSON.parse(localStorage.getItem(LEAVE_KEY) || 'null'); } catch (e) { return null; } }
@@ -2805,7 +2812,35 @@ function leaveLoad() {
     .withFailureHandler(function() { if (!LEAVE_ME) body.innerHTML = '<div class="sp-empty">⚠ Could not load. Check the connection.</div>'; })
     .leaveMine(saved && saved.token);
 }
-function leaveSetType(t) { LEAVE_TYPE = t; leaveRender(); }
+function leaveSetType(t) {
+  var reason = (document.getElementById('lv-reason') || {}).value || '';
+  LEAVE_TYPE = t; leaveRender();
+  document.getElementById('lv-reason').value = reason;
+}
+// Full day(s) or half day, and morning or afternoon: shown and hidden without redrawing the form
+function leaveSetLen(len) {
+  LEAVE_LEN = len;
+  document.getElementById('lv-full').style.display = len === 'full' ? '' : 'none';
+  document.getElementById('lv-half').style.display = len === 'half' ? '' : 'none';
+  document.querySelectorAll('[data-lvlen]').forEach(function(b) { b.classList.toggle('active', b.dataset.lvlen === len); });
+  leaveCount();
+}
+function leaveSetHalf(h) {
+  LEAVE_HALF = h;
+  document.querySelectorAll('[data-lvhalf]').forEach(function(b) { b.classList.toggle('active', b.dataset.lvhalf === h); });
+}
+function leaveFromChanged() {
+  var f = document.getElementById('lv-from'), t = document.getElementById('lv-to');
+  t.min = f.value; if (!t.value || t.value < f.value) t.value = f.value;
+  leaveCount();
+}
+// "3 days" under the From / To dates
+function leaveCount() {
+  var el = document.getElementById('lv-count'); if (!el) return;
+  var f = document.getElementById('lv-from').value, t = document.getElementById('lv-to').value || f, n = 0;
+  if (f && t >= f) for (var k = f; k <= t && n < 99; k = lvAddDays(k, 1)) n++;
+  el.textContent = LEAVE_LEN === 'full' && n ? n + (n === 1 ? ' day' : ' days') : '';
+}
 
 function leaveRender() {
   var r = LEAVE_ME; if (!r) return;
@@ -2827,14 +2862,25 @@ function leaveRender() {
       + '<button class="mstab' + (LEAVE_TYPE === 'dayoff' ? ' active' : '') + '" onclick="leaveSetType(\'dayoff\')">Day off</button>'
       + '<button class="mstab' + (LEAVE_TYPE === 'sick' ? ' active' : '') + '" onclick="leaveSetType(\'sick\')">Sick leave</button></div>';
   }
-  if (LEAVE_TYPE === 'dayoff') {
-    h += '<div class="form-group"><label for="lv-date">Date</label><input type="date" id="lv-date" min="' + r.earliestDayOff + '" value="' + r.earliestDayOff + '"></div>'
-      + '<div class="lv-hint">Ask at least 3 days ahead. Only one Bicasso person can be off on the same day.</div>';
-  } else {
-    h += '<div class="row2"><div class="form-group"><label for="lv-from">From</label><input type="date" id="lv-from" min="' + r.today + '" value="' + r.today + '" onchange="var t=document.getElementById(\'lv-to\');t.min=this.value;if(t.value<this.value)t.value=this.value"></div>'
-      + '<div class="form-group"><label for="lv-to">To</label><input type="date" id="lv-to" min="' + r.today + '" value="' + r.today + '"></div></div>'
-      + '<div class="lv-hint">Sick leave can start today. Up to 7 days in one request.</div>';
-  }
+  var first = LEAVE_TYPE === 'dayoff' ? r.earliestDayOff : r.today;
+  var tab = function(attr, val, cur, fn, label) {
+    return '<button class="mstab' + (val === cur ? ' active' : '') + '" data-' + attr + '="' + val + '" onclick="' + fn + '(\'' + val + '\')">' + label + '</button>';
+  };
+  h += '<div class="ms-tabs rp-tabs lv-len">' + tab('lvlen', 'full', LEAVE_LEN, 'leaveSetLen', 'Full day') + tab('lvlen', 'half', LEAVE_LEN, 'leaveSetLen', 'Half day') + '</div>';
+  // Full days: one day, or several days in a row (From = To for one day)
+  h += '<div id="lv-full"' + (LEAVE_LEN === 'full' ? '' : ' style="display:none"') + '>'
+    + '<div class="row2"><div class="form-group"><label for="lv-from">From</label><input type="date" id="lv-from" min="' + first + '" value="' + first + '" onchange="leaveFromChanged()"></div>'
+    + '<div class="form-group"><label for="lv-to">To</label><input type="date" id="lv-to" min="' + first + '" value="' + first + '" onchange="leaveCount()"></div></div>'
+    + '<div class="lv-count" id="lv-count"></div>'
+    + '<div class="lv-hint">For one day, leave From and To the same. For several days in a row, choose the last day in To.</div></div>';
+  // Half day: one date, morning or afternoon
+  h += '<div id="lv-half"' + (LEAVE_LEN === 'half' ? '' : ' style="display:none"') + '>'
+    + '<div class="form-group"><label for="lv-date">Date</label><input type="date" id="lv-date" min="' + first + '" value="' + first + '"></div>'
+    + '<div class="ms-tabs rp-tabs lv-len">' + tab('lvhalf', 'morning', LEAVE_HALF, 'leaveSetHalf', 'Morning') + tab('lvhalf', 'afternoon', LEAVE_HALF, 'leaveSetHalf', 'Afternoon') + '</div>'
+    + '<div class="lv-hint">A half day counts as 0.5 of a day.</div></div>';
+  h += LEAVE_TYPE === 'dayoff'
+    ? '<div class="lv-hint">Ask at least 3 days ahead. Only one Bicasso person can be off on the same day. Up to 14 days in one request.</div>'
+    : '<div class="lv-hint">Sick leave can start today. Up to 7 days in one request.</div>';
   h += '<div class="form-group" style="margin-top:12px"><label for="lv-reason">Reason (optional)</label><textarea id="lv-reason" rows="2" maxlength="300"></textarea></div>'
     + '<div id="lv-err" class="lv-err"></div>'
     + '<button class="btn-submit" id="lv-send" onclick="leaveSend()">Send request</button></div>';
@@ -2842,7 +2888,7 @@ function leaveRender() {
   h += '<div class="card"><label>My requests</label>'
     + (r.requests.length ? r.requests.map(function(q) {
         return '<div class="lv-req"><div class="lv-req-top"><b>' + LEAVE_TYPE_LABEL[q.type] + '</b>' + lvStatus(q.status) + '</div>'
-          + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>'
+          + '<div class="lv-req-days">' + lvWhen(q) + '</div>'
           + (q.reason ? '<div class="lv-hint">' + lvEsc(q.reason) + '</div>' : '')
           + (q.note ? '<div class="lv-note">Owner: ' + lvEsc(q.note) + '</div>' : '')
           + (q.status === 'Pending' ? '<button class="lv-link" onclick="leaveCancel(\'' + lvEsc(q.id) + '\')">Cancel request</button>' : '')
@@ -2850,20 +2896,23 @@ function leaveRender() {
       }).join('') : '<div class="hist-empty">No requests yet.</div>')
     + '</div>';
   document.getElementById('leave-body').innerHTML = h;
+  leaveCount();
 }
 
 function leaveSend() {
-  var dates = [], reason = document.getElementById('lv-reason').value, err = document.getElementById('lv-err'), btn = document.getElementById('lv-send');
+  var dates = [], half = '', reason = document.getElementById('lv-reason').value, err = document.getElementById('lv-err'), btn = document.getElementById('lv-send');
   err.textContent = '';
-  if (LEAVE_TYPE === 'dayoff') {
+  if (LEAVE_LEN === 'half') {
     var d = document.getElementById('lv-date').value;
     if (!d) { err.textContent = 'Choose the date.'; return; }
-    dates = [d];
+    dates = [d]; half = LEAVE_HALF;
   } else {
     var from = document.getElementById('lv-from').value, to = document.getElementById('lv-to').value || from;
+    var most = LEAVE_TYPE === 'dayoff' ? 14 : 7;
     if (!from) { err.textContent = 'Choose the first day.'; return; }
     if (to < from) to = from;
-    for (var k = from; k <= to && dates.length < 8; k = lvAddDays(k, 1)) dates.push(k);
+    for (var k = from; k <= to && dates.length <= most; k = lvAddDays(k, 1)) dates.push(k);
+    if (dates.length > most) { err.textContent = 'One request can cover up to ' + most + ' days. Send the rest as another request.'; return; }
   }
   btn.disabled = true; btn.textContent = 'Sending…';
   google.script.run
@@ -2872,7 +2921,7 @@ function leaveSend() {
       if (leaveReply(r, 'lv-err')) { leaveRender(); showToast('Request sent. The owner has been told.'); }
     })
     .withFailureHandler(function() { btn.disabled = false; btn.textContent = 'Send request'; err.textContent = 'Connection error. Check My requests before sending again.'; leaveLoad(); })
-    .leaveRequest((leaveSaved() || {}).token, LEAVE_TYPE, dates, reason);
+    .leaveRequest((leaveSaved() || {}).token, LEAVE_TYPE, dates, reason, half);
 }
 function leaveCancel(id) {
   if (!confirm('Cancel this request?')) return;
@@ -3042,7 +3091,7 @@ function ownerRender() {
   h += '<div class="lv-title">Waiting for you' + (pending.length ? ' · ' + pending.length : '') + '</div>';
   h += pending.length ? pending.map(function(q) {
     return '<div class="card lv-ask"><div class="lv-req-top"><span class="lv-who">' + lvEsc(q.name) + '</span><span class="lv-type ' + q.type + '">' + LEAVE_TYPE_LABEL[q.type] + '</span></div>'
-      + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>'
+      + '<div class="lv-req-days">' + lvWhen(q) + '</div>'
       + (q.reason ? '<div class="lv-hint">“' + lvEsc(q.reason) + '”</div>' : '')
       + (q.warning ? '<div class="lv-warn">⚠ ' + lvEsc(q.warning.charAt(0).toUpperCase() + q.warning.slice(1)) + '.</div>' : '')
       + '<input type="text" id="on-' + lvEsc(q.id) + '" class="lv-noteinp" placeholder="Note for ' + lvEsc(q.name.split(' ')[0]) + ' (optional)" maxlength="300">'
@@ -3056,13 +3105,16 @@ function ownerRender() {
   h += '<div class="lv-title">Coming up</div><div class="card">'
     + (dayKeys.length ? dayKeys.map(function(d) {
         return '<div class="lv-day"><span class="lv-day-date">' + lvDay(d) + '</span><span>'
-          + days[d].map(function(q) { return lvEsc(q.name) + (q.type === 'sick' ? ' <i>(sick)</i>' : ''); }).join(', ') + '</span></div>';
+          + days[d].map(function(q) {
+              var tags = [q.type === 'sick' ? 'sick' : '', q.half ? (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() : ''].filter(Boolean);
+              return lvEsc(q.name) + (tags.length ? ' <i>(' + tags.join(', ') + ')</i>' : '');
+            }).join(', ') + '</span></div>';
       }).join('') : '<div class="hist-empty" style="padding:4px 0">Nobody is off in the coming days.</div>')
     + '</div>';
   h += '<div class="lv-title">Recent</div><div class="card">'
     + (past.length ? past.slice(0, 30).map(function(q) {
         return '<div class="lv-req"><div class="lv-req-top"><b>' + lvEsc(q.name) + ' · ' + LEAVE_TYPE_LABEL[q.type] + '</b>' + lvStatus(q.status) + '</div>'
-          + '<div class="lv-req-days">' + lvDays(q.dates) + '</div>' + (q.note ? '<div class="lv-note">Your note: ' + lvEsc(q.note) + '</div>' : '') + '</div>';
+          + '<div class="lv-req-days">' + lvWhen(q) + '</div>' + (q.note ? '<div class="lv-note">Your note: ' + lvEsc(q.note) + '</div>' : '') + '</div>';
       }).join('') : '<div class="hist-empty" style="padding:4px 0">No decided requests yet.</div>')
     + '</div>';
   document.getElementById('owner-body').innerHTML = h;
