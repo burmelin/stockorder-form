@@ -65,12 +65,13 @@ test('advances: every staff member is listed, Palladium too', () => {
   assert.deepEqual(staffNamesFromRows([['ID']]), []);
 });
 
-test('payroll: marking a month as paid replaces only that month', () => {
-  const { replacePayrollMonth, payrollFromRows, PAYROLL_HEADERS } = require('../api/_advances');
-  const old = [PAYROLL_HEADERS, ['2026-11', 'Kumar Giri', 15000, 0, 2000, 17000, '2026-11-30'], ['2026-10', 'Kumar Giri', 15000, 4000, 1800, 12800, '2026-10-31']];
-  const next = replacePayrollMonth(old, '2026-11', [{ name: 'Kumar Giri', salary: 15000, deduct: 1500, commission: 2100 }, { name: 'Aung', salary: 9000, deduct: 0, commission: 0 }], '2026-12-01');
+test('payroll: people are marked paid one at a time, others kept', () => {
+  const { upsertPayroll, payrollFromRows, PAYROLL_HEADERS } = require('../api/_advances');
+  const old = [PAYROLL_HEADERS, ['2026-11', 'Kumar Giri', 15000, 0, 2000, 17000, '2026-11-30'], ['2026-11', 'Aung', 9000, 0, 0, 9000, '2026-11-29'], ['2026-10', 'Kumar Giri', 15000, 4000, 1800, 12800, '2026-10-31']];
+  const next = upsertPayroll(old, '2026-11', [{ name: 'Kumar Giri', salary: 15000, deduct: 1500, commission: 2100 }], '2026-12-01');
   assert.deepEqual(next[0], PAYROLL_HEADERS);
-  assert.deepEqual(next.slice(1).map((r) => [r[0], r[1], r[5]]), [['2026-10', 'Kumar Giri', 12800], ['2026-11', 'Kumar Giri', 15600], ['2026-11', 'Aung', 9000]]);
+  assert.deepEqual(next.slice(1).map((r) => [r[0], r[1], r[5], r[6]]),
+    [['2026-10', 'Kumar Giri', 12800, '2026-10-31'], ['2026-11', 'Aung', 9000, '2026-11-29'], ['2026-11', 'Kumar Giri', 15600, '2026-12-01']]);
   const nov = payrollFromRows(next.slice(1), '2026-11');
-  assert.deepEqual(nov[0], { name: 'Kumar Giri', salary: 15000, deduct: 1500, commission: 2100, pay: 15600, paidAt: '2026-12-01' });
+  assert.deepEqual(nov.find((p) => p.name === 'Kumar Giri'), { name: 'Kumar Giri', salary: 15000, deduct: 1500, commission: 2100, pay: 15600, paidAt: '2026-12-01' });
 });

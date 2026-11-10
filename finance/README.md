@@ -134,10 +134,12 @@ At the bottom of the **Staff** tab, for the month picked:
   amount, up to what they owe; saved in tab **Advance Deductions**). Pay = salary − that
   amount, and the rest is still owed next month.
 - **Payday:** each person's salary − advance taken off + commission (from the Terminal 21 and
-  Nana cards) and the total. **Mark as paid** saves those amounts in tab **Payroll** (Month,
-  Name, Salary, Advance taken off, Commission, Pay, Marked paid), so the month keeps a record
-  even if old sales are edited later; a person whose pay has changed since shows the new
-  amount in red. Saving again replaces that month's rows.
+  Nana cards) and the total. Tap **Paid** beside a person when you pay them: their amounts are
+  saved with the date in tab **Payroll** (Month, Name, Salary, Advance taken off, Commission,
+  Pay, Marked paid), so the month keeps a record even if old sales are edited later. People can
+  be paid on different days; marking one never changes the others. If a paid person's numbers
+  change later, the new amount shows in red with **Update**. **Mark all as paid** does everyone
+  not yet paid at once.
 
 ## Daily statement
 

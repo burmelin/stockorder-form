@@ -1351,50 +1351,58 @@ function renderPayday() {
   if (!now) { $('payList').innerHTML = ''; $('payTotal').textContent = '—'; $('payStatus').textContent = 'Loading…'; return; }
   const saved = ADV.payroll || [];
   const savedBy = new Map(saved.map((p) => [p.name, p]));
+  const nowBy = new Map(now.map((p) => [p.name, p]));
   const parts = (p) => [p.salary ? `salary ${fmt(p.salary)}` : '', p.deduct ? `− advance ${fmt(p.deduct)}` : '', p.commission ? `+ commission ${fmt(p.commission)}` : '']
     .filter(Boolean).join(' ').replace(/^\+ /, '');
-  const list = saved.length ? saved.concat(now.filter((p) => !savedBy.has(p.name)).map((p) => ({ ...p, unsaved: true }))) : now;
-  const nowBy = new Map(now.map((p) => [p.name, p]));
+  // Paid people show what was saved; the others show today's numbers
+  const list = now.map((p) => savedBy.get(p.name) || p).concat(saved.filter((p) => !nowBy.has(p.name)));
   $('payList').innerHTML = list.length ? list.map((p) => {
-    const live = nowBy.get(p.name);
-    const diff = saved.length && !p.unsaved && (!live || live.pay !== p.pay) ? `<span class="sub overdue">changed since: now ${fmt(live ? live.pay : 0)}</span>` : '';
-    const extra = p.unsaved ? '<span class="sub overdue">not in the saved record</span>' : '';
-    return `<li><div class="row"><span class="name">${esc(p.name)}<span class="sub">${parts(p) || 'nothing'}</span>${diff}${extra}</span>
-      <span class="amount">${fmt(p.pay)}</span></div></li>`;
+    const paid = savedBy.has(p.name), live = nowBy.get(p.name);
+    const changed = paid && (!live || live.pay !== p.pay);
+    const status = paid
+      ? `<span class="sub paid-tag">Paid${p.paidAt ? ` ${fmtDate(p.paidAt)}` : ''}</span>${changed ? `<span class="sub overdue">changed since: now ${fmt(live ? live.pay : 0)}</span>` : ''}`
+      : '';
+    const btn = !paid ? `<button type="button" class="pay-one" data-name="${esc(p.name)}">Paid</button>`
+      : changed && live ? `<button type="button" class="pay-one ghost" data-name="${esc(p.name)}">Update</button>` : '';
+    return `<li><div class="row pay-row"><span class="name">${esc(p.name)}<span class="sub">${parts(p) || 'nothing'}</span>${status}</span>
+      <span class="amount">${fmt(p.pay)}</span>${btn}</div></li>`;
   }).join('') : '<li><div class="row"><span class="name sub">Type salaries above to see the pay.</span></div></li>';
-  $('payTotal').textContent = fmt(list.filter((p) => !p.unsaved).reduce((n, p) => n + p.pay, 0));
+  $('payTotal').textContent = fmt(list.reduce((n, p) => n + p.pay, 0));
+  const unpaid = now.filter((p) => !savedBy.has(p.name));
   const st = $('payStatus');
-  if (saved.length) {
-    st.textContent = `Marked paid${saved[0].paidAt ? ` on ${fmtDate(saved[0].paidAt)}` : ''}. These are the saved amounts.`;
-    st.classList.add('paid');
-    $('payMark').textContent = 'Save again with today’s numbers';
-  } else {
-    st.textContent = ADV.month === thisMonth() ? 'This month is still running: commission can still go up.' : 'Not marked as paid yet.';
-    st.classList.remove('paid');
-    $('payMark').textContent = `Mark ${monthLabel(ADV.month)} as paid`;
-  }
-  $('payMark').disabled = !now.length;
+  st.classList.toggle('paid', saved.length > 0 && !unpaid.length);
+  st.textContent = !unpaid.length ? `Everyone is paid for ${monthLabel(ADV.month)}.`
+    : `${saved.length ? `${saved.length} paid, ${unpaid.length} still to pay. ` : ''}${ADV.month === thisMonth() ? 'This month is still running: commission can still go up.' : ''}`;
+  $('payMark').hidden = unpaid.length < 2;
+  $('payMark').textContent = saved.length ? `Mark the other ${unpaid.length} as paid` : `Mark all ${unpaid.length} as paid`;
 }
-$('payMark').addEventListener('click', async () => {
-  const now = paydayNow();
-  if (!now || !now.length) return;
+// Saves these people's pay as paid today (the others keep what was saved for them)
+async function markPaid(people, btn) {
   const month = ADV.month;
-  const again = (ADV.payroll || []).length;
-  if (again && !confirm(`Replace the saved ${monthLabel(month)} payroll with today's numbers?`)) return;
-  const btn = $('payMark');
   btn.disabled = true;
   try {
-    const data = await saveJSON('/api/advances', 'POST', { kind: 'payroll', month, people: now });
+    const data = await saveJSON('/api/advances', 'POST', { kind: 'payroll', month, people });
     if (ADV.month === month) {
-      ADV.payroll = now.map((p) => ({ ...p, paidAt: data.paidAt || todayLocalISO() }));
+      const names = new Set(people.map((p) => p.name));
+      ADV.payroll = (ADV.payroll || []).filter((p) => !names.has(p.name)).concat(people.map((p) => ({ ...p, paidAt: data.paidAt || todayLocalISO() })));
       renderPayday();
     }
-    showToast(`${monthLabel(month)} saved in the Payroll tab`, 'success', 'payToast');
+    showToast(people.length === 1 ? `${people[0].name}: ${fmt(people[0].pay)} saved as paid` : `${people.length} people saved as paid`, 'success', 'payToast');
   } catch (err) {
     showToast(err.message, 'error', 'payToast');
-  } finally {
     btn.disabled = false;
   }
+}
+$('payList').addEventListener('click', (e) => {
+  const b = e.target.closest('.pay-one');
+  if (!b || !ADV) return;
+  const p = (paydayNow() || []).find((x) => x.name === b.dataset.name);
+  if (p) markPaid([p], b);
+});
+$('payMark').addEventListener('click', () => {
+  const savedBy = new Set((ADV.payroll || []).map((p) => p.name));
+  const unpaid = (paydayNow() || []).filter((p) => !savedBy.has(p.name));
+  if (unpaid.length && confirm(`Mark ${unpaid.length} people as paid today?`)) markPaid(unpaid, $('payMark'));
 });
 
 // ================= daily statement =================

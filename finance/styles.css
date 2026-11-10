@@ -337,6 +337,12 @@ button, input, select, textarea { font-family: inherit; }
 .pay-status { margin: 0 0 8px; }
 .pay-status.paid { color: var(--good); font-weight: 600; }
 .pay-mark { margin-top: 14px; }
+.pay-row { gap: 10px; }
+.pay-row .name { flex: 1; min-width: 0; }
+.pay-row .sub.paid-tag { color: var(--good); font-weight: 600; }
+.pay-one { flex: none; min-width: 64px; height: 36px; padding: 0 12px; border-radius: 8px; border: none; background: var(--blue); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.pay-one.ghost { background: #fff; color: var(--blue); border: 1.5px solid var(--blue); }
+.pay-one:disabled { opacity: .6; }
 .adv-form { margin-top: 10px; }
 @media (max-width: 380px) { .adv-head, .adv-row { grid-template-columns: minmax(0, 1fr) 72px 64px 64px; gap: 6px; } }
 .more { margin-top: 8px; }

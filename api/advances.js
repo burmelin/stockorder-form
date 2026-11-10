@@ -2,12 +2,12 @@
 // POST /api/advances { kind: 'salary', name, amount }        — set a person's monthly salary
 // POST /api/advances { kind: 'deduct', month, name, amount } — how much to take off that payday
 // POST /api/advances { kind: 'payroll', month, people: [{ name, salary, deduct, commission }] }
-//                                                            — "Mark as paid": the month's record
+//                                       — mark these people paid for the month (others kept)
 // See api/_advances.js for how advances are found and counted. Staff come from the Stock
 // sheet's Staff tab: everyone, shops and Palladium.
 const { SHEET_ID, MOCK, getSheetsClient, checkPin, readMasterEntry } = require('./_google');
 const { localDate } = require('./_loyverse');
-const { SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, replacePayrollMonth, money, staffNamesFromRows, salariesFromRows, deductionsFromRows, advancesFor } = require('./_advances');
+const { SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, money, staffNamesFromRows, salariesFromRows, deductionsFromRows, advancesFor } = require('./_advances');
 
 const STOCK_SHEET_ID = process.env.STOCK_SHEET_ID || '1RsicbmRnmQYRZJE37sydQ2sxMxIzQXfk5ke4aB6ATBM';
 const HEADERS = { [SALARY_TAB]: ['Name', 'Monthly salary'], [DEDUCTIONS_TAB]: ['Month', 'Name', 'Amount'] };
@@ -26,7 +26,7 @@ async function readTab(sheets, tab) {
   }
 }
 
-// Writes the month's payroll rows, replacing any saved before for that month
+// Writes these people's payroll rows for the month; other people's rows stay as they are
 async function savePayroll(req, res) {
   const b = req.body || {};
   const month = String(b.month || '');
@@ -45,7 +45,7 @@ async function savePayroll(req, res) {
       await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: [{ addSheet: { properties: { title: PAYROLL_TAB } } }] } });
       values = [PAYROLL_HEADERS];
     }
-    const next = replacePayrollMonth(values, month, people, paidAt);
+    const next = upsertPayroll(values, month, people, paidAt);
     await sheets.spreadsheets.values.clear({ spreadsheetId: SHEET_ID, range: `'${PAYROLL_TAB}'!A:G` });
     await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `'${PAYROLL_TAB}'!A1`, valueInputOption: 'RAW', requestBody: { values: next } });
     res.json({ ok: true, paidAt });
