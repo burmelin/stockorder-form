@@ -16,21 +16,23 @@
 /* The hidden attribute must always win, even over display rules like .form label { display:block } */
 [hidden] { display: none !important; }
 
-/* App-shell: fixed header + footer, only the active page scrolls. Locks the
-   viewport so the header/footer stay pinned and iOS rubber-band can't drag them. */
-html { height: 100%; }
+/* App shell, copied from the staff app (index.html): body is a plain 100vh box with
+   overflow hidden, and #shell (like #screen-app) is pinned to the four screen edges.
+   Body is white, like the staff app's, so the area under the white tab bar matches it. */
 body {
   font-family: var(--f-text);
-  background: var(--linen);
+  background: #fff;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums lining-nums;
-  /* Pinned to all four screen edges, as in the staff app: on an iPhone home-screen app a
-     height of 100% / 100dvh stops short of the bottom by the status bar's height. */
+  height: 100vh;
+  overflow: hidden;
+}
+#shell {
   position: fixed; inset: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  background: var(--linen);
 }
 button, input, select, textarea { font-family: inherit; }
 
@@ -375,9 +377,9 @@ button, input, select, textarea { font-family: inherit; }
 /* ---------- print statement ---------- */
 .print-only { display: none; }
 @media print {
-  .topbar, .tabbar, .page, #toast { display: none !important; }
+  #shell, #toast { display: none !important; }
   .print-only { display: block !important; }
-  body { position: static !important; display: block !important; overflow: visible !important; padding: 0 !important; background: #fff !important; }
+  body { height: auto !important; overflow: visible !important; background: #fff !important; }
   #printArea { padding: 24px; color: #000; font-size: 13px; }
   #printArea h1 { font-size: 20px; margin-bottom: 2px; }
   #printArea .ph-sub { color: #444; margin-bottom: 16px; font-size: 12px; }
@@ -400,9 +402,10 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ---------- tab bar (as in the staff app) ---------- */
 .tabbar {
+  /* no fixed height: like the staff app's #app-nav, the tabs set the height and the
+     padding below them covers the home-indicator area */
   flex: none; z-index: 20;
-  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: #fff; border-top: 1px solid var(--line);
   display: flex;
 }
@@ -410,6 +413,7 @@ button, input, select, textarea { font-family: inherit; }
   position: relative; flex: 1; border: none; background: none; cursor: pointer;
   font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #9C978F;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 10px 6px 9px;
 }
 .tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tab.active { color: var(--blue); }
@@ -423,10 +427,10 @@ button, input, select, textarea { font-family: inherit; }
 
 /* ---------- computer: tabs on the left, two columns ---------- */
 @media (min-width: 900px) {
-  body { display: grid; grid-template-columns: 210px 1fr; grid-template-rows: auto 1fr; }
+  #shell { display: grid; grid-template-columns: 210px 1fr; grid-template-rows: auto 1fr; }
   .topbar { grid-column: 1 / -1; padding-left: 20px; }
   .tabbar {
-    grid-row: 2; grid-column: 1; height: auto; padding: 16px 10px;
+    grid-row: 2; grid-column: 1; padding: 16px 10px;
     flex-direction: column; gap: 2px; border-top: none; border-right: 1px solid var(--line);
   }
   .tab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; border-radius: 8px; font-size: .72rem; }
