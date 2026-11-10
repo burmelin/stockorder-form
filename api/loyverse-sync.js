@@ -13,7 +13,7 @@
 // updated in place on the next run, never duplicated. A Loyverse row someone corrected
 // by hand in the sheet is kept as it is (see planSync / planMovements). Vercel Cron calls it daily
 // (see vercel.json) with "Authorization: Bearer $CRON_SECRET".
-const { logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
+const { logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
 const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements } = require('./_loyverse');
 
 const MOCK_SHOPS = ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'];
