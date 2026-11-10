@@ -133,6 +133,11 @@ At the bottom of the **Staff** tab, for the month picked:
 - **Take off:** on payday type how much of what the person owes to take off this month (any
   amount, up to what they owe; saved in tab **Advance Deductions**). Pay = salary − that
   amount, and the rest is still owed next month.
+- **Payday:** each person's salary − advance taken off + commission (from the Terminal 21 and
+  Nana cards) and the total. **Mark as paid** saves those amounts in tab **Payroll** (Month,
+  Name, Salary, Advance taken off, Commission, Pay, Marked paid), so the month keeps a record
+  even if old sales are edited later; a person whose pay has changed since shows the new
+  amount in red. Saving again replaces that month's rows.
 
 ## Daily statement
 

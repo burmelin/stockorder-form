@@ -318,6 +318,16 @@
     </details>
     <p class="rule-hint comm-note">An advance from a shop drawer comes in by itself: staff type the name and "Advance" as the Loyverse pay-out note, e.g. <em>Kumar Advance</em>. It counts as salary on the day it's paid. On payday, type how much to take off: the rest is still owed next month. Salaries and amounts taken off are saved in the finance sheet (tabs "Staff Salary" and "Advance Deductions").</p>
   </section>
+
+  <section class="card pay-card">
+    <h2>Payday <span class="label">salary − advance + commission</span></h2>
+    <p id="payStatus" class="rule-hint pay-status"></p>
+    <ul id="payList" class="rows"></ul>
+    <div class="row total-row"><span>Total to pay</span><strong id="payTotal" class="total-big">&mdash;</strong></div>
+    <button type="button" id="payMark" class="save-btn pay-mark">Mark as paid</button>
+    <div id="payToast" class="toast" hidden></div>
+    <p class="rule-hint comm-note">Mark as paid saves each person's salary, advance taken off, commission and pay in the finance sheet's "Payroll" tab, so the month has a record that doesn't change if old sales are edited later. If today's numbers differ from what was saved, the difference shows in red.</p>
+  </section>
 </main>
 
 <!-- ============ REPORTS (statement + Bicasso card sales) ============ -->

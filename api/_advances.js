@@ -10,8 +10,12 @@
 // Saved in the finance sheet:
 //   "Staff Salary"        Name | Monthly salary
 //   "Advance Deductions"  Month (YYYY-MM) | Name | Amount
+//   "Payroll"             Month | Name | Salary | Advance taken off | Commission | Pay | Marked paid
+//                         (one row per person, written by "Mark as paid": the month's record)
 const SALARY_TAB = 'Staff Salary';
 const DEDUCTIONS_TAB = 'Advance Deductions';
+const PAYROLL_TAB = 'Payroll';
+const PAYROLL_HEADERS = ['Month', 'Name', 'Salary', 'Advance taken off', 'Commission', 'Pay', 'Marked paid'];
 
 const isAdvance = (r) => r.category === 'Salary' && /advance/i.test(r.notes || '');
 const words = (s) => String(s || '').toLowerCase().replace(/ · \d\d:\d\d$/, '').split(/[^a-z0-9\u1000-\u109f]+/).filter(Boolean);
@@ -33,6 +37,21 @@ function staffNamesFromRows(values) {
   const nameCol = (values[0] || []).map((h) => String(h).trim().toLowerCase()).indexOf('name');
   if (nameCol < 0) return [];
   return [...new Set(values.slice(1).map((r) => String(r[nameCol] || '').trim().replace(/\s+/g, ' ')).filter(Boolean))];
+}
+
+// The saved Payroll rows for one month
+function payrollFromRows(values, month) {
+  return values.filter((r) => String(r[0] || '').trim() === month && String(r[1] || '').trim())
+    .map((r) => ({ name: String(r[1]).trim(), salary: money(r[2]), deduct: money(r[3]), commission: money(r[4]), pay: money(r[5]), paidAt: String(r[6] || '') }));
+}
+// All Payroll rows with this month's replaced by `people` (other months kept as they are)
+function replacePayrollMonth(values, month, people, paidAt) {
+  const keep = values.filter((r, i) => i > 0 && String(r[0] || '').trim() && String(r[0]).trim() !== month);
+  const rows = people.map((p) => {
+    const salary = money(p.salary), deduct = money(p.deduct), commission = money(p.commission);
+    return [month, String(p.name).trim().slice(0, 100), salary, deduct, commission, Math.max(0, salary - deduct) + commission, paidAt];
+  });
+  return [PAYROLL_HEADERS, ...[...keep, ...rows].sort((a, b) => String(a[0]).localeCompare(String(b[0])))];
 }
 
 function salariesFromRows(values) {
@@ -86,4 +105,4 @@ function advancesFor(rows, names, salaries, deductions, month) {
   return { month, staff, unmatched };
 }
 
-module.exports = { SALARY_TAB, DEDUCTIONS_TAB, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };
+module.exports = { SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, replacePayrollMonth, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };

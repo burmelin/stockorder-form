@@ -334,6 +334,9 @@ button, input, select, textarea { font-family: inherit; }
 .adv-row input:disabled { background: var(--sunk); color: var(--stone); }
 .adv-row .amount { text-align: right; }
 .adv-list-label { margin-top: 18px; }
+.pay-status { margin: 0 0 8px; }
+.pay-status.paid { color: var(--good); font-weight: 600; }
+.pay-mark { margin-top: 14px; }
 .adv-form { margin-top: 10px; }
 @media (max-width: 380px) { .adv-head, .adv-row { grid-template-columns: minmax(0, 1fr) 72px 64px 64px; gap: 6px; } }
 .more { margin-top: 8px; }

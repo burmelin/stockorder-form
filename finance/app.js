@@ -1166,6 +1166,7 @@ function renderCommissionStaff() {
   $('commNanaStaff').innerHTML = nana.html;
   $('commTotal').textContent = fmt(t21.total);
   $('commNanaTotal').textContent = fmt(nana.total);
+  renderPayday();
 }
 
 $('commMonth').addEventListener('change', () => { if ($('commMonth').value) openCommission($('commMonth').value); });
@@ -1224,6 +1225,7 @@ function advTotal() {
   const missing = ADV.staff.filter((p) => !p.salary).length;
   $('advTotal').textContent = fmt(ADV.staff.reduce((n, p) => n + p.pay, 0));
   $('advMissing').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no salary typed yet` : '';
+  renderPayday();
 }
 function renderAdvances() {
   const a = ADV;
@@ -1312,6 +1314,84 @@ $('advForm').addEventListener('submit', async (e) => {
     loadAdvances(ADV.month);
   } catch (err) {
     showToast(err.message, 'error', 'advToast');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ================= Payday: salary − advance + commission, and "Mark as paid" =================
+// Commission per person for the month, as the Terminal 21 and Nana cards show it
+function commissionByName() {
+  const out = {};
+  if (!COMM || !ADV || COMM.month !== ADV.month) return null;
+  const add = (names, each) => names.forEach((name) => {
+    const extra = Math.max(0, getOff(COMM.month, name) - COMM_ALLOWED_OFF);
+    out[name] = (out[name] || 0) + each - Math.round((each / 30) * extra);
+  });
+  add(COMM.staff, COMM.commissionEach + COMM.bonusEach);
+  add(COMM.nana.staff, COMM.nana.commissionEach);
+  return out;
+}
+// Today's figures for everyone with a salary, an advance taken off or commission
+function paydayNow() {
+  const comm = commissionByName();
+  if (!comm) return null;
+  const people = new Map();
+  for (const p of ADV.staff) people.set(p.name, { name: p.name, salary: p.salary, deduct: p.deduct, commission: 0 });
+  for (const [name, c] of Object.entries(comm)) {
+    const p = people.get(name) || { name, salary: 0, deduct: 0, commission: 0 };
+    p.commission = Math.round(c);
+    people.set(name, p);
+  }
+  return [...people.values()].map((p) => ({ ...p, pay: Math.max(0, p.salary - p.deduct) + p.commission }))
+    .filter((p) => p.salary || p.deduct || p.commission);
+}
+function renderPayday() {
+  const now = paydayNow();
+  if (!now) { $('payList').innerHTML = ''; $('payTotal').textContent = '—'; $('payStatus').textContent = 'Loading…'; return; }
+  const saved = ADV.payroll || [];
+  const savedBy = new Map(saved.map((p) => [p.name, p]));
+  const parts = (p) => [p.salary ? `salary ${fmt(p.salary)}` : '', p.deduct ? `− advance ${fmt(p.deduct)}` : '', p.commission ? `+ commission ${fmt(p.commission)}` : '']
+    .filter(Boolean).join(' ').replace(/^\+ /, '');
+  const list = saved.length ? saved.concat(now.filter((p) => !savedBy.has(p.name)).map((p) => ({ ...p, unsaved: true }))) : now;
+  const nowBy = new Map(now.map((p) => [p.name, p]));
+  $('payList').innerHTML = list.length ? list.map((p) => {
+    const live = nowBy.get(p.name);
+    const diff = saved.length && !p.unsaved && (!live || live.pay !== p.pay) ? `<span class="sub overdue">changed since: now ${fmt(live ? live.pay : 0)}</span>` : '';
+    const extra = p.unsaved ? '<span class="sub overdue">not in the saved record</span>' : '';
+    return `<li><div class="row"><span class="name">${esc(p.name)}<span class="sub">${parts(p) || 'nothing'}</span>${diff}${extra}</span>
+      <span class="amount">${fmt(p.pay)}</span></div></li>`;
+  }).join('') : '<li><div class="row"><span class="name sub">Type salaries above to see the pay.</span></div></li>';
+  $('payTotal').textContent = fmt(list.filter((p) => !p.unsaved).reduce((n, p) => n + p.pay, 0));
+  const st = $('payStatus');
+  if (saved.length) {
+    st.textContent = `Marked paid${saved[0].paidAt ? ` on ${fmtDate(saved[0].paidAt)}` : ''}. These are the saved amounts.`;
+    st.classList.add('paid');
+    $('payMark').textContent = 'Save again with today’s numbers';
+  } else {
+    st.textContent = ADV.month === thisMonth() ? 'This month is still running: commission can still go up.' : 'Not marked as paid yet.';
+    st.classList.remove('paid');
+    $('payMark').textContent = `Mark ${monthLabel(ADV.month)} as paid`;
+  }
+  $('payMark').disabled = !now.length;
+}
+$('payMark').addEventListener('click', async () => {
+  const now = paydayNow();
+  if (!now || !now.length) return;
+  const month = ADV.month;
+  const again = (ADV.payroll || []).length;
+  if (again && !confirm(`Replace the saved ${monthLabel(month)} payroll with today's numbers?`)) return;
+  const btn = $('payMark');
+  btn.disabled = true;
+  try {
+    const data = await saveJSON('/api/advances', 'POST', { kind: 'payroll', month, people: now });
+    if (ADV.month === month) {
+      ADV.payroll = now.map((p) => ({ ...p, paidAt: data.paidAt || todayLocalISO() }));
+      renderPayday();
+    }
+    showToast(`${monthLabel(month)} saved in the Payroll tab`, 'success', 'payToast');
+  } catch (err) {
+    showToast(err.message, 'error', 'payToast');
   } finally {
     btn.disabled = false;
   }
