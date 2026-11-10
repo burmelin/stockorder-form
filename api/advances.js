@@ -1,12 +1,11 @@
-// GET  /api/advances?month=YYYY-MM — each shop person's salary, advances and pay for the month
+// GET  /api/advances?month=YYYY-MM — each staff member's salary, advances and pay for the month
 // POST /api/advances { kind: 'salary', name, amount }        — set a person's monthly salary
 // POST /api/advances { kind: 'deduct', month, name, amount } — how much to take off that payday
 // See api/_advances.js for how advances are found and counted. Staff come from the Stock
-// sheet's Staff tab (shop staff: Bicasso 1, Bicasso 2 and Nana), as for commission.
+// sheet's Staff tab: everyone, shops and Palladium.
 const { SHEET_ID, MOCK, getSheetsClient, checkPin, readMasterEntry } = require('./_google');
 const { localDate } = require('./_loyverse');
-const { staffFromStockRows } = require('./commission');
-const { SALARY_TAB, DEDUCTIONS_TAB, money, salariesFromRows, deductionsFromRows, advancesFor } = require('./_advances');
+const { SALARY_TAB, DEDUCTIONS_TAB, money, staffNamesFromRows, salariesFromRows, deductionsFromRows, advancesFor } = require('./_advances');
 
 const STOCK_SHEET_ID = process.env.STOCK_SHEET_ID || '1RsicbmRnmQYRZJE37sydQ2sxMxIzQXfk5ke4aB6ATBM';
 const HEADERS = { [SALARY_TAB]: ['Name', 'Monthly salary'], [DEDUCTIONS_TAB]: ['Month', 'Name', 'Amount'] };
@@ -86,8 +85,7 @@ module.exports = async function handler(req, res) {
       staffNote = 'Staff are read from the Staff tab of the Stock sheet, but the finance app can\'t open it ('
         + (stock.err.code || stock.err.message) + ').';
     } else {
-      const s = staffFromStockRows(stock.data.values || []);
-      names = [...new Set(s.bicasso.concat(s.nana))];
+      names = staffNamesFromRows(stock.data.values || []);
     }
     res.json({
       ...advancesFor(master.rows, names,

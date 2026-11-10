@@ -1197,7 +1197,7 @@ function onDaysOffStep(e) {
 });
 
 // ================= Salary and advances =================
-// Each shop person's monthly salary, the advances they took (Salary rows with "advance" and
+// Each staff member's monthly salary (shops and Palladium), the advances they took (Salary rows with "advance" and
 // their name in the note), what they owe, how much to take off this payday and the pay.
 // The server does the counting (api/_advances.js); salaries and amounts taken off are saved
 // in the finance sheet so every phone shows the same.

@@ -121,7 +121,7 @@ The **Staff** tab shows, for any month (this month updates every day):
 
 At the bottom of the **Staff** tab, for the month picked:
 
-- **Salary:** type each shop person's monthly salary once (saved in the finance sheet, tab
+- **Salary:** type each staff member's monthly salary once, Palladium staff too (saved in the finance sheet, tab
   **Staff Salary**).
 - **Advances:** an advance is a **Salary** row whose note has the word *advance* and the
   person's name. Staff paying one from a shop drawer type it as the Loyverse pay-out note,

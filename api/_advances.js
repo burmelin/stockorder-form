@@ -28,6 +28,13 @@ function nameInNote(note, names) {
   return first.length === 1 ? first[0] : '';
 }
 
+// Everyone in the Stock sheet's Staff tab (shops and Palladium), in sheet order
+function staffNamesFromRows(values) {
+  const nameCol = (values[0] || []).map((h) => String(h).trim().toLowerCase()).indexOf('name');
+  if (nameCol < 0) return [];
+  return [...new Set(values.slice(1).map((r) => String(r[nameCol] || '').trim().replace(/\s+/g, ' ')).filter(Boolean))];
+}
+
 function salariesFromRows(values) {
   const out = {};
   for (const r of values) {
@@ -79,4 +86,4 @@ function advancesFor(rows, names, salaries, deductions, month) {
   return { month, staff, unmatched };
 }
 
-module.exports = { SALARY_TAB, DEDUCTIONS_TAB, isAdvance, nameInNote, money, salariesFromRows, deductionsFromRows, advancesFor };
+module.exports = { SALARY_TAB, DEDUCTIONS_TAB, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };

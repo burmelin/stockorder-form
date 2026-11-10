@@ -1,7 +1,7 @@
 // Salary advances: who an advance belongs to, what they owe, and the pay after a deduction.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { nameInNote, advancesFor, salariesFromRows, deductionsFromRows } = require('../api/_advances');
+const { nameInNote, staffNamesFromRows, advancesFor, salariesFromRows, deductionsFromRows } = require('../api/_advances');
 const { planMovements } = require('../api/_loyverse');
 
 const NAMES = ['Kumar Giri', 'Sunil GTM', 'Pyone Cho', 'Bharati'];
@@ -57,4 +57,10 @@ test('advances: a Loyverse pay-out noted "Kumar Advance" is booked as Salary', (
   assert.equal(a.category, 'Salary');
   assert.equal(a.cashOut, 2000);
   assert.match(a.note, /^Kumar Advance · /);
+});
+
+test('advances: every staff member is listed, Palladium too', () => {
+  const rows = [['ID', 'Name', 'Works at'], ['E1', 'Kumar  Giri', 'Bicasso 1'], ['E2', 'Aung', 'Palladium'], ['E3', '', 'Nana'], ['E4', 'Kumar Giri', 'Bicasso 2']];
+  assert.deepEqual(staffNamesFromRows(rows), ['Kumar Giri', 'Aung']);
+  assert.deepEqual(staffNamesFromRows([['ID']]), []);
 });
