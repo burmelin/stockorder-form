@@ -130,16 +130,14 @@ At the bottom of the **Staff** tab, for the month picked:
   salary on the day it's paid (it is salary paid early), so salary spending still adds up to
   the full salaries. A note with no name it knows shows as **Whose advance?**: fix the note in
   Master Entry.
-- **Take off:** on payday type how much of what the person owes to take off this month (any
-  amount, up to what they owe; saved in tab **Advance Deductions**). Pay = salary − that
-  amount, and the rest is still owed next month.
-- **Payday:** each person's salary − advance taken off + commission (from the Terminal 21 and
-  Nana cards) and the total. Tap **Paid** beside a person when you pay them: their amounts are
-  saved with the date in tab **Payroll** (Month, Name, Salary, Advance taken off, Commission,
-  Pay, Marked paid), so the month keeps a record even if old sales are edited later. People can
-  be paid on different days; marking one never changes the others. If a paid person's numbers
-  change later, the new amount shows in red with **Update**. **Mark all as paid** does everyone
-  not yet paid at once.
+- **Payday** (above the salaries): one row per person showing salary + commission & bonus
+  (from the Terminal 21 and Nana cards) − advance cut = pay. Type the **Advance cut** (any
+  amount up to what they owe; the rest waits for next month, saved in tab **Advance
+  Deductions**), the pay updates, then tap **Pay**. Their amounts are saved with the date in tab
+  **Payroll** (Month, Name, Salary, Advance taken off, Commission, Pay, Marked paid), so the
+  month keeps a record even if old sales are edited later. People can be paid on different
+  days; paying one never changes the others. If a paid person's numbers change later, the new
+  amount shows in red with **Update**. **Pay all** does everyone not yet paid at once.
 
 ## Daily statement
 

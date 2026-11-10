@@ -1199,13 +1199,13 @@ function onDaysOffStep(e) {
 
 // ================= Salary and advances =================
 // Each staff member's monthly salary (shops and Palladium), the advances they took (Salary rows with "advance" and
-// their name in the note), what they owe, how much to take off this payday and the pay.
+// their name in the note) and what they owe. The Payday card below does the cut and the pay.
 // The server does the counting (api/_advances.js); salaries and amounts taken off are saved
 // in the finance sheet so every phone shows the same.
 let ADV = null;
 async function loadAdvances(month) {
   $('advStaff').innerHTML = '<li><div class="row"><span class="name">Loading…</span></div></li>';
-  $('advList').innerHTML = ''; $('advTotal').textContent = '—'; $('advNote').hidden = true;
+  $('advList').innerHTML = ''; $('advNote').hidden = true;
   try {
     const resp = await api(`/api/advances?month=${month}`);
     const data = await resp.json();
@@ -1218,13 +1218,9 @@ async function loadAdvances(month) {
   }
 }
 
-const advSub = (p) => (p.owes
-  ? `owes ${fmt(p.owes)}${p.deduct ? `, ${fmt(p.owesAfter)} left` : ''}`
-  : 'owes nothing');
 function advTotal() {
   const missing = ADV.staff.filter((p) => !p.salary).length;
-  $('advTotal').textContent = fmt(ADV.staff.reduce((n, p) => n + p.pay, 0));
-  $('advMissing').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no salary typed yet` : '';
+  $('advMissing').textContent = missing ? `${missing} ${missing === 1 ? 'person has' : 'people have'} no salary typed yet.` : '';
   renderPayday();
 }
 function renderAdvances() {
@@ -1236,10 +1232,8 @@ function renderAdvances() {
   } else {
     $('advStaff').innerHTML = a.staff.map((p, i) => {
       return `<li><div class="row adv-row">
-        <span class="name">${esc(p.name)}<span class="sub ${p.owesAfter ? 'overdue' : ''}">${advSub(p)}</span></span>
+        <span class="name">${esc(p.name)}<span class="sub ${p.owes ? 'overdue' : ''}">${p.owes ? `owes ${fmt(p.owes)} in advances` : 'no advance owed'}</span></span>
         <input type="number" inputmode="numeric" min="0" step="1" class="adv-salary" data-i="${i}" value="${p.salary || ''}" placeholder="0" aria-label="Monthly salary for ${esc(p.name)}">
-        <input type="number" inputmode="numeric" min="0" step="1" class="adv-deduct" data-i="${i}" value="${p.deduct || ''}" placeholder="0" ${p.owes ? '' : 'disabled'} aria-label="Advance to take off ${esc(p.name)}'s pay">
-        <span class="amount">${p.salary ? fmt(p.pay) : '—'}</span>
       </div></li>`;
     }).join('');
   }
@@ -1261,17 +1255,9 @@ function renderAdvances() {
   if (!$('advDate').value) $('advDate').value = todayLocalISO();
 }
 
+// Saves a salary or an advance cut a moment after the last key press
 const advSaving = {};
-function onAdvanceInput(e) {
-  const el = e.target.closest('.adv-salary, .adv-deduct');
-  if (!el || !ADV) return;
-  const p = ADV.staff[+el.dataset.i];
-  const amount = Math.max(0, Math.round(parseFloat(el.value) || 0));
-  const kind = el.classList.contains('adv-salary') ? 'salary' : 'deduct';
-  if (kind === 'salary') p.salary = amount;
-  else p.deduct = Math.min(amount, p.owes);
-  p.pay = Math.max(0, p.salary - p.deduct);
-  p.owesAfter = p.owes - p.deduct;
+function saveAdvField(kind, p) {
   const month = ADV.month, key = kind + '|' + p.name;
   clearTimeout(advSaving[key]);
   advSaving[key] = setTimeout(async () => {
@@ -1279,21 +1265,21 @@ function onAdvanceInput(e) {
       const resp = await api('/api/advances', { method: 'POST', body: JSON.stringify({ kind, month, name: p.name, amount: kind === 'salary' ? p.salary : p.deduct }) });
       if (!resp.ok) throw new Error((await resp.json()).error || 'Server error');
     } catch (err) {
-      $('advNote').textContent = `${kind === 'salary' ? 'Salary' : 'Amount to take off'} for ${p.name} was not saved (${err.message}). Type it again to retry.`;
+      $('advNote').textContent = `${kind === 'salary' ? 'Salary' : 'Advance cut'} for ${p.name} was not saved (${err.message}). Type it again to retry.`;
       $('advNote').hidden = false;
     }
   }, 700);
-  // Update this row and the total in place, so the cursor stays where it is
-  const row = el.closest('.adv-row');
-  const sub = row.querySelector('.sub');
-  sub.textContent = advSub(p);
-  sub.classList.toggle('overdue', !!p.owesAfter);
-  row.querySelector('.amount').textContent = p.salary ? fmt(p.pay) : '—';
-  if (kind === 'deduct' && e.type === 'change' && amount > p.owes) el.value = p.deduct || '';
+}
+function onSalaryInput(e) {
+  const el = e.target.closest('.adv-salary');
+  if (!el || !ADV) return;
+  const p = ADV.staff[+el.dataset.i];
+  p.salary = Math.max(0, Math.round(parseFloat(el.value) || 0));
+  p.pay = Math.max(0, p.salary - p.deduct);
+  saveAdvField('salary', p);
   advTotal();
 }
-$('advStaff').addEventListener('input', onAdvanceInput);
-$('advStaff').addEventListener('change', onAdvanceInput);
+$('advStaff').addEventListener('input', onSalaryInput);
 
 // The owner paid an advance by hand (from Palladium's cash or the bank): a Salary row whose
 // note is "<name> Advance", so it's counted like the ones staff type in Loyverse.
@@ -1332,50 +1318,93 @@ function commissionByName() {
   add(COMM.nana.staff, COMM.nana.commissionEach);
   return out;
 }
-// Today's figures for everyone with a salary, an advance taken off or commission
+// Today's figures for everyone with a salary, commission or an advance owed
 function paydayNow() {
   const comm = commissionByName();
   if (!comm) return null;
   const people = new Map();
-  for (const p of ADV.staff) people.set(p.name, { name: p.name, salary: p.salary, deduct: p.deduct, commission: 0 });
+  for (const p of ADV.staff) people.set(p.name, { name: p.name, salary: p.salary, deduct: p.deduct, owes: p.owes, commission: 0 });
   for (const [name, c] of Object.entries(comm)) {
-    const p = people.get(name) || { name, salary: 0, deduct: 0, commission: 0 };
+    const p = people.get(name) || { name, salary: 0, deduct: 0, owes: 0, commission: 0 };
     p.commission = Math.round(c);
     people.set(name, p);
   }
   return [...people.values()].map((p) => ({ ...p, pay: Math.max(0, p.salary - p.deduct) + p.commission }))
-    .filter((p) => p.salary || p.deduct || p.commission);
+    .filter((p) => p.salary || p.owes || p.commission);
+}
+const payParts = (p) => [p.salary ? `salary ${fmt(p.salary)}` : '', p.commission ? `+ commission & bonus ${fmt(p.commission)}` : '', p.deduct ? `− advance ${fmt(p.deduct)}` : '']
+  .filter(Boolean).join(' ').replace(/^[+−] /, '') || 'nothing';
+// The text part of one person's row and their button (the cut box is left alone while typing)
+function payRowBits(name) {
+  const now = paydayNow() || [];
+  const live = now.find((p) => p.name === name);
+  const saved = (ADV.payroll || []).find((p) => p.name === name);
+  const shown = saved || live;
+  const changed = saved && (!live || live.pay !== saved.pay);
+  const owes = live && live.owes ? `<span class="sub overdue">owes ${fmt(live.owes)} in advances${live.deduct ? `, ${fmt(live.owes - live.deduct)} left after this cut` : ''}</span>` : '';
+  const status = saved ? `<span class="sub paid-tag">Paid ${saved.paidAt ? fmtDate(saved.paidAt) : ''}: ${fmt(saved.pay)}</span>${changed ? `<span class="sub overdue">changed since: now ${fmt(live ? live.pay : 0)}</span>` : ''}` : '';
+  return {
+    text: `${esc(name)}<span class="sub">${payParts(live || saved)}</span>${owes}${status}`,
+    pay: fmt(live ? live.pay : shown.pay),
+    btn: !saved ? `<button type="button" class="pay-one" data-name="${esc(name)}">Pay</button>`
+      : changed && live ? `<button type="button" class="pay-one ghost" data-name="${esc(name)}">Update</button>`
+      : '<span class="pay-done">✓</span>',
+  };
 }
 function renderPayday() {
   const now = paydayNow();
   if (!now) { $('payList').innerHTML = ''; $('payTotal').textContent = '—'; $('payStatus').textContent = 'Loading…'; return; }
   const saved = ADV.payroll || [];
-  const savedBy = new Map(saved.map((p) => [p.name, p]));
-  const nowBy = new Map(now.map((p) => [p.name, p]));
-  const parts = (p) => [p.salary ? `salary ${fmt(p.salary)}` : '', p.deduct ? `− advance ${fmt(p.deduct)}` : '', p.commission ? `+ commission ${fmt(p.commission)}` : '']
-    .filter(Boolean).join(' ').replace(/^\+ /, '');
-  // Paid people show what was saved; the others show today's numbers
-  const list = now.map((p) => savedBy.get(p.name) || p).concat(saved.filter((p) => !nowBy.has(p.name)));
-  $('payList').innerHTML = list.length ? list.map((p) => {
-    const paid = savedBy.has(p.name), live = nowBy.get(p.name);
-    const changed = paid && (!live || live.pay !== p.pay);
-    const status = paid
-      ? `<span class="sub paid-tag">Paid${p.paidAt ? ` ${fmtDate(p.paidAt)}` : ''}</span>${changed ? `<span class="sub overdue">changed since: now ${fmt(live ? live.pay : 0)}</span>` : ''}`
-      : '';
-    const btn = !paid ? `<button type="button" class="pay-one" data-name="${esc(p.name)}">Paid</button>`
-      : changed && live ? `<button type="button" class="pay-one ghost" data-name="${esc(p.name)}">Update</button>` : '';
-    return `<li><div class="row pay-row"><span class="name">${esc(p.name)}<span class="sub">${parts(p) || 'nothing'}</span>${status}</span>
-      <span class="amount">${fmt(p.pay)}</span>${btn}</div></li>`;
-  }).join('') : '<li><div class="row"><span class="name sub">Type salaries above to see the pay.</span></div></li>';
-  $('payTotal').textContent = fmt(list.reduce((n, p) => n + p.pay, 0));
+  const names = now.map((p) => p.name).concat(saved.map((p) => p.name).filter((n) => !now.some((p) => p.name === n)));
+  $('payList').innerHTML = names.length ? names.map((name) => {
+    const live = now.find((p) => p.name === name);
+    const bits = payRowBits(name);
+    return `<li><div class="pay-row" data-name="${esc(name)}">
+      <span class="name pay-text">${bits.text}</span>
+      <div class="pay-ctl">
+        <label class="pay-cut-l"><span>Advance cut</span>
+          <input type="number" inputmode="numeric" min="0" step="1" class="pay-cut" value="${live && live.deduct ? live.deduct : ''}" placeholder="0" ${live && live.owes ? '' : 'disabled'} aria-label="Advance to cut from ${esc(name)}'s pay"></label>
+        <span class="amount pay-amt">${bits.pay}</span>
+        <span class="pay-btn">${bits.btn}</span>
+      </div></div></li>`;
+  }).join('') : '<li><div class="row"><span class="name sub">Type salaries below to see the pay.</span></div></li>';
+  payTotals();
+}
+function payTotals() {
+  const now = paydayNow() || [];
+  const savedBy = new Map((ADV.payroll || []).map((p) => [p.name, p]));
+  $('payTotal').textContent = fmt(now.reduce((n, p) => n + p.pay, 0));
   const unpaid = now.filter((p) => !savedBy.has(p.name));
   const st = $('payStatus');
-  st.classList.toggle('paid', saved.length > 0 && !unpaid.length);
+  st.classList.toggle('paid', savedBy.size > 0 && !unpaid.length);
   st.textContent = !unpaid.length ? `Everyone is paid for ${monthLabel(ADV.month)}.`
-    : `${saved.length ? `${saved.length} paid, ${unpaid.length} still to pay. ` : ''}${ADV.month === thisMonth() ? 'This month is still running: commission can still go up.' : ''}`;
+    : `${savedBy.size ? `${savedBy.size} paid, ${unpaid.length} still to pay. ` : ''}${ADV.month === thisMonth() ? 'This month is still running: commission can still go up.' : ''}`;
   $('payMark').hidden = unpaid.length < 2;
-  $('payMark').textContent = saved.length ? `Mark the other ${unpaid.length} as paid` : `Mark all ${unpaid.length} as paid`;
+  $('payMark').textContent = savedBy.size ? `Pay the other ${unpaid.length}` : `Pay all ${unpaid.length}`;
 }
+// Typing the advance cut: work out the pay again in place, and save the cut
+$('payList').addEventListener('input', (e) => {
+  const el = e.target.closest('.pay-cut');
+  if (!el || !ADV) return;
+  const row = el.closest('.pay-row'), name = row.dataset.name;
+  const p = ADV.staff.find((x) => x.name === name);
+  if (!p) return;
+  p.deduct = Math.min(Math.max(0, Math.round(parseFloat(el.value) || 0)), p.owes);
+  p.pay = Math.max(0, p.salary - p.deduct);
+  p.owesAfter = p.owes - p.deduct;
+  saveAdvField('deduct', p);
+  const bits = payRowBits(name);
+  row.querySelector('.pay-text').innerHTML = bits.text;
+  row.querySelector('.pay-amt').textContent = bits.pay;
+  row.querySelector('.pay-btn').innerHTML = bits.btn;
+  payTotals();
+});
+$('payList').addEventListener('change', (e) => {
+  const el = e.target.closest('.pay-cut');
+  if (!el || !ADV) return;
+  const p = ADV.staff.find((x) => x.name === el.closest('.pay-row').dataset.name);
+  if (p && String(p.deduct || '') !== el.value) el.value = p.deduct || '';   // more than owed: shows the most it can be
+});
 // Saves these people's pay as paid today (the others keep what was saved for them)
 async function markPaid(people, btn) {
   const month = ADV.month;
@@ -1387,7 +1416,7 @@ async function markPaid(people, btn) {
       ADV.payroll = (ADV.payroll || []).filter((p) => !names.has(p.name)).concat(people.map((p) => ({ ...p, paidAt: data.paidAt || todayLocalISO() })));
       renderPayday();
     }
-    showToast(people.length === 1 ? `${people[0].name}: ${fmt(people[0].pay)} saved as paid` : `${people.length} people saved as paid`, 'success', 'payToast');
+    showToast(people.length === 1 ? `${people[0].name}: ${fmt(people[0].pay)} paid` : `${people.length} people paid`, 'success', 'payToast');
   } catch (err) {
     showToast(err.message, 'error', 'payToast');
     btn.disabled = false;
@@ -1402,7 +1431,7 @@ $('payList').addEventListener('click', (e) => {
 $('payMark').addEventListener('click', () => {
   const savedBy = new Set((ADV.payroll || []).map((p) => p.name));
   const unpaid = (paydayNow() || []).filter((p) => !savedBy.has(p.name));
-  if (unpaid.length && confirm(`Mark ${unpaid.length} people as paid today?`)) markPaid(unpaid, $('payMark'));
+  if (unpaid.length && confirm(`Save ${unpaid.length} people as paid today?`)) markPaid(unpaid, $('payMark'));
 });
 
 // ================= daily statement =================
