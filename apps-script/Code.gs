@@ -1535,22 +1535,23 @@ function verifyOwner(password) {
 // Password hash/salt the first time it's used, and the cell is cleared.
 var STAFF_SHEET    = 'Staff';
 var LEAVE_SHEET    = 'Leave';
-// "Half day" (column K) is empty for a full day, or Morning / Afternoon. Older rows have no
-// column K and count as full days.
+// "Half day" (column K) is empty for a full day, or First half / Second half of the shop day
+// (Morning / Afternoon are read the same). Older rows have no column K and count as full days.
 var LEAVE_HEADERS  = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
 var LEAVE_TYPES    = { dayoff: 'Day off', sick: 'Sick leave' };
-var LEAVE_HALVES   = { morning: 'Morning', afternoon: 'Afternoon' };
-// Each shop's opening and closing time (24-hour 'HH:MM'). A half day is the first or second
-// half of the person's own shop day, split at the middle. Empty = not known yet: the app then
-// shows only "Morning" / "Afternoon" without hours.
+var LEAVE_HALVES   = { morning: 'First half', afternoon: 'Second half' };
+var HALF_OF_CELL   = { 'first half': 'morning', 'morning': 'morning', 'second half': 'afternoon', 'afternoon': 'afternoon' };
+// Each shop's opening and closing time (24-hour 'HH:MM'; midnight closing is '24:00'). A half
+// day is the first or second half of the person's own shop day, split at the middle (to the
+// nearest 15 minutes). Empty = not known: the app then shows only "First half" / "Second half".
 var SHOP_HOURS = {
-  'Bicasso 1':    { opens: '', closes: '' },
-  'Bicasso 2':    { opens: '', closes: '' },
-  'Bicasso Nana': { opens: '', closes: '' }
+  'Bicasso 1':    { opens: '10:00', closes: '21:30' },
+  'Bicasso 2':    { opens: '10:00', closes: '21:30' },
+  'Bicasso Nana': { opens: '13:00', closes: '24:00' }
 };
 function minutesOf(t) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '').trim()); return m ? +m[1] * 60 + +m[2] : null; }
 function clockText(min) {
-  var h = Math.floor(min / 60), m = min % 60;
+  var h = Math.floor(min / 60) % 24, m = min % 60;
   return ((h + 11) % 12 + 1) + ':' + ('0' + m).slice(-2) + (h < 12 ? ' AM' : ' PM');
 }
 // { morning: '9:00 AM – 1:30 PM', afternoon: '1:30 PM – 6:00 PM' } for a staff member's shop, or blanks
@@ -1558,7 +1559,7 @@ function halfTimesFor(s) {
   var shop = s && s.places.filter(function(p) { return SHOP_HOURS[p]; })[0];
   var h = shop && SHOP_HOURS[shop], open = h && minutesOf(h.opens), close = h && minutesOf(h.closes);
   if (open == null || close == null || close <= open) return { morning: '', afternoon: '' };
-  var mid = open + Math.round((close - open) / 60) * 30;   // the middle, on the half hour
+  var mid = open + Math.round((close - open) / 30) * 15;   // the middle, to the nearest 15 minutes
   return { morning: clockText(open) + ' – ' + clockText(mid), afternoon: clockText(mid) + ' – ' + clockText(close) };
 }
 // Adds the hours to each half-day request (the hours of that person's shop)
@@ -1660,7 +1661,7 @@ function readLeave(ss) {
              staffId: String(r[2]), name: String(r[3]), type: String(r[4]) === 'Sick leave' ? 'sick' : 'dayoff',
              date: dateKeyOf(r[5]), reason: String(r[6] || ''), status: String(r[7] || 'Pending'),
              decided: r[8] instanceof Date ? cellDateText(r[8]) : String(r[8] || ''), note: String(r[9] || ''),
-             half: LEAVE_HALVES[half] ? half : '' };
+             half: HALF_OF_CELL[half] || '' };
   }).filter(function(l) { return l.id && l.date; });
 }
 function isActiveLeave(l) { return l.status === 'Pending' || l.status === 'Approved'; }
@@ -1800,7 +1801,7 @@ function leaveMine(b) {
 function leaveRequest(b, type, dates, reason, half) {
   if (!LEAVE_TYPES[type]) return { success: false, error: 'Choose day off or sick leave.' };
   half = String(half || '').toLowerCase();
-  if (half && !LEAVE_HALVES[half]) return { success: false, error: 'Choose morning or afternoon.' };
+  if (half && !LEAVE_HALVES[half]) return { success: false, error: 'Choose the first or second half of the day.' };
   dates = (dates || []).map(String).filter(function(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
     .filter(function(d, i, a) { return a.indexOf(d) === i; }).sort();
   reason = String(reason || '').trim().slice(0, 300);

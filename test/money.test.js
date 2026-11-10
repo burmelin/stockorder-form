@@ -75,7 +75,7 @@ test('days off: approved leave in the month, each day once; saved numbers win', 
 test('days off: a half day of approved leave counts 0.5; saved half days are kept', () => {
   const head = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
   const rows = [head,
-    ['a', '', '1', 'Sunil', 'Day off', '2026-11-03', '', 'Approved', '', '', 'Morning'],
+    ['a', '', '1', 'Sunil', 'Day off', '2026-11-03', '', 'Approved', '', '', 'First half'],
     ['b', '', '1', 'Sunil', 'Day off', '2026-11-06', '', 'Approved', '', '', ''],
     ['c', '', '1', 'Sunil', 'Sick leave', '2026-11-07', '', 'Approved'],
     ['d', '', '2', 'Kumar', 'Day off', '2026-11-08', '', 'Approved', '', '', 'Afternoon']];

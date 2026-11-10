@@ -2722,7 +2722,7 @@ var LEAVE_TYPE = 'dayoff';
 var LEAVE_PICK = null;                     // { id, name } chosen on "Who are you?"
 var LEAVE_STATUS = { Pending: 'Waiting', Approved: 'Approved', Declined: 'Declined', Cancelled: 'Cancelled' };
 var LEAVE_TYPE_LABEL = { dayoff: 'Day off', sick: 'Sick leave' };
-var LEAVE_HALF_LABEL = { morning: 'Morning', afternoon: 'Afternoon' };
+var LEAVE_HALF_LABEL = { morning: 'First half', afternoon: 'Second half' };
 var LEAVE_LEN = 'full';                    // 'full' (one or more whole days) or 'half'
 var LEAVE_HALF = 'morning';
 var HALF_TIMES = { morning: '', afternoon: '' };   // the hours of each half at this person's shop, from the server
@@ -2732,7 +2732,7 @@ function lvDay(k) { var d = new Date(k + 'T12:00:00Z'); return ['Sun', 'Mon', 'T
 function lvDays(list) {
   return list.length > 2 ? lvDay(list[0]) + ' – ' + lvDay(list[list.length - 1]) + ' (' + list.length + ' days)' : list.map(lvDay).join(', ');
 }
-// The days of a request, with "Morning" / "Afternoon" for a half day
+// The days of a request, with "First half" / "Second half" and its hours for a half day
 function lvWhen(q) {
   if (!q.half) return lvDays(q.dates);
   return lvDay(q.dates[0]) + ' · ' + (LEAVE_HALF_LABEL[q.half] || '') + (q.time ? ', ' + q.time : ' (half day)');
@@ -2821,7 +2821,7 @@ function leaveSetType(t) {
   LEAVE_TYPE = t; leaveRender();
   document.getElementById('lv-reason').value = reason;
 }
-// Full day(s) or half day, and morning or afternoon: shown and hidden without redrawing the form
+// Full day(s) or half day, and first or second half: shown and hidden without redrawing the form
 function leaveSetLen(len) {
   LEAVE_LEN = len;
   document.getElementById('lv-full').style.display = len === 'full' ? '' : 'none';
@@ -2879,10 +2879,10 @@ function leaveRender() {
     + '<div class="form-group"><label for="lv-to">To</label><input type="date" id="lv-to" min="' + first + '" value="' + first + '" onchange="leaveCount()"></div></div>'
     + '<div class="lv-count" id="lv-count"></div>'
     + '<div class="lv-hint">For one day, leave From and To the same. For several days in a row, choose the last day in To.</div></div>';
-  // Half day: one date, morning or afternoon
+  // Half day: one date, first or second half of the shop day
   h += '<div id="lv-half"' + (LEAVE_LEN === 'half' ? '' : ' style="display:none"') + '>'
     + '<div class="form-group"><label for="lv-date">Date</label><input type="date" id="lv-date" min="' + r.today + '" value="' + r.today + '"></div>'
-    + '<div class="ms-tabs rp-tabs lv-len">' + tab('lvhalf', 'morning', LEAVE_HALF, 'leaveSetHalf', 'Morning') + tab('lvhalf', 'afternoon', LEAVE_HALF, 'leaveSetHalf', 'Afternoon') + '</div>'
+    + '<div class="ms-tabs rp-tabs lv-len">' + tab('lvhalf', 'morning', LEAVE_HALF, 'leaveSetHalf', 'First half') + tab('lvhalf', 'afternoon', LEAVE_HALF, 'leaveSetHalf', 'Second half') + '</div>'
     + '<div class="lv-count" id="lv-halftime">' + (HALF_TIMES[LEAVE_HALF] ? 'Off ' + HALF_TIMES[LEAVE_HALF] : '') + '</div>'
     + '<div class="lv-hint">A half day can be today and counts as 0.5 of a day.</div></div>';
   h += LEAVE_TYPE === 'dayoff'

@@ -29,7 +29,7 @@ function staffFromStockRows(values) {
 
 // ---- days off ----
 // Approved leave (day off or sick leave) from the Stock sheet's Leave tab, counted per person
-// for the month: the starting number of days off. A half day (Morning / Afternoon in the
+// for the month: the starting number of days off. A half day (First / Second half in the
 // "Half day" column) counts as 0.5. The owner can change it in the app; that
 // number is saved in the finance sheet's "Commission Days Off" tab (Month, Name, Days off), so
 // every phone shows the same.
@@ -49,7 +49,7 @@ function leaveDaysFromRows(values, month) {
     const key = name + '|' + date;
     if (seen.has(key)) continue;   // one day counts once, even if asked twice
     seen.add(key);
-    const half = halfCol > -1 && /^(morning|afternoon)$/i.test(String(r[halfCol] || '').trim());
+    const half = halfCol > -1 && /^(first half|second half|morning|afternoon)$/i.test(String(r[halfCol] || '').trim());
     out[name] = (out[name] || 0) + (half ? 0.5 : 1);
   }
   return out;
