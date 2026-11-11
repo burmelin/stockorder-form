@@ -1288,14 +1288,21 @@ function renderAdvances() {
   }
   advTotal();
 
-  const items = a.staff.flatMap((p) => p.items.map((it) => ({ ...it, who: p.name })))
-    .concat(a.unmatched.map((it) => ({ ...it, who: '' })))
-    .sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : x.row - y.row));
-  $('advList').innerHTML = items.length ? items.map((it) => `
-    <li><div class="row"><span class="name">${it.who ? esc(it.who) : '<span class="overdue">Whose advance?</span>'}
-      <span class="sub ${it.who ? '' : 'overdue'}">${fmtDate(it.date)} · ${esc(it.shop)} · “${esc(String(it.notes).replace(/ · \d\d:\d\d$/, ''))}”${it.who ? '' : ` · no name found: fix the note in Master Entry row ${it.row}`}</span></span>
+  // Every advance behind what someone owes (earlier months too), what earlier paydays took
+  // off, and this month's advances with no name found
+  const line = (it) => `${fmtDate(it.date)} · ${esc(it.shop)} · “${esc(String(it.notes).replace(/ · \d\d:\d\d$/, ''))}” · row ${it.row}`;
+  const owing = a.staff.filter((p) => p.owes || p.items.some((it) => it.thisMonth));
+  const html = owing.map((p) => p.items.map((it) => `
+    <li><div class="row"><span class="name">${esc(p.name)}<span class="sub">${line(it)}${it.thisMonth ? '' : ' · earlier month'}</span></span>
       <span class="amount">${fmt(it.amount)}</span></div></li>`).join('')
-    : '<li><div class="row"><span class="name sub">No advances this month.</span></div></li>';
+    + (p.earlierCuts ? `<li><div class="row"><span class="name">${esc(p.name)}<span class="sub">already taken off earlier paydays</span></span>
+      <span class="amount">−${fmt(p.earlierCuts)}</span></div></li>` : '')
+    + `<li><div class="row adv-owes-row"><span class="name">${esc(p.name)} owes</span><strong>${fmt(p.owes)}</strong></div></li>`).join('')
+    + a.unmatched.map((it) => `
+    <li><div class="row"><span class="name"><span class="overdue">Whose advance?</span>
+      <span class="sub overdue">${line(it)} · no name found: fix the note in Master Entry</span></span>
+      <span class="amount">${fmt(it.amount)}</span></div></li>`).join('');
+  $('advList').innerHTML = html || '<li><div class="row"><span class="name sub">Nobody owes an advance.</span></div></li>';
 
   const sel = $('advName');
   const was = sel.value;

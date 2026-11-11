@@ -34,7 +34,9 @@ test('advances: owed carries over, the deduction is what the owner typed', () =>
   const k = nov.staff.find((s) => s.name === 'Kumar Giri');
   // 3000 + 2000 + 1000 taken, 4000 taken off in October
   assert.deepEqual([k.salary, k.taken, k.owes, k.deduct, k.pay, k.owesAfter], [15000, 1000, 2000, 1500, 13500, 500]);
-  assert.deepEqual(k.items.map((i) => i.row), [12]);
+  // every advance behind the total is listed, this month's marked
+  assert.deepEqual(k.items.map((i) => [i.row, i.thisMonth]), [[10, false], [11, false], [12, true]]);
+  assert.equal(k.earlierCuts, 4000);
   assert.deepEqual(nov.unmatched.map((u) => u.row), [14]);
   const s = nov.staff.find((x) => x.name === 'Sunil GTM');
   assert.deepEqual([s.salary, s.owes, s.pay], [12000, 0, 12000]);
@@ -74,4 +76,12 @@ test('payroll: people are marked paid one at a time, others kept', () => {
     [['2026-10', 'Kumar Giri', 12800, '2026-10-31'], ['2026-11', 'Aung', 9000, '2026-11-29'], ['2026-11', 'Kumar Giri', 15600, '2026-12-01']]);
   const nov = payrollFromRows(next.slice(1), '2026-11');
   assert.deepEqual(nov.find((p) => p.name === 'Kumar Giri'), { name: 'Kumar Giri', salary: 15000, deduct: 1500, commission: 2100, pay: 15600, paidAt: '2026-12-01' });
+});
+
+test('advances: only advances from the start day count', () => {
+  const rows = [adv(1, '2026-07-20', 'Kumar Salary Advanced', 2000), adv(2, '2026-11-10', 'Kumar advance', 5000)];
+  const all = advancesFor(rows, NAMES, {}, [], '2026-11', '').staff.find((x) => x.name === 'Kumar Giri');
+  const fromNov = advancesFor(rows, NAMES, {}, [], '2026-11', '2026-11-01').staff.find((x) => x.name === 'Kumar Giri');
+  assert.equal(all.owes, 7000);
+  assert.deepEqual([fromNov.owes, fromNov.items.length], [5000, 1]);
 });

@@ -15,6 +15,9 @@
 const SALARY_TAB = 'Staff Salary';
 const DEDUCTIONS_TAB = 'Advance Deductions';
 const PAYROLL_TAB = 'Payroll';
+// Advances are counted from this day: the first month the owner tracked them in the app
+// (older ones were settled by hand). Empty = count everything.
+const ADVANCES_FROM = '';
 const PAYROLL_HEADERS = ['Month', 'Name', 'Salary', 'Advance taken off', 'Commission', 'Pay', 'Marked paid'];
 
 const isAdvance = (r) => r.category === 'Salary' && /advance/i.test(r.notes || '');
@@ -77,35 +80,37 @@ function deductionsFromRows(values) {
 // For one month: each person's salary, advances taken that month, what they owe on payday
 // (all advances to the end of the month, less what earlier paydays took off), the amount
 // taken off this payday, and the pay. Advances whose note names nobody are listed apart.
-function advancesFor(rows, names, salaries, deductions, month) {
+// Every advance that makes up what a person owes is in their items (earlier months too), and
+// earlierCuts is what earlier paydays already took off, so the screen can show where the
+// total comes from. Advances before ADVANCES_FROM are not counted: tracking started then.
+function advancesFor(rows, names, salaries, deductions, month, from = ADVANCES_FROM) {
   const end = month + '-31';
-  const people = new Map(names.map((n) => [n, { name: n, salary: salaries[n] || 0, taken: 0, owesBefore: 0, deduct: 0, items: [] }]));
+  const people = new Map(names.map((n) => [n, { name: n, salary: salaries[n] || 0, taken: 0, owesBefore: 0, earlierCuts: 0, deduct: 0, items: [] }]));
   const unmatched = [];
   for (const r of rows) {
-    if (!isAdvance(r) || r.date > end) continue;
+    if (!isAdvance(r) || r.date > end || (from && r.date < from)) continue;
     const amount = (r.cashOut || 0) + (r.bankOut || 0);
     const name = nameInNote(r.notes, names);
     const p = people.get(name);
     if (!p) { if (r.date.slice(0, 7) === month) unmatched.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes }); continue; }
     p.owesBefore += amount;
-    if (r.date.slice(0, 7) === month) {
-      p.taken += amount;
-      p.items.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes });
-    }
+    const thisMonth = r.date.slice(0, 7) === month;
+    if (thisMonth) p.taken += amount;
+    p.items.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes, thisMonth });
   }
   for (const d of deductions) {
     const p = people.get(d.name);
     if (!p) continue;
-    if (d.month < month) p.owesBefore -= d.amount;
+    if (d.month < month && (!from || d.month >= from.slice(0, 7))) { p.owesBefore -= d.amount; p.earlierCuts += d.amount; }
     else if (d.month === month) p.deduct = d.amount;
   }
   const staff = [...people.values()].map((p) => {
     const owes = Math.max(0, p.owesBefore);
     const deduct = Math.min(p.deduct, owes);
-    return { name: p.name, salary: p.salary, taken: p.taken, owes, deduct, pay: Math.max(0, p.salary - deduct), owesAfter: owes - deduct,
+    return { name: p.name, salary: p.salary, taken: p.taken, owes, earlierCuts: p.earlierCuts, deduct, pay: Math.max(0, p.salary - deduct), owesAfter: owes - deduct,
       items: p.items.sort((a, b) => (a.date < b.date ? -1 : 1)) };
   });
   return { month, staff, unmatched };
 }
 
-module.exports = { SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };
+module.exports = { ADVANCES_FROM, SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };
