@@ -260,8 +260,19 @@ function esc(s) { const el = document.createElement('span'); el.textContent = s;
 $('refreshBtn').addEventListener('click', () => { TX = null; loadDashboard(); });
 
 // ---- Bicasso bank sales: card / QR money from the Retail Sale rows (Bank In) of
-// Bicasso 1 and 2, for the dates picked. Defaults to this month so far. ----
+// Bicasso 1 and 2, for the dates picked. Defaults to this month so far. Each day also shows
+// what the bank actually paid in for it (typed by the owner, "Bank Deposits" tab) and the fee
+// the bank kept; the usual fee % is learned from the days entered (api/_cardfees.js). ----
 const BANK_SHOPS = ['Bicasso 1', 'Bicasso 2'];
+// Does the bank's card deposit also pay the QR / PromptPay money? If not, QR arrives on its
+// own and the fee is worked out on card sales only.
+const DEPOSIT_WITH_QR = false;
+const FLAG_POINTS = 0.5, MIN_FLAG_BAHT = 20, MIN_RATE_DAYS = 3;
+const fmt2 = (n) => (n < 0 ? '−฿' : '฿') + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const pct = (n) => (n == null ? '—' : `${n.toFixed(2)}%`);
+let BANK_DEPOSITS = {};
+let BANK_SPLIT = new Map();   // date -> { card, qr } from the Loyverse receipts
+let BANK_SEQ = 0;
 function initBankCard() {
   if (!$('bankFrom').value) {
     const now = new Date();
@@ -270,15 +281,49 @@ function initBankCard() {
   }
   loadBankCard();
 }
+// Same rules as feeSummary in api/_cardfees.js (tested there): change both together
+function bankFees(dates) {
+  const rows = dates.map((date) => {
+    const sp = BANK_SPLIT.get(date);
+    if (!sp) return { date, sales: null, received: BANK_DEPOSITS[date] ? BANK_DEPOSITS[date].amount : null, fee: null, pct: null };
+    const sales = Math.round((DEPOSIT_WITH_QR ? sp.card + sp.qr : sp.card) * 100) / 100;
+    const dep = BANK_DEPOSITS[date];
+    const received = dep ? dep.amount : null;
+    const fee = received == null ? null : Math.round((sales - received) * 100) / 100;
+    return { date, card: sp.card, qr: sp.qr, sales, received, fee, pct: received == null || !(sales > 0) ? null : (fee / sales) * 100 };
+  });
+  const ps = rows.filter((r) => r.pct != null && r.pct >= 0).map((r) => r.pct).sort((a, b) => a - b);
+  const m = Math.floor(ps.length / 2);
+  const rate = ps.length >= MIN_RATE_DAYS ? (ps.length % 2 ? ps[m] : (ps[m - 1] + ps[m]) / 2) : null;
+  for (const r of rows) {
+    r.expected = rate == null || !(r.sales > 0) ? null : r.sales * (1 - rate / 100);
+    r.flag = '';
+    if (r.received == null || r.fee == null) continue;
+    if (r.fee < -0.5) r.flag = 'more';
+    else if (rate != null && r.pct - rate > FLAG_POINTS && r.received < r.expected - MIN_FLAG_BAHT) r.flag = 'short';
+  }
+  return { rows: new Map(rows.map((r) => [r.date, r])), rate };
+}
+function feeLine(f) {
+  if (!f || f.sales == null) return f && f.received != null ? `<span class="sub">bank paid ${fmt2(f.received)}</span>` : '';
+  const split = `card ${fmt(f.card)} · QR ${fmt(f.qr)}`;
+  if (f.received == null) return `<span class="sub">${split} · bank paid: not entered</span>`;
+  const cls = f.flag ? ' overdue' : '';
+  const why = f.flag === 'more' ? ' · bank paid more than sold, check the date'
+    : f.flag === 'short' ? ` · fee higher than usual, ${fmt2(f.expected - f.received)} short` : '';
+  return `<span class="sub">${split}</span><span class="sub${cls}">bank paid ${fmt2(f.received)} · fee ${fmt2(f.fee)} (${pct(f.pct)})${why}</span>`;
+}
 async function loadBankCard() {
   const r = { from: $('bankFrom').value || null, to: $('bankTo').value || null };
   if (r.from && r.to && r.from > r.to) {
     $('bankList').innerHTML = '<li><div class="row"><span class="name sub overdue">The first date must be before the second</span></div></li>';
-    $('bankTotal').textContent = '—'; $('bankDays').textContent = ''; $('bankDaily').hidden = true;
+    $('bankTotal').textContent = '—'; $('bankDays').textContent = ''; $('bankDaily').hidden = true; $('bankFees').hidden = true;
     return;
   }
   $('bankList').innerHTML = '<li><div class="row"><span class="name sub">Loading…</span></div></li>';
   let tx;
+  // Deposits and the card / QR split load alongside; the sales show even if they fail.
+  const extras = loadBankExtras(r);
   try { tx = await loadTx(); } catch (err) {
     $('bankList').innerHTML = `<li><div class="row"><span class="name sub overdue">Could not load: ${esc(err.message)}</span></div></li>`;
     return;
@@ -297,18 +342,101 @@ async function loadBankCard() {
     <li><div class="row"><span class="name">${esc(s)}</span><span class="amount">${fmt(byShop[s])}</span></div></li>`).join('');
   $('bankTotal').textContent = fmt(total);
   $('bankDays').textContent = byDay.size ? `${byDay.size} day${byDay.size === 1 ? '' : 's'} with card sales` : 'no card sales in these dates';
-  const days = [...byDay].sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  $('bankDaily').hidden = !days.length;
-  BANK_DAYS = new Map(days);
-  $('bankDayList').innerHTML = days.map(([date, d]) => `
-    <li><details class="bank-day" data-date="${date}"><summary class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span></span>
-      <span class="amount">${fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></summary>
-      <ul class="rows bank-receipts"></ul></details></li>`).join('');
+  const seq = ++BANK_SEQ;   // the dates can change again before this finishes
+  BANK_DAYS = new Map([...byDay].sort((a, b) => (a[0] < b[0] ? 1 : -1)));
+  BANK_SPLIT = new Map(); BANK_DEPOSITS = {};
+  renderBankDays();
+  const x = await extras;
+  if (seq !== BANK_SEQ) return;
+  BANK_DEPOSITS = x.deposits; BANK_SPLIT = x.split;
+  renderBankDays(x.note);
 }
+// The bank deposits for the dates, and every card / QR receipt (to split card from QR).
+// Returns a note to show if something couldn't be loaded.
+async function loadBankExtras(r) {
+  const from = r.from || isoOf(new Date()), to = r.to || isoOf(new Date());
+  const notes = [];
+  let deposits = {};
+  const deps = api(`/api/bank-deposits?from=${from}&to=${to}`).then(async (resp) => {
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    deposits = data.deposits || {};
+  }).catch((err) => notes.push(`Could not load the bank deposits: ${err.message}`));
+  const splitMap = new Map();
+  const days = (Date.parse(to) - Date.parse(from)) / 86400000;
+  const split = days > 30
+    ? Promise.resolve(notes.push('Pick 31 days or fewer to see card vs QR and the bank fee'))
+    : api(`/api/card-receipts?from=${from}&to=${to}`).then(async (resp) => {
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Server error');
+      const byDate = new Map();
+      for (const l of data.receipts) {
+        const sp = splitMap.get(l.date) || { card: 0, qr: 0 };
+        sp.qr += l.qr || 0; sp.card += l.amount - (l.qr || 0);
+        splitMap.set(l.date, sp);
+        byDate.set(l.date, [...(byDate.get(l.date) || []), l]);
+      }
+      // the day lists below then open without asking Loyverse again
+      for (let d = from; d <= to; d = isoOf(new Date(Date.parse(d + 'T12:00:00') + 86400000))) {
+        if (!CARD_RECEIPTS.has(d)) CARD_RECEIPTS.set(d, Promise.resolve(byDate.get(d) || []));
+      }
+    }).catch((err) => notes.push(`Could not split card from QR (Loyverse): ${err.message}`));
+  await Promise.all([deps, split]);
+  return { note: notes.join(' · '), deposits, split: splitMap };
+}
+function renderBankDays(note) {
+  const dates = [...new Set([...BANK_DAYS.keys(), ...BANK_SPLIT.keys(), ...Object.keys(BANK_DEPOSITS)])].sort().reverse();
+  const { rows: fees, rate } = bankFees(dates);
+  const done = [...fees.values()].filter((f) => f.received != null && f.sales != null);
+  const sales = done.reduce((n, f) => n + f.sales, 0), received = done.reduce((n, f) => n + f.received, 0);
+  const flagged = done.filter((f) => f.flag).length;
+  $('bankFees').hidden = note === undefined;
+  $('bankFees').innerHTML = done.length ? `
+    <li><div class="row"><span class="name">${DEPOSIT_WITH_QR ? 'Card + QR' : 'Card'} sales<span class="sub">${done.length} day${done.length === 1 ? '' : 's'} with the bank deposit entered</span></span><span class="amount">${fmt2(sales)}</span></div></li>
+    <li><div class="row"><span class="name">Bank paid in</span><span class="amount">${fmt2(received)}</span></div></li>
+    <li><div class="row"><span class="name">Fee kept by the bank<span class="sub">${rate == null ? 'usual rate shows after 3 days' : `usual rate ${pct(rate)}`}${flagged ? ` · <span class="overdue">${flagged} day${flagged === 1 ? '' : 's'} to check</span>` : ''}</span></span><span class="amount">${fmt2(sales - received)} (${pct(sales > 0 ? (sales - received) / sales * 100 : null)})</span></div></li>`
+    : '<li><div class="row"><span class="name sub">Open a day below and type what the bank paid in for it, to see the fee</span></div></li>';
+  if (note) $('bankFees').innerHTML += `<li><div class="row"><span class="name sub overdue">${esc(note)}</span></div></li>`;
+  $('bankDaily').hidden = !dates.length;
+  $('bankDayList').innerHTML = dates.map((date) => {
+    const d = BANK_DAYS.get(date) || Object.fromEntries(BANK_SHOPS.map((s) => [s, 0]));
+    const f = fees.get(date);
+    const dep = BANK_DEPOSITS[date];
+    return `
+    <li><details class="bank-day" data-date="${date}"><summary class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span>${note === undefined ? '' : feeLine(f)}</span>
+      <span class="amount">${fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></summary>
+      <form class="deposit-form" data-date="${date}">
+        <label>Bank paid in for this day's ${DEPOSIT_WITH_QR ? 'card + QR' : 'card'} sales</label>
+        <div class="deposit-row"><span class="currency-wrap"><input type="number" inputmode="decimal" min="0" step="0.01" name="amount" placeholder="0.00" value="${dep ? dep.amount : ''}"></span>
+        <button type="submit" class="save-btn">Save</button></div>
+        <p class="rule-hint">Enter it on the sales day it pays for, even if it reached the bank a day or two later. Clear it and save to remove.</p>
+      </form>
+      <ul class="rows bank-receipts"></ul></details></li>`;
+  }).join('');
+}
+$('bankDayList').addEventListener('submit', async (e) => {
+  if (!e.target.matches('.deposit-form')) return;
+  e.preventDefault();
+  const form = e.target, date = form.dataset.date, btn = form.querySelector('button');
+  const amount = Number(form.amount.value || 0);
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const resp = await api('/api/bank-deposits', { method: 'POST', body: JSON.stringify({ date, amount }) });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    if (amount > 0) BANK_DEPOSITS[date] = { amount: Math.round(amount * 100) / 100, note: '' }; else delete BANK_DEPOSITS[date];
+    const open = [...$('bankDayList').querySelectorAll('.bank-day[open]')].map((x) => x.dataset.date);
+    renderBankDays('');
+    for (const d of open) { const det = $('bankDayList').querySelector(`.bank-day[data-date="${d}"]`); if (det) det.open = true; }
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Save';
+    alert('Could not save: ' + err.message);
+  }
+});
 
+let BANK_DAYS = new Map();
 // Tap a day: its single card / QR receipts, read live from Loyverse (the sheet keeps only
 // the day's total). Fetched once per day and kept until the page reloads.
-let BANK_DAYS = new Map();
 const CARD_RECEIPTS = new Map();
 async function loadCardReceipts(date) {
   if (CARD_RECEIPTS.has(date)) return CARD_RECEIPTS.get(date);

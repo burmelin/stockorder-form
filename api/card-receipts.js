@@ -12,9 +12,9 @@ function mockLines(from, to) {
   const out = [];
   for (let d = from; d <= to; d = addDays(d, 1)) {
     out.push(
-      { date: d, time: '11:42', shop: 'Bicasso 1', number: '1-1001', amount: 1200, methods: ['Card'], refund: false },
-      { date: d, time: '15:05', shop: 'Bicasso 1', number: '1-1002', amount: 850, methods: ['QR PromptPay'], refund: false },
-      { date: d, time: '19:30', shop: 'Bicasso 1', number: '1-1003', amount: 3350, methods: ['Card'], refund: false },
+      { date: d, time: '11:42', shop: 'Bicasso 1', number: '1-1001', amount: 1200, qr: 0, methods: ['Card'], refund: false },
+      { date: d, time: '15:05', shop: 'Bicasso 1', number: '1-1002', amount: 850, qr: 850, methods: ['QR PromptPay'], refund: false },
+      { date: d, time: '19:30', shop: 'Bicasso 1', number: '1-1003', amount: 3350, qr: 0, methods: ['Card'], refund: false },
     );
   }
   return out;
