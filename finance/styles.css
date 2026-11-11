@@ -357,6 +357,7 @@ button, input, select, textarea { font-family: inherit; }
 .pay-one:disabled { opacity: .6; }
 .adv-form { margin-top: 10px; }
 .adv-missing { margin: 8px 0 0; }
+.adv-owner { display: block; margin-top: 6px; height: 36px; border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 0 8px; font-size: 14px; max-width: 100%; }
 .adv-owes-row { font-weight: 600; border-bottom: 1.5px solid var(--line); }
 .more { margin-top: 8px; }
 .more summary { cursor: pointer; color: var(--blue); font-size: 14px; font-weight: 600; padding: 6px 0; }

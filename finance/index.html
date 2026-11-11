@@ -311,7 +311,7 @@
     <ul id="advList" class="rows"></ul>
 
     <details class="more" id="advAddBox">
-      <summary>Add an advance you paid</summary>
+      <summary>Add an advance</summary>
       <form id="advForm" class="form adv-form" autocomplete="off">
         <label><span>Person</span><select id="advName" required></select></label>
         <label><span>Amount</span><input type="number" inputmode="numeric" min="1" step="1" id="advAmount" required></label>
@@ -320,13 +320,14 @@
           <select id="advFrom">
             <option value="cash">Cash at Palladium</option>
             <option value="bank">Bank transfer</option>
+            <option value="earlier">Before November, still owed (no cash now)</option>
           </select>
         </label>
         <button type="submit" id="advSave" class="save-btn">Save advance</button>
       </form>
       <div id="advToast" class="toast" hidden></div>
     </details>
-    <p class="rule-hint comm-note">An advance from a shop drawer comes in by itself: staff type the name and "Advance" as the Loyverse pay-out note, e.g. <em>Kumar Advance</em>. It counts as salary on the day it's paid. Salaries and advance cuts are saved in the finance sheet (tabs "Staff Salary" and "Advance Deductions").</p>
+    <p class="rule-hint comm-note">An advance from a shop drawer comes in by itself: staff type the person's name and "Advance" as the Loyverse pay-out note, e.g. <em>Kumar Giri Advance</em> (a name two people share, like "Kumar", shows as Whose advance? for you to pick). It counts as salary on the day it's paid. Advances are counted from 1 November 2026; for an older one still owed, use Add an advance → Before November. Salaries and advance cuts are saved in the finance sheet (tabs "Staff Salary" and "Advance Deductions").</p>
   </section>
 
 </main>

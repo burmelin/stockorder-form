@@ -30,7 +30,7 @@ test('advances: owed carries over, the deduction is what the owner typed', () =>
   const salaries = salariesFromRows([['Kumar Giri', '15,000'], ['Sunil GTM', 12000]]);
   const deductions = deductionsFromRows([['2026-10', 'Kumar Giri', 4000], ['2026-11', 'Kumar Giri', 1500], ['bad', 'x', 1]]);
 
-  const nov = advancesFor(rows, NAMES, salaries, deductions, '2026-11');
+  const nov = advancesFor(rows, NAMES, salaries, deductions, '2026-11', '');
   const k = nov.staff.find((s) => s.name === 'Kumar Giri');
   // 3000 + 2000 + 1000 taken, 4000 taken off in October
   assert.deepEqual([k.salary, k.taken, k.owes, k.deduct, k.pay, k.owesAfter], [15000, 1000, 2000, 1500, 13500, 500]);
@@ -41,7 +41,7 @@ test('advances: owed carries over, the deduction is what the owner typed', () =>
   const s = nov.staff.find((x) => x.name === 'Sunil GTM');
   assert.deepEqual([s.salary, s.owes, s.pay], [12000, 0, 12000]);
 
-  const oct = advancesFor(rows, NAMES, salaries, deductions, '2026-10');
+  const oct = advancesFor(rows, NAMES, salaries, deductions, '2026-10', '');
   const ko = oct.staff.find((x) => x.name === 'Kumar Giri');
   assert.deepEqual([ko.taken, ko.owes, ko.deduct, ko.pay], [5000, 5000, 4000, 11000]);
 });
@@ -84,4 +84,26 @@ test('advances: only advances from the start day count', () => {
   const fromNov = advancesFor(rows, NAMES, {}, [], '2026-11', '2026-11-01').staff.find((x) => x.name === 'Kumar Giri');
   assert.equal(all.owes, 7000);
   assert.deepEqual([fromNov.owes, fromNov.items.length], [5000, 1]);
+});
+
+test('advances: a name that could be two people waits for the owner to pick', () => {
+  const names = ['Kumar Giri', 'Sub Kumar', 'Sunil', 'Sunil GTM'];
+  assert.equal(nameInNote('Kumar advance', names), '');
+  assert.equal(nameInNote('Sib Kumar November Advance', names), '');
+  assert.equal(nameInNote('Sub Kumar advance', names), 'Sub Kumar');
+  assert.equal(nameInNote('Kumar Giri advance', names), 'Kumar Giri');
+  assert.equal(nameInNote('Sunil advance', names), '');
+  assert.equal(nameInNote('Sunil GTM advance', names), 'Sunil GTM');
+  const { advanceKey, ownersFromRows, openingsFromRows } = require('../api/_advances');
+  const rows = [adv(640, '2026-11-07', 'Sib Kumar November Advance · 21:14', 2000, { shop: 'Nana' }), adv(660, '2026-11-10', 'Kumar advance · 21:01', 5000, { shop: 'Bicasso 2' })];
+  const before = advancesFor(rows, names, {}, [], '2026-11');
+  assert.deepEqual(before.unmatched.map((u) => u.row), [640, 660]);
+  const owners = ownersFromRows([[advanceKey(rows[0]), 'Sub Kumar'], [advanceKey(rows[1]), 'Kumar Giri']]);
+  const openings = openingsFromRows([['2026-10-15', 'Kumar Giri', '1,000', 'October advance'], ['', '', 5]]);
+  const after = advancesFor(rows, names, {}, [], '2026-11', '2026-11-01', { owners, openings });
+  assert.equal(after.unmatched.length, 0);
+  assert.equal(after.staff.find((p) => p.name === 'Sub Kumar').owes, 2000);
+  const k = after.staff.find((p) => p.name === 'Kumar Giri');
+  assert.equal(k.owes, 6000);
+  assert.ok(k.items.some((i) => i.earlier && i.amount === 1000));
 });
