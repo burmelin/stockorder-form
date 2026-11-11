@@ -267,7 +267,8 @@ const BANK_SHOPS = ['Bicasso 1', 'Bicasso 2'];
 // Does the bank's card deposit also pay the QR / PromptPay money? If not, QR arrives on its
 // own and the fee is worked out on card sales only.
 const DEPOSIT_WITH_QR = false;
-const FLAG_POINTS = 0.5, MIN_FLAG_BAHT = 20, MIN_RATE_DAYS = 3;
+// KBank's dearest card (foreign platinum+, 3.15%) plus 7% VAT: a fee above this is wrong
+const MAX_FEE_PCT = 3.15 * 1.07, MIN_FLAG_BAHT = 20, MIN_RATE_DAYS = 3;
 const fmt2 = (n) => (n < 0 ? '−฿' : '฿') + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = (n) => (n == null ? '—' : `${n.toFixed(2)}%`);
 let BANK_DEPOSITS = {};
@@ -300,7 +301,7 @@ function bankFees(dates) {
     r.flag = '';
     if (r.received == null || r.fee == null) continue;
     if (r.fee < -0.5) r.flag = 'more';
-    else if (rate != null && r.pct - rate > FLAG_POINTS && r.received < r.expected - MIN_FLAG_BAHT) r.flag = 'short';
+    else if (r.received < r.sales * (1 - MAX_FEE_PCT / 100) - MIN_FLAG_BAHT) { r.flag = 'short'; r.short = r.sales * (1 - MAX_FEE_PCT / 100) - r.received; }
   }
   return { rows: new Map(rows.map((r) => [r.date, r])), rate };
 }
@@ -310,7 +311,7 @@ function feeLine(f) {
   if (f.received == null) return `<span class="sub">${split} · bank paid: not entered</span>`;
   const cls = f.flag ? ' overdue' : '';
   const why = f.flag === 'more' ? ' · bank paid more than sold, check the date'
-    : f.flag === 'short' ? ` · fee higher than usual, ${fmt2(f.expected - f.received)} short` : '';
+    : f.flag === 'short' ? ` · more than any card fee (max 3.37%), ${fmt2(f.short)} short` : '';
   return `<span class="sub">${split}</span><span class="sub${cls}">bank paid ${fmt2(f.received)} · fee ${fmt2(f.fee)} (${pct(f.pct)})${why}</span>`;
 }
 async function loadBankCard() {

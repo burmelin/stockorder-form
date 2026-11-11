@@ -39,19 +39,21 @@ test('fee per day, usual rate, and the days flagged', () => {
     { date: '2026-11-08', card: 10000, qr: 0 },
     { date: '2026-11-09', card: 10000, qr: 2000 },
     { date: '2026-11-10', card: 42530, qr: 0 },
-    { date: '2026-11-11', card: 10000, qr: 0 },   // fee far above usual
+    { date: '2026-11-11', card: 10000, qr: 0 },   // 5% fee: more than any card costs
+    { date: '2026-11-14', card: 10000, qr: 0 },   // 3.3%: dear premium cards, not wrong
     { date: '2026-11-12', card: 5000, qr: 0 },    // paid more than sold
     { date: '2026-11-13', card: 7000, qr: 0 },    // nothing entered
   ];
   const deps = {
     '2026-11-08': { amount: 9713 }, '2026-11-09': { amount: 9713 }, '2026-11-10': { amount: 41307.88 },
-    '2026-11-11': { amount: 9500 }, '2026-11-12': { amount: 6000 },
+    '2026-11-11': { amount: 9500 }, '2026-11-12': { amount: 6000 }, '2026-11-14': { amount: 9670 },
   };
   const s = feeSummary(days, deps);
   const by = Object.fromEntries(s.days.map((d) => [d.date, d]));
   assert.equal(by['2026-11-10'].fee, 1222.12);
   assert.equal(by['2026-11-10'].pct.toFixed(2), '2.87');
-  assert.equal(s.rate.toFixed(2), '2.87');               // median of 2.87, 2.87, 2.87, 5
+  assert.equal(s.rate.toFixed(2), '2.87');               // median of 2.87, 2.87, 2.87, 3.3, 5
+  assert.equal(by['2026-11-14'].flag, '');
   assert.equal(by['2026-11-10'].flag, '');
   assert.equal(by['2026-11-11'].flag, 'short');
   assert.equal(by['2026-11-12'].flag, 'more');
@@ -59,9 +61,9 @@ test('fee per day, usual rate, and the days flagged', () => {
   assert.equal(by['2026-11-13'].flag, '');
   // QR counted in when the deposit pays it too
   assert.equal(feeSummary(days, deps, { withQr: true }).days[1].sales, 12000);
-  assert.equal(s.totals.days, 5);
-  // two days entered: too few to know the usual rate, so nothing is flagged short
+  assert.equal(s.totals.days, 6);
+  // two days entered: too few to show a usual rate, but an impossible fee is still flagged
   const two = feeSummary(days.slice(2, 4), deps);
   assert.equal(two.rate, null);
-  assert.deepEqual(two.days.map((d) => d.flag), ['', '']);
+  assert.deepEqual(two.days.map((d) => d.flag), ['', 'short']);
 });

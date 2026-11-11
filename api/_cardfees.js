@@ -1,13 +1,15 @@
 // Bicasso card fees: what the bank actually paid in for each day's card sales, kept in the
 // finance sheet's "Bank Deposits" tab (Date | Amount | Note), against what Loyverse says was
-// sold. The bank keeps a fee (a percent plus VAT) that nobody has told us, so the rate is
-// learned from the days already entered: the median fee % of the range. A day whose fee is
-// well above that, or where the bank paid more than was sold, is flagged to check.
+// sold. KBank's published EDC rates (MDR, plus 7% VAT on the fee) run from 0.55% (Thai
+// debit) to 3.15% (foreign platinum credit), and Loyverse doesn't say which card was used,
+// so each day's fee is a mix. The usual rate is learned from the days entered (median). A day
+// is flagged only when the bank took more than even the dearest card costs, or paid in more
+// than was sold, since a day of mostly premium foreign cards is dearer but not wrong.
 const DEPOSITS_TAB = 'Bank Deposits';
 const DEPOSIT_HEADERS = ['Date', 'Amount', 'Note'];
-const FLAG_POINTS = 0.5;   // flag a day whose fee % is this many points above the usual rate
-const MIN_FLAG_BAHT = 20;  // ...and at least this many baht more than the usual rate would take
-const MIN_RATE_DAYS = 3;   // fewer days entered than this: no usual rate yet, so nothing is flagged short
+const MAX_FEE_PCT = 3.15 * 1.07;   // KBank's dearest card (foreign platinum+) with VAT: 3.37%
+const MIN_FLAG_BAHT = 20;          // ...and at least this many baht over it, so rounding never flags
+const MIN_RATE_DAYS = 3;           // fewer days entered than this: no usual rate shown yet
 
 const round2 = (n) => Math.round(n * 100) / 100;
 function money(v) {
@@ -62,7 +64,7 @@ function feeSummary(days, deposits, { withQr = false } = {}) {
     r.flag = '';
     if (r.received == null) continue;
     if (r.fee < -0.5) r.flag = 'more';   // paid more than was sold: wrong day, or two days in one deposit
-    else if (rate != null && r.pct - rate > FLAG_POINTS && r.received < r.expected - MIN_FLAG_BAHT) r.flag = 'short';
+    else if (r.received < r.sales * (1 - MAX_FEE_PCT / 100) - MIN_FLAG_BAHT) r.flag = 'short';   // more than any card costs
   }
   const done = rows.filter((r) => r.received != null);
   const totals = {
@@ -75,4 +77,4 @@ function feeSummary(days, deposits, { withQr = false } = {}) {
   return { days: rows, rate, totals };
 }
 
-module.exports = { DEPOSITS_TAB, DEPOSIT_HEADERS, money, depositsFromRows, upsertDeposit, feeSummary };
+module.exports = { MAX_FEE_PCT, DEPOSITS_TAB, DEPOSIT_HEADERS, money, depositsFromRows, upsertDeposit, feeSummary };
