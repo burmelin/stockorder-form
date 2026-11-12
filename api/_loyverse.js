@@ -158,8 +158,12 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
 }
 
 // One line per receipt that has a card / QR part (whatever dailyTotals counts as bank), for
-// the "Bicasso card sales" report: { date, time, shop, number, amount, methods, refund }.
+// the "Bicasso card sales" report: { date, time, shop, number, amount, qr, methods, refund }.
+// qr is the part paid by QR / PromptPay (amount includes it), so card = amount - qr.
 // Refunds come out negative, so the lines add up to the day's Bank In the import wrote.
+// A payment type that is QR / PromptPay rather than a card, by its Loyverse name
+function isQr(name) { return /\bqr\b|prompt\s*pay/i.test(String(name || '')); }
+
 function cardReceipts(receipts, storeShop, dates, tz = TIMEZONE) {
   const overrides = jsonMap('LOYVERSE_PAYMENT_MAP');
   const out = [];
@@ -170,17 +174,18 @@ function cardReceipts(receipts, storeShop, dates, tz = TIMEZONE) {
     if (!dates.has(date)) continue;
     const shop = storeShop.get(r.store_id);
     if (!shop) continue;
-    let bank = 0;
+    let bank = 0, qr = 0;
     const methods = [];
     for (const p of r.payments || []) {
       if (paymentKind(p, overrides) !== 'bank') continue;
       bank += num(p.money_amount);
       const name = String(p.name || p.type || 'Card').trim();
+      if (isQr(name)) qr += num(p.money_amount);
       if (!methods.includes(name)) methods.push(name);
     }
     if (!(bank > 0.005)) continue;
     const refund = r.receipt_type === 'REFUND';
-    out.push({ date, time: localTime(at, tz), at: new Date(at).getTime(), shop, number: r.receipt_number || '', amount: round2(refund ? -bank : bank), methods, refund });
+    out.push({ date, time: localTime(at, tz), at: new Date(at).getTime(), shop, number: r.receipt_number || '', amount: round2(refund ? -bank : bank), qr: round2(refund ? -qr : qr), methods, refund });
   }
   out.sort((a, b) => a.at - b.at);
   return out.map(({ at, ...x }) => x);
@@ -399,4 +404,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, planSync, planMovements, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, planSync, planMovements, loyverseClash, payoutClash };

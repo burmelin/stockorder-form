@@ -368,6 +368,16 @@ button, input, select, textarea { font-family: inherit; }
 .bank-receipts { margin: 0 0 8px 18px; padding-left: 10px; border-left: 2px solid var(--sunk); }
 .bank-receipts .row { font-size: 13px; padding: 6px 0; }
 .bank-receipts .amount.overdue { color: var(--bad); }
+.bank-day .sub.overdue, .bank-fees .overdue { color: var(--bad); }
+.bank-fees { margin-top: 10px; padding-top: 6px; border-top: 1px solid var(--sunk); }
+.deposit-form { margin: 4px 0 10px 18px; }
+.deposit-form label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.deposit-row { display: flex; gap: 8px; }
+.deposit-row .currency-wrap { flex: 1; min-width: 0; position: relative; }
+.deposit-row .currency-wrap::before { content: '฿'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--stone); }
+.deposit-row input { width: 100%; padding: 11px 12px 11px 28px; font-size: 16px; border: 1.5px solid var(--sunk); border-radius: 8px; text-align: right; }
+.deposit-row .save-btn { width: auto; padding: 11px 18px; font-size: 15px; }
+.deposit-form .rule-hint { margin: 6px 0 0; font-size: 12px; }
 
 /* ---------- reports ---------- */
 .stmt-controls .lv-range { margin-bottom: 10px; }
