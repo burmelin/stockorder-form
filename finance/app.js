@@ -306,9 +306,11 @@ function bankFees(dates) {
   });
   return new Map(rows.map((r) => [r.date, r]));
 }
-function feeLine(f) {
+// dayTotal: the day's card + QR sales (Bank In). QR lands in the bank with no fee, so the
+// estimated bank in is that total less the card fee.
+function feeLine(f, dayTotal) {
   if (!f || f.sales == null) return f && f.received != null ? `<span class="sub">bank paid ${fmt2(f.received)}</span>` : '';
-  const split = `card ${fmt(f.card)} · QR ${fmt(f.qr)} · est. bank in ${fmt2(f.expected)}`;
+  const split = `card ${fmt(f.card)} · QR ${fmt(f.qr)} · fee −${fmt2(f.sales - f.expected)} · est. bank in ${fmt2(dayTotal - (f.sales - f.expected))}`;
   if (f.received == null) return `<span class="sub">${split}</span>`;
   const cls = f.flag ? ' overdue' : '';
   const why = f.flag === 'more' ? ' · bank paid more than sold, check the date'
@@ -392,7 +394,10 @@ function renderBankDays(note) {
   const fees = bankFees(dates);
   const all = [...fees.values()].filter((f) => f.sales != null);
   const sum = (xs, k) => xs.reduce((n, f) => n + f[k], 0);
-  const sales = sum(all, 'sales'), expected = sum(all, 'expected');
+  const sales = sum(all, 'sales'), fee = sales - sum(all, 'expected');
+  const dayTotal = (date) => { const d = BANK_DAYS.get(date); return d ? BANK_SHOPS.reduce((n, s) => n + d[s], 0) : 0; };
+  // the card + QR total shown above, for the days whose card / QR split is known
+  const total = all.reduce((n, f) => n + dayTotal(f.date), 0);
   const checked = all.filter((f) => f.received != null);
   const flagged = checked.filter((f) => f.flag).length;
   const rateNote = BANK_RATE.days
@@ -400,10 +405,9 @@ function renderBankDays(note) {
     : `${pct(BANK_RATE.rate)}, from 10 Nov until you check a day`;
   $('bankFees').hidden = note === undefined;
   $('bankFees').innerHTML = all.length ? `
-    <li><div class="row"><span class="name">${DEPOSIT_WITH_QR ? 'Card + QR' : 'Card'} sales</span><span class="amount">${fmt2(sales)}</span></div></li>
-    <li><div class="row"><span class="name">Bank fee (estimated)<span class="sub">${rateNote}</span></span><span class="amount">−${fmt2(sales - expected)}</span></div></li>
-    <li><div class="row total-row"><span class="name">Bank in (estimated)<span class="sub">compare with the bank for the same dates</span></span><strong>${fmt2(expected)}</strong></div></li>
-    ${checked.length ? `<li><div class="row"><span class="name">Checked with the bank<span class="sub">${checked.length} day${checked.length === 1 ? '' : 's'} · estimate was ${fmt2(sum(checked, 'expected'))}${flagged ? ` · <span class="overdue">${flagged} day${flagged === 1 ? '' : 's'} to check</span>` : ''}</span></span><span class="amount">${fmt2(sum(checked, 'received'))}</span></div></li>` : ''}`
+    <li><div class="row"><span class="name">Card fee (estimated)<span class="sub">${rateNote} · on card ${fmt(sales)}, QR has no fee</span></span><span class="amount">−${fmt2(fee)}</span></div></li>
+    <li><div class="row total-row"><span class="name">Bank in (estimated)<span class="sub">${fmt2(total)} sales − ${fmt2(fee)} fee</span></span><strong>${fmt2(total - fee)}</strong></div></li>
+    ${checked.length ? `<li><div class="row"><span class="name">Card deposits checked<span class="sub">${checked.length} day${checked.length === 1 ? '' : 's'} · card estimate was ${fmt2(sum(checked, 'expected'))}${flagged ? ` · <span class="overdue">${flagged} day${flagged === 1 ? '' : 's'} to check</span>` : ''}</span></span><span class="amount">${fmt2(sum(checked, 'received'))}</span></div></li>` : ''}`
     : '<li><div class="row"><span class="name sub">No card sales in these dates</span></div></li>';
   if (note) $('bankFees').innerHTML += `<li><div class="row"><span class="name sub overdue">${esc(note)}</span></div></li>`;
   $('bankDaily').hidden = !dates.length;
@@ -412,10 +416,10 @@ function renderBankDays(note) {
     const f = fees.get(date);
     const dep = BANK_DEPOSITS[date];
     return `
-    <li><details class="bank-day" data-date="${date}"><summary class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span>${note === undefined ? '' : feeLine(f)}</span>
+    <li><details class="bank-day" data-date="${date}"><summary class="row"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span>${note === undefined ? '' : feeLine(f, BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span>
       <span class="amount">${fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></summary>
       <form class="deposit-form" data-date="${date}">
-        <label>Checked with the bank? What it paid in for this day (optional)</label>
+        <label>Checked with the bank? The card deposit for this day (optional)</label>
         <div class="deposit-row"><span class="currency-wrap"><input type="number" inputmode="decimal" min="0" step="0.01" name="amount" placeholder="0.00" value="${dep ? dep.amount : ''}"></span>
         <button type="submit" class="save-btn">Save</button></div>
         <p class="rule-hint">Only for days you checked. It makes the fee rate more accurate. Enter it on the sales day it pays for (the bank dates it 23:59 that day). Clear it and save to remove.</p>
