@@ -410,8 +410,11 @@ tbody tr:last-child td{border-bottom:none}
 .lv-decline{background:#fff;color:var(--bad);border:1.5px solid #EDCFCA}
 .lv-day{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #ECE8E1;font-size:.88rem;color:var(--ink)}
 .lv-day:last-child{border-bottom:none}
+.lv-today{border-left:4px solid var(--brass)}
+.lv-today .lv-day{font-weight:600}
 .lv-day-date{width:92px;flex-shrink:0;font-weight:700}
-.lv-day i{color:var(--bad);font-style:normal;font-size:.78rem}
+.lv-day i{color:var(--stone);font-style:normal;font-size:.78rem;font-weight:400}
+.lv-day i.sick{color:var(--bad)}
 .app-store-tag:empty{display:none}
 .pal-mode .btn-leave{display:none}   /* warehouse staff don't take leave */
 .btn-leave{background:none;border:1px solid rgba(255,255,255,.28);color:rgba(255,255,255,.85);padding:6px 12px;border-radius:6px;font-size:.78rem;font-weight:600;cursor:pointer}
@@ -3110,17 +3113,24 @@ function ownerRender() {
       + '<div class="lv-actions"><button class="lv-decline" onclick="ownerDecide(\'' + lvEsc(q.id) + '\', \'decline\', this)">Decline</button>'
       + '<button class="lv-approve" onclick="ownerDecide(\'' + lvEsc(q.id) + '\', \'approve\', this)">Approve</button></div></div>';
   }).join('') : '<div class="card"><div class="hist-empty" style="padding:4px 0">Nothing waiting. New requests also arrive by email.</div></div>';
-  // Who's off, day by day
+  // Who's off today, then day by day after today (today is the shop's date, Bangkok time, from the server)
   var days = {};
   upcoming.forEach(function(q) { q.dates.forEach(function(d) { if (d >= today) (days[d] = days[d] || []).push(q); }); });
-  var dayKeys = Object.keys(days).sort();
+  var who = function(list) {
+    return list.map(function(q) {
+      return lvEsc(q.name) + (q.type === 'sick' ? ' <i class="sick">(sick)</i>' : '')
+        + (q.half ? ' <i>(' + (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() + (q.time ? ' ' + q.time : '') + ')</i>' : '');
+    }).join(', ');
+  };
+  if (days[today]) {
+    h += '<div class="lv-title">Off today · ' + lvDay(today) + '</div><div class="card lv-today">'
+      + days[today].map(function(q) { return '<div class="lv-day"><span>' + who([q]) + '</span></div>'; }).join('')
+      + '</div>';
+  }
+  var dayKeys = Object.keys(days).filter(function(d) { return d > today; }).sort();
   h += '<div class="lv-title">Coming up</div><div class="card">'
     + (dayKeys.length ? dayKeys.map(function(d) {
-        return '<div class="lv-day"><span class="lv-day-date">' + lvDay(d) + '</span><span>'
-          + days[d].map(function(q) {
-              var tags = [q.type === 'sick' ? 'sick' : '', q.half ? (LEAVE_HALF_LABEL[q.half] || '').toLowerCase() + (q.time ? ' ' + q.time : '') : ''].filter(Boolean);
-              return lvEsc(q.name) + (tags.length ? ' <i>(' + tags.join(', ') + ')</i>' : '');
-            }).join(', ') + '</span></div>';
+        return '<div class="lv-day"><span class="lv-day-date">' + lvDay(d) + '</span><span>' + who(days[d]) + '</span></div>';
       }).join('') : '<div class="hist-empty" style="padding:4px 0">Nobody is off in the coming days.</div>')
     + '</div>';
   h += '<div class="lv-title">Recent</div><div class="card">'
