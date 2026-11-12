@@ -161,8 +161,9 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
 // the "Bicasso card sales" report: { date, time, shop, number, amount, qr, methods, refund }.
 // qr is the part paid by QR / PromptPay (amount includes it), so card = amount - qr.
 // Refunds come out negative, so the lines add up to the day's Bank In the import wrote.
-// A payment type that is QR / PromptPay rather than a card, by its Loyverse name
-function isQr(name) { return /\bqr\b|prompt\s*pay/i.test(String(name || '')); }
+// A payment type that is QR / PromptPay rather than a card, by its Loyverse name. The shops'
+// "SCAN" type is a PromptPay QR scan (owner, 12 Nov 2026).
+function isQr(name) { return /\bqr\b|prompt\s*pay|^\s*scan\s*$/i.test(String(name || '')); }
 
 function cardReceipts(receipts, storeShop, dates, tz = TIMEZONE) {
   const overrides = jsonMap('LOYVERSE_PAYMENT_MAP');

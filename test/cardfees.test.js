@@ -5,8 +5,8 @@ const { depositsFromRows, upsertDeposit, feeSummary, learnedRate, money, DEFAULT
 const { cardReceipts, isQr } = require('../api/_loyverse');
 
 test('QR / PromptPay payment names are told apart from cards', () => {
-  for (const n of ['QR PromptPay', 'QR', 'PromptPay', 'Thai QR']) assert.ok(isQr(n), n);
-  for (const n of ['Card', 'Visa', 'Credit card', 'Transfer']) assert.ok(!isQr(n), n);
+  for (const n of ['QR PromptPay', 'QR', 'PromptPay', 'Thai QR', 'SCAN', 'Scan']) assert.ok(isQr(n), n);
+  for (const n of ['Card', 'Visa', 'Credit card', 'Transfer', 'Scan card']) assert.ok(!isQr(n), n);
 });
 
 test('card receipts carry the QR part separately', () => {
