@@ -9,7 +9,7 @@
 // than was sold, since a day of mostly premium foreign cards is dearer but not wrong.
 const DEPOSITS_TAB = 'Bank Deposits';
 const DEPOSIT_HEADERS = ['Date', 'Amount', 'Note', 'Card sales'];
-const DEFAULT_RATE = 2.87;         // 10 Nov 2026: card ฿42,530, bank paid ฿41,307.88
+const DEFAULT_RATE = 2.89;         // real 10-11 Nov 2026: 2.874% and 2.899% (card ฿42,530 / ฿20,450)
 const MAX_FEE_PCT = 3.15 * 1.07;   // KBank's dearest card (foreign platinum+) with VAT: 3.37%
 const MIN_FLAG_BAHT = 20;          // ...and at least this many baht over it, so rounding never flags
 
