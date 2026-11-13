@@ -15,6 +15,13 @@
 const SALARY_TAB = 'Staff Salary';
 const DEDUCTIONS_TAB = 'Advance Deductions';
 const PAYROLL_TAB = 'Payroll';
+const OWNERS_TAB = 'Advance Names';      // Key (date|shop|note) | Name: whose advance, picked by the owner
+const OPENING_TAB = 'Advance Opening';   // Date | Name | Amount | Note: advances from before tracking
+const advanceKey = (r) => [r.date, r.shop, r.notes || ''].join('|');
+// Advances in Master Entry are counted from this day, when the owner started tracking them in
+// the app. Older advances still owed are added by hand as "earlier" advances (tab "Advance
+// Opening", no cash moves). Empty = count everything.
+const ADVANCES_FROM = '2026-11-01';
 const PAYROLL_HEADERS = ['Month', 'Name', 'Salary', 'Advance taken off', 'Commission', 'Pay', 'Marked paid'];
 
 const isAdvance = (r) => r.category === 'Salary' && /advance/i.test(r.notes || '');
@@ -27,9 +34,15 @@ function nameInNote(note, names) {
   const w = words(note);
   const has = (seq) => w.some((_, i) => seq.every((s, j) => w[i + j] === s));
   const full = names.filter((n) => has(words(n))).sort((a, b) => words(b).length - words(a).length);
-  if (full.length) return full[0];
+  // A name that is part of someone else's longer name ("Sunil" and "Sunil GTM") is not enough
+  const inside = (n) => names.some((m) => m !== n && !full.includes(m) && words(n).every((x) => words(m).includes(x)));
+  if (full.length) return inside(full[0]) ? '' : full[0];
+  // First name only, when no other staff name has that word ("Kumar" with Kumar Giri and Sub
+  // Kumar could be either: the owner picks in Finance)
   const first = names.filter((n) => words(n).length && w.includes(words(n)[0]));
-  return first.length === 1 ? first[0] : '';
+  if (first.length !== 1) return '';
+  const fw = words(first[0])[0];
+  return names.some((m) => m !== first[0] && words(m).includes(fw)) ? '' : first[0];
 }
 
 // Everyone in the Stock sheet's Staff tab (shops and Palladium), in sheet order
@@ -57,6 +70,16 @@ function upsertPayroll(values, month, people, paidAt) {
   return [PAYROLL_HEADERS, ...[...keep, ...rows].sort((a, b) => String(a[0]).localeCompare(String(b[0])))];
 }
 
+function ownersFromRows(values) {
+  const out = {};
+  for (const r of values) if (String(r[0] || '').trim() && String(r[1] || '').trim()) out[String(r[0]).trim()] = String(r[1]).trim();
+  return out;
+}
+function openingsFromRows(values) {
+  return values.map((r) => ({ date: /^\d{4}-\d{2}-\d{2}$/.test(String(r[0] || '').trim()) ? String(r[0]).trim() : '', name: String(r[1] || '').trim(), amount: money(r[2]), note: String(r[3] || '').trim() }))
+    .filter((o) => o.name && o.amount);
+}
+
 function salariesFromRows(values) {
   const out = {};
   for (const r of values) {
@@ -77,35 +100,45 @@ function deductionsFromRows(values) {
 // For one month: each person's salary, advances taken that month, what they owe on payday
 // (all advances to the end of the month, less what earlier paydays took off), the amount
 // taken off this payday, and the pay. Advances whose note names nobody are listed apart.
-function advancesFor(rows, names, salaries, deductions, month) {
+// Every advance that makes up what a person owes is in their items (earlier months too), and
+// earlierCuts is what earlier paydays already took off, so the screen can show where the
+// total comes from. Advances before ADVANCES_FROM are not counted: tracking started then.
+function advancesFor(rows, names, salaries, deductions, month, from = ADVANCES_FROM, extra = {}) {
+  const owners = extra.owners || {}, openings = extra.openings || [];
   const end = month + '-31';
-  const people = new Map(names.map((n) => [n, { name: n, salary: salaries[n] || 0, taken: 0, owesBefore: 0, deduct: 0, items: [] }]));
+  const people = new Map(names.map((n) => [n, { name: n, salary: salaries[n] || 0, taken: 0, owesBefore: 0, earlierCuts: 0, deduct: 0, items: [] }]));
   const unmatched = [];
   for (const r of rows) {
-    if (!isAdvance(r) || r.date > end) continue;
+    if (!isAdvance(r) || r.date > end || (from && r.date < from)) continue;
     const amount = (r.cashOut || 0) + (r.bankOut || 0);
-    const name = nameInNote(r.notes, names);
+    const picked = owners[advanceKey(r)];
+    const name = picked && names.includes(picked) ? picked : nameInNote(r.notes, names);
     const p = people.get(name);
-    if (!p) { if (r.date.slice(0, 7) === month) unmatched.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes }); continue; }
+    if (!p) { unmatched.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes, key: advanceKey(r) }); continue; }
     p.owesBefore += amount;
-    if (r.date.slice(0, 7) === month) {
-      p.taken += amount;
-      p.items.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes });
-    }
+    const thisMonth = r.date.slice(0, 7) === month;
+    if (thisMonth) p.taken += amount;
+    p.items.push({ row: r.row, date: r.date, shop: r.shop, amount, notes: r.notes, thisMonth });
+  }
+  for (const o of openings) {
+    const p = people.get(o.name);
+    if (!p || !o.amount || (o.date && o.date > end)) continue;
+    p.owesBefore += o.amount;
+    p.items.push({ row: 0, date: o.date, shop: 'Before tracking', amount: o.amount, notes: o.note || 'earlier advance', thisMonth: false, earlier: true });
   }
   for (const d of deductions) {
     const p = people.get(d.name);
     if (!p) continue;
-    if (d.month < month) p.owesBefore -= d.amount;
+    if (d.month < month && (!from || d.month >= from.slice(0, 7))) { p.owesBefore -= d.amount; p.earlierCuts += d.amount; }
     else if (d.month === month) p.deduct = d.amount;
   }
   const staff = [...people.values()].map((p) => {
     const owes = Math.max(0, p.owesBefore);
     const deduct = Math.min(p.deduct, owes);
-    return { name: p.name, salary: p.salary, taken: p.taken, owes, deduct, pay: Math.max(0, p.salary - deduct), owesAfter: owes - deduct,
+    return { name: p.name, salary: p.salary, taken: p.taken, owes, earlierCuts: p.earlierCuts, deduct, pay: Math.max(0, p.salary - deduct), owesAfter: owes - deduct,
       items: p.items.sort((a, b) => (a.date < b.date ? -1 : 1)) };
   });
   return { month, staff, unmatched };
 }
 
-module.exports = { SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };
+module.exports = { ADVANCES_FROM, OWNERS_TAB, OPENING_TAB, advanceKey, ownersFromRows, openingsFromRows, SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, isAdvance, nameInNote, staffNamesFromRows, money, salariesFromRows, deductionsFromRows, advancesFor };

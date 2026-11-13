@@ -1414,14 +1414,26 @@ function renderAdvances() {
   }
   advTotal();
 
-  const items = a.staff.flatMap((p) => p.items.map((it) => ({ ...it, who: p.name })))
-    .concat(a.unmatched.map((it) => ({ ...it, who: '' })))
-    .sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : x.row - y.row));
-  $('advList').innerHTML = items.length ? items.map((it) => `
-    <li><div class="row"><span class="name">${it.who ? esc(it.who) : '<span class="overdue">Whose advance?</span>'}
-      <span class="sub ${it.who ? '' : 'overdue'}">${fmtDate(it.date)} · ${esc(it.shop)} · “${esc(String(it.notes).replace(/ · \d\d:\d\d$/, ''))}”${it.who ? '' : ` · no name found: fix the note in Master Entry row ${it.row}`}</span></span>
+  // Every advance behind what someone owes (earlier months too), what earlier paydays took
+  // off, and this month's advances with no name found
+  const line = (it) => (it.earlier
+    ? `${it.date ? fmtDate(it.date) + ' · ' : ''}from before tracking · “${esc(it.notes)}”`
+    : `${fmtDate(it.date)} · ${esc(it.shop)} · “${esc(String(it.notes).replace(/ · \d\d:\d\d$/, ''))}” · row ${it.row}`);
+  const owing = a.staff.filter((p) => p.owes || p.items.some((it) => it.thisMonth));
+  const html = owing.map((p) => p.items.map((it) => `
+    <li><div class="row"><span class="name">${esc(p.name)}<span class="sub">${line(it)}${it.thisMonth || it.earlier ? '' : ' · earlier month'}</span></span>
       <span class="amount">${fmt(it.amount)}</span></div></li>`).join('')
-    : '<li><div class="row"><span class="name sub">No advances this month.</span></div></li>';
+    + (p.earlierCuts ? `<li><div class="row"><span class="name">${esc(p.name)}<span class="sub">already taken off earlier paydays</span></span>
+      <span class="amount">−${fmt(p.earlierCuts)}</span></div></li>` : '')
+    + `<li><div class="row adv-owes-row"><span class="name">${esc(p.name)} owes</span><strong>${fmt(p.owes)}</strong></div></li>`).join('')
+    + a.unmatched.map((it) => `
+    <li><div class="row adv-who"><span class="name"><span class="overdue">Whose advance?</span>
+      <span class="sub overdue">${line(it)}</span>
+      <select class="adv-owner" data-key="${esc(it.key)}" aria-label="Whose advance is this?">
+        <option value="">Pick the person…</option>${a.staff.map((p) => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('')}
+      </select></span>
+      <span class="amount">${fmt(it.amount)}</span></div></li>`).join('');
+  $('advList').innerHTML = html || '<li><div class="row"><span class="name sub">Nobody owes an advance.</span></div></li>';
 
   const sel = $('advName');
   const was = sel.value;
@@ -1456,6 +1468,21 @@ function onSalaryInput(e) {
 }
 $('advStaff').addEventListener('input', onSalaryInput);
 
+// A note that doesn't say clearly whose advance it is: the owner picks the person once
+$('advList').addEventListener('change', async (e) => {
+  const el = e.target.closest('.adv-owner');
+  if (!el || !el.value || !ADV) return;
+  el.disabled = true;
+  try {
+    await saveJSON('/api/advances', 'POST', { kind: 'owner', key: el.dataset.key, name: el.value });
+    loadAdvances(ADV.month);
+  } catch (err) {
+    el.disabled = false;
+    $('advNote').textContent = `Not saved: ${err.message}`;
+    $('advNote').hidden = false;
+  }
+});
+
 // The owner paid an advance by hand (from Palladium's cash or the bank): a Salary row whose
 // note is "<name> Advance", so it's counted like the ones staff type in Loyverse.
 $('advForm').addEventListener('submit', async (e) => {
@@ -1463,11 +1490,14 @@ $('advForm').addEventListener('submit', async (e) => {
   if (!ADV) return;
   const name = $('advName').value, amount = Math.round(parseFloat($('advAmount').value) || 0), date = $('advDate').value;
   if (!name || amount <= 0 || !date) return showToast('Pick a person, an amount and a date', 'error', 'advToast');
-  const bank = $('advFrom').value === 'bank';
+  const bank = $('advFrom').value === 'bank', earlier = $('advFrom').value === 'earlier';
   const btn = $('advSave');
   btn.disabled = true;
   try {
-    await saveJSON('/api/transaction', 'POST', { category: 'Salary', shop: 'Palladium', date, notes: `${name} Advance`,
+    // An advance from before tracking started: the cash already went out (it's in Master Entry
+    // or was never recorded), so only what they owe is saved, in tab "Advance Opening"
+    if (earlier) await saveJSON('/api/advances', 'POST', { kind: 'opening', name, amount, date, note: 'earlier advance' });
+    else await saveJSON('/api/transaction', 'POST', { category: 'Salary', shop: 'Palladium', date, notes: `${name} Advance`,
       cashOut: bank ? 0 : amount, bankOut: bank ? amount : 0 });
     showToast(`Saved: ${name} advance ${fmt(amount)}`, 'success', 'advToast');
     $('advAmount').value = '';

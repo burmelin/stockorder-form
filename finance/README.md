@@ -126,10 +126,14 @@ At the bottom of the **Staff** tab, for the month picked:
 - **Advances:** an advance is a **Salary** row whose note has the word *advance* and the
   person's name. Staff paying one from a shop drawer type it as the Loyverse pay-out note,
   e.g. `Kumar Advance`, and the daily import books it as Salary. An advance the owner pays from
-  Palladium's cash or the bank goes in with **Add an advance you paid**. An advance counts as
-  salary on the day it's paid (it is salary paid early), so salary spending still adds up to
-  the full salaries. A note with no name it knows shows as **Whose advance?**: fix the note in
-  Master Entry.
+  Palladium's cash or the bank goes in with **Add an advance**. An advance counts as salary on
+  the day it's paid (it is salary paid early), so salary spending still adds up to the full
+  salaries. Advances are counted from **1 November 2026**, when tracking started; an older
+  advance still owed goes in with **Add an advance** → *Before November, still owed* (saved in
+  tab **Advance Opening**; no cash moves). **Advances owed** lists every advance behind each
+  person's total. When a note could be more than one person (e.g. "Kumar" with Kumar Giri and
+  Sub Kumar) or names nobody, it shows as **Whose advance?**: pick the person once (saved in
+  tab **Advance Names**).
 - **Payday** (above the salaries): one row per person showing salary + commission & bonus
   (from the Terminal 21 and Nana cards) − advance cut = pay. Type the **Advance cut** (any
   amount up to what they owe; the rest waits for next month, saved in tab **Advance

@@ -7,14 +7,14 @@
 // sheet's Staff tab: everyone, shops and Palladium.
 const { SHEET_ID, MOCK, getSheetsClient, checkPin, readMasterEntry } = require('./_google');
 const { localDate } = require('./_loyverse');
-const { SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, money, staffNamesFromRows, salariesFromRows, deductionsFromRows, advancesFor } = require('./_advances');
+const { ADVANCES_FROM, OWNERS_TAB, OPENING_TAB, ownersFromRows, openingsFromRows, SALARY_TAB, DEDUCTIONS_TAB, PAYROLL_TAB, PAYROLL_HEADERS, payrollFromRows, upsertPayroll, money, staffNamesFromRows, salariesFromRows, deductionsFromRows, advancesFor } = require('./_advances');
 
 const STOCK_SHEET_ID = process.env.STOCK_SHEET_ID || '1RsicbmRnmQYRZJE37sydQ2sxMxIzQXfk5ke4aB6ATBM';
-const HEADERS = { [SALARY_TAB]: ['Name', 'Monthly salary'], [DEDUCTIONS_TAB]: ['Month', 'Name', 'Amount'] };
+const HEADERS = { [SALARY_TAB]: ['Name', 'Monthly salary'], [DEDUCTIONS_TAB]: ['Month', 'Name', 'Amount'], [OWNERS_TAB]: ['Key', 'Name'], [OPENING_TAB]: ['Date', 'Name', 'Amount', 'Note'] };
 
 // Reads a whole tab, making it (with its header row) the first time
 async function readTab(sheets, tab) {
-  const cols = HEADERS[tab].length === 2 ? 'A1:B' : 'A1:C';
+  const cols = 'A1:' + 'ABCD'[HEADERS[tab].length - 1];
   try {
     return (await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${tab}'!${cols}` })).data.values || [];
   } catch (err) {
@@ -55,9 +55,42 @@ async function savePayroll(req, res) {
   }
 }
 
+// { kind: 'owner', key, name }: whose advance a row is, when its note doesn't say clearly
+// { kind: 'opening', name, amount, date, note }: an advance from before tracking started
+async function saveExtra(req, res) {
+  const b = req.body || {};
+  const name = String(b.name || '').trim().slice(0, 100);
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  let tab, row, sameRow = null;
+  if (b.kind === 'owner') {
+    const key = String(b.key || '').slice(0, 300);
+    if (!/^\d{4}-\d{2}-\d{2}\|/.test(key)) return res.status(400).json({ error: 'key is required' });
+    tab = OWNERS_TAB; row = [key, name]; sameRow = (r) => String(r[0] || '').trim() === key;
+  } else {
+    const amount = money(b.amount), date = String(b.date || '');
+    if (!amount || amount > 10000000) return res.status(400).json({ error: 'Enter the amount' });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'Date must be YYYY-MM-DD' });
+    tab = OPENING_TAB; row = [date, name, amount, String(b.note || '').trim().slice(0, 200)];
+  }
+  if (MOCK) return res.json({ ok: true, mock: true });
+  try {
+    const sheets = getSheetsClient();
+    const values = await readTab(sheets, tab);
+    const i = sameRow ? values.findIndex((r, n) => n > 0 && sameRow(r)) : -1;
+    const last = 'ABCD'[row.length - 1];
+    if (i > 0) await sheets.spreadsheets.values.update({ spreadsheetId: SHEET_ID, range: `'${tab}'!A${i + 1}:${last}${i + 1}`, valueInputOption: 'RAW', requestBody: { values: [row] } });
+    else await sheets.spreadsheets.values.append({ spreadsheetId: SHEET_ID, range: `'${tab}'!A:${last}`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: [row] } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not save: ' + err.message });
+  }
+}
+
 async function save(req, res) {
   const b = req.body || {};
   if (b.kind === 'payroll') return savePayroll(req, res);
+  if (b.kind === 'owner' || b.kind === 'opening') return saveExtra(req, res);
   const name = String(b.name || '').trim().slice(0, 100);
   const amount = money(b.amount);
   const month = String(b.month || '');
@@ -96,22 +129,24 @@ module.exports = async function handler(req, res) {
 
   if (MOCK) {
     const rows = [
-      { row: 40, date: `${month}-05`, shop: 'Bicasso 1', category: 'Salary', cashOut: 2000, bankOut: 0, notes: 'Kumar Advance · 14:10' },
-      { row: 41, date: `${month}-12`, shop: 'Nana', category: 'Salary', cashOut: 1000, bankOut: 0, notes: 'advance · 19:02' },
+      { row: 40, date: `${month}-05`, shop: 'Bicasso 1', category: 'Salary', cashOut: 2000, bankOut: 0, notes: 'Kumar Giri Advance · 14:10' },
+      { row: 41, date: `${month}-12`, shop: 'Nana', category: 'Salary', cashOut: 1000, bankOut: 0, notes: 'Kumar advance · 19:02' },
     ];
-    const names = ['Pyone Cho', 'Sunil GTM', 'Kumar Giri', 'Bharati'];
-    return res.json({ ...advancesFor(rows, names, { 'Kumar Giri': 15000 }, [], month), payroll: [], staffNote: '', mock: true });
+    const names = ['Pyone Cho', 'Sunil GTM', 'Kumar Giri', 'Sub Kumar', 'Bharati'];
+    return res.json({ ...advancesFor(rows, names, { 'Kumar Giri': 15000 }, [], month, '', { openings: [{ date: '2026-10-20', name: 'Kumar Giri', amount: 1000, note: 'earlier advance' }] }), payroll: [], staffNote: '', mock: true });
   }
 
   try {
     const sheets = getSheetsClient();
     const soft = (p) => p.then((r) => r, (err) => ({ err }));
-    const [master, stock, salaries, deductions, payroll] = await Promise.all([
+    const [master, stock, salaries, deductions, payroll, owners, openings] = await Promise.all([
       readMasterEntry(sheets),
       soft(sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Staff'!A1:J60" })),
       soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${SALARY_TAB}'!A2:B` })),
       soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${DEDUCTIONS_TAB}'!A2:C` })),
       soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${PAYROLL_TAB}'!A2:G` })),
+      soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${OWNERS_TAB}'!A2:B` })),
+      soft(sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${OPENING_TAB}'!A2:D` })),
     ]);
     let names = [], staffNote = '';
     if (stock.err) {
@@ -123,7 +158,11 @@ module.exports = async function handler(req, res) {
     res.json({
       ...advancesFor(master.rows, names,
         salaries.err ? {} : salariesFromRows(salaries.data.values || []),
-        deductions.err ? [] : deductionsFromRows(deductions.data.values || []), month),
+        deductions.err ? [] : deductionsFromRows(deductions.data.values || []), month, ADVANCES_FROM, {
+          owners: owners.err ? {} : ownersFromRows(owners.data.values || []),
+          openings: openings.err ? [] : openingsFromRows(openings.data.values || []),
+        }),
+      advancesFrom: ADVANCES_FROM,
       payroll: payroll.err ? [] : payrollFromRows(payroll.data.values || [], month),
       staffNote, mock: false,
     });
