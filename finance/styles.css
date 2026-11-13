@@ -398,20 +398,19 @@ button, input, select, textarea { font-family: inherit; }
 .stmt-actions .save-btn, .stmt-actions .ghost-btn { padding: 12px; font-size: 15px; }
 .stmt.stale { opacity: .45; transition: opacity .15s; }
 .clock-upload { display: block; text-align: center; cursor: pointer; }
+.clock-status:empty { display: none; }
 .clock-status { font-size: 13px; color: var(--stone); margin-top: 8px; }
 .clock-status.bad { color: var(--bad); }
 .clock-status.good { color: var(--good); }
 .clock-how { margin-top: 6px; }
-.clock-day h3, .clock-sum h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.clock-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.clock-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--stone); text-align: left; font-weight: 700; padding: 4px 4px 6px; border-bottom: 1px solid var(--line); }
-.clock-table td { padding: 7px 4px; border-bottom: 1px solid var(--sunk); vertical-align: top; }
-.clock-table tr:last-child td { border-bottom: none; }
-.clock-table .num { text-align: right; white-space: nowrap; }
-.clock-table .shop { color: var(--stone); font-size: 12px; }
-.clock-table .who { font-weight: 600; }
-.flag { display: inline-block; font-size: 11px; font-weight: 700; color: #B42318; background: #FEE4E2; border-radius: 4px; padding: 0 5px; margin-left: 3px; white-space: nowrap; }
-.flag.open { color: #93370D; background: #FEF0C7; }
+.clock-steps { padding-left: 18px; margin: 6px 0; }
+.clock-steps li { margin-bottom: 4px; }
+.clock-upload { margin-bottom: 4px; }
+#clockPanel .stmt-actions { margin-top: 12px; }
+.stmt .st-flag { display: inline-block; font-size: 9.5px; font-weight: 700; color: #B42318; background: #FEE4E2; border-radius: 4px; padding: 0 4px; margin-left: 2px; white-space: nowrap;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.stmt .st-flag.open { color: #93370D; background: #FEF0C7; margin-left: 0; }
+.stmt .st-clock td { vertical-align: top; }
 .stmt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px 6px; }
 
 /* The statement itself: the same markup on screen, in print and in the PDF */

@@ -90,3 +90,18 @@ test('the real Loyverse export layout: combined date-time, Open and Missing', ()
   assert.strictEqual(shopFor('BICASSO 3 Nana'), 'Nana');
   assert.strictEqual(shopFor('Burmelin'), 'Bicasso 1');
 });
+
+test('leave this month: approved day off, sick (half), waiting requests, other months ignored', () => {
+  const { leaveFromRows } = require('../api/timecards');
+  const H = ['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'];
+  const row = (name, type, date, status, half = '') => ['', '', '', name, type, date, '', status, '', '', half];
+  const out = leaveFromRows([H,
+    row('Aye', 'Day off', '2026-11-04', 'Approved'),
+    row('Aye', 'Day off', '2026-11-04', 'Approved'),
+    row('Aye', 'Sick leave', '2026-11-09', 'Approved', 'First half'),
+    row('Aye', 'Day off', '2026-11-20', 'Pending'),
+    row('Aye', 'Day off', '2026-11-21', 'Declined'),
+    row('Mon', 'Day off', '2026-10-30', 'Approved'),
+  ], '2026-11');
+  assert.deepStrictEqual(out, [{ name: 'Aye', dayOff: 1, sick: 0.5, pending: 1, dates: { dayOff: ['4'], sick: ['9½'], pending: ['20 off'] } }]);
+});

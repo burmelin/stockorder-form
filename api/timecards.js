@@ -1,4 +1,5 @@
-// GET  /api/timecards?from=YYYY-MM-DD&to=YYYY-MM-DD — saved clock in / out times for those days
+// GET  /api/timecards?from=YYYY-MM-DD&to=YYYY-MM-DD — saved clock in / out times for those days,
+//      plus each person's leave in the month of `to` (Stock sheet, Leave tab)
 // POST /api/timecards { from, to, cards: [{ employee, store, inAt, outAt }] }
 //      — the Loyverse Timecards export, read in the browser by finance/timecards.js. Every
 //        saved timecard from `from` to `to` is replaced by these, so uploading an overlapping
@@ -8,6 +9,8 @@
 const { SHEET_ID, MOCK, getSheetsClient, checkPin } = require('./_google');
 const { localDate } = require('./_loyverse');
 const { businessDay } = require('../finance/timecards');
+
+const STOCK_SHEET_ID = process.env.STOCK_SHEET_ID || '1RsicbmRnmQYRZJE37sydQ2sxMxIzQXfk5ke4aB6ATBM';
 
 const TAB = 'Timecards';
 const HEADERS = ['Day', 'Employee', 'Shop', 'Clock in', 'Clock out', 'Hours', 'Loyverse store', 'Uploaded'];
@@ -47,6 +50,33 @@ function mergeRows(values, from, to, cards, uploaded) {
 function rowsToCards(values, from, to) {
   return (values || []).slice(1).filter((r) => r[0] && r[3] && (!from || r[0] >= from) && (!to || r[0] <= to))
     .map((r) => ({ day: String(r[0]), employee: String(r[1] || ''), shop: String(r[2] || ''), inAt: String(r[3]), outAt: String(r[4] || '') }));
+}
+
+// The month's leave per person from the Stock sheet's Leave tab (staff app requests):
+// approved days off, approved sick leave, and requests still waiting for the owner.
+// A half day counts 0.5; a date asked twice counts once.
+function leaveFromRows(values, month) {
+  const head = (values[0] || []).map((h) => String(h).trim().toLowerCase());
+  const col = (n) => head.indexOf(n);
+  const [nameC, typeC, dateC, statusC, halfC] = [col('name'), col('type'), col('date'), col('status'), col('half day')];
+  if (nameC < 0 || dateC < 0 || statusC < 0) return [];
+  const people = new Map(), seen = new Set();
+  for (const r of values.slice(1)) {
+    const name = String(r[nameC] || '').trim(), date = String(r[dateC] || '').trim().slice(0, 10);
+    const status = String(r[statusC] || '').trim();
+    if (!name || date.slice(0, 7) !== month || (status !== 'Approved' && status !== 'Pending')) continue;
+    const sick = /sick/i.test(String(r[typeC] || ''));
+    const kind = status === 'Pending' ? 'pending' : sick ? 'sick' : 'dayOff';
+    const key = `${name}|${date}|${kind}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const half = halfC > -1 && /half|morning|afternoon/i.test(String(r[halfC] || ''));
+    const p = people.get(name) || { name, dayOff: 0, sick: 0, pending: 0, dates: { dayOff: [], sick: [], pending: [] } };
+    p[kind] += half ? 0.5 : 1;
+    p.dates[kind].push(+date.slice(8, 10) + (half ? '½' : '') + (kind === 'pending' ? (sick ? ' sick' : ' off') : ''));
+    people.set(name, p);
+  }
+  return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function readAll(sheets) {
@@ -112,13 +142,24 @@ module.exports = async function handler(req, res) {
   const to = String(q.to || localDate(Date.now()));
   const from = String(q.from || to);
   if (!DAY.test(from) || !DAY.test(to)) return res.status(400).json({ error: 'Dates must be YYYY-MM-DD' });
-  if (MOCK) return res.json({ ok: true, mock: true, from, to, cards: mockCards(from, to), lastDay: to, uploaded: to });
+  const month = to.slice(0, 7);
+  if (MOCK) {
+    const leave = leaveFromRows([['Request ID', 'Requested', 'Employee ID', 'Name', 'Type', 'Date', 'Reason', 'Status', 'Decided', 'Owner note', 'Half day'],
+      ['1', '', 'S1', 'Aye', 'Day off', `${month}-04`, '', 'Approved', '', '', ''], ['2', '', 'S1', 'Aye', 'Sick leave', `${month}-09`, '', 'Approved', '', '', 'First half'],
+      ['3', '', 'S2', 'Mon', 'Day off', `${month}-20`, '', 'Pending', '', '', '']], month);
+    return res.json({ ok: true, mock: true, from, to, cards: mockCards(from, to), lastDay: to, uploaded: to, month, leave });
+  }
   try {
-    const values = (await readAll(getSheetsClient())) || [];
+    const sheets = getSheetsClient();
+    const leaveRead = sheets.spreadsheets.values.get({ spreadsheetId: STOCK_SHEET_ID, range: "'Leave'!A1:K" }).then((r) => r, (err) => ({ err }));
+    const values = (await readAll(sheets)) || [];
+    const lv = await leaveRead;
+    if (lv.err) console.error('Leave tab:', lv.err.message);
+    const leave = lv.err ? null : leaveFromRows(lv.data.values || [], month);
     const all = values.slice(1).filter((r) => r[0]);
     const lastDay = all.reduce((m, r) => (String(r[0]) > m ? String(r[0]) : m), '');
     const uploaded = all.reduce((m, r) => (String(r[7] || '') > m ? String(r[7]) : m), '');
-    res.json({ ok: true, from, to, cards: rowsToCards(values, from, to), lastDay, uploaded });
+    res.json({ ok: true, from, to, cards: rowsToCards(values, from, to), lastDay, uploaded, month, leave });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Could not read the timecards: ' + err.message });
@@ -126,3 +167,4 @@ module.exports = async function handler(req, res) {
 };
 module.exports.mergeRows = mergeRows;
 module.exports.shopFor = shopFor;
+module.exports.leaveFromRows = leaveFromRows;
