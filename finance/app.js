@@ -1833,7 +1833,6 @@ function openClock() {
   if (!$('clockFrom').value) setClockRange('week');
   else loadClock();
 }
-const clockMins = (m) => `${m >= 60 ? Math.floor(m / 60) + 'h ' : ''}${m % 60 ? (m % 60) + 'm' : ''}`.trim();
 const clockHours = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
 const halfDays = (n) => (n ? String(Math.floor(n)).replace(/^0$/, '') + (n % 1 ? '½' : '') : '–');
 
@@ -1871,8 +1870,7 @@ function clockHtml(r) {
   const period = one ? longDate(r.from, true) : `${longDate(r.from, true)} – ${longDate(r.to, true)}`;
   const [my, mm] = (r.month || r.to.slice(0, 7)).split('-').map(Number);
   const monthName = `${MONTH_NAMES[mm - 1]} ${my}`;
-  const late = (l) => (l.late ? ` <span class="st-flag">${clockMins(l.late)} late</span>` : '');
-  const out = (l) => (l.out ? esc(l.out) + (l.early ? ` <span class="st-flag">${clockMins(l.early)} early</span>` : '') : '<span class="st-flag open">no clock-out</span>');
+  const out = (l) => (l.out ? esc(l.out) : '<span class="st-flag open">no clock-out</span>');
 
   const people = r.totals.length ? `
     <h3>Each person <span>${one ? '' : `${shortDate(r.from)} – ${shortDate(r.to)}`}</span></h3>
@@ -1900,7 +1898,7 @@ function clockHtml(r) {
     <table class="st-list st-clock">
       <thead><tr><th>Name</th><th>Shop</th><th>In</th><th>Out</th><th class="num">Hours</th></tr></thead>
       <tbody>${r.days.slice().reverse().map((d) => `<tr class="sect"><td colspan="5">${longDate(d.date, true)}</td></tr>`
-        + d.lines.map((l) => `<tr><td><b>${esc(l.employee)}</b></td><td class="nowrap">${esc(l.shop || '')}</td><td class="nowrap">${esc(l.in)}${late(l)}</td>
+        + d.lines.map((l) => `<tr><td><b>${esc(l.employee)}</b></td><td class="nowrap">${esc(l.shop || '')}</td><td class="nowrap">${esc(l.in)}</td>
           <td class="nowrap">${out(l)}</td><td class="num">${l.hours == null ? '' : clockHours(l.hours)}</td></tr>`).join('')).join('')}</tbody>
     </table>` : '';
 
