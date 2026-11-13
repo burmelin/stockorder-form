@@ -12,18 +12,22 @@ const { businessDay } = require('../finance/timecards');
 const TAB = 'Timecards';
 const HEADERS = ['Day', 'Employee', 'Shop', 'Clock in', 'Clock out', 'Hours', 'Loyverse store', 'Uploaded'];
 const SHOPS = ['Bicasso 1', 'Bicasso 2', 'Nana', 'Palladium'];
+// Loyverse store names that don't say which shop they are (owner, 13 Nov 2026)
+const ALIASES = { burmelin: 'Bicasso 1' };
 const MAX_CARDS = 3000;
 const STAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 // Loyverse store name -> shop: LOYVERSE_STORE_MAP first (as the sales import), then the
-// same name ignoring spaces and case, then a store name that contains the shop's name.
+// known aliases ("Burmelin" is Bicasso 1), the same name ignoring spaces and case, then a
+// store name that contains the shop's name.
 function shopFor(store) {
   let overrides = {};
   try { overrides = JSON.parse(process.env.LOYVERSE_STORE_MAP || '{}'); } catch (e) { /* ignore */ }
   const s = String(store || '').trim();
   for (const [k, v] of Object.entries(overrides)) if (k.trim().toLowerCase() === s.toLowerCase() && v) return String(v);
   const norm = (x) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (ALIASES[norm(s)]) return ALIASES[norm(s)];
   return SHOPS.find((sh) => norm(sh) === norm(s)) || SHOPS.find((sh) => norm(s).includes(norm(sh))) || s;
 }
 const hoursOf = (a, b) => {

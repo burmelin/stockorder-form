@@ -88,4 +88,5 @@ test('the real Loyverse export layout: combined date-time, Open and Missing', ()
   assert.strictEqual(r.cards[3].inAt, '2026-11-08 09:56');
   assert.strictEqual(shopFor('BICASSO 2 Terminal 21'), 'Bicasso 2');
   assert.strictEqual(shopFor('BICASSO 3 Nana'), 'Nana');
+  assert.strictEqual(shopFor('Burmelin'), 'Bicasso 1');
 });
