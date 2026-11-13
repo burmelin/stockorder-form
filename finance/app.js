@@ -1807,8 +1807,108 @@ $('reportSeg').addEventListener('click', (e) => {
   $('reportSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   $('stPanel').hidden = b.dataset.report !== 'statement';
   $('bankCard').hidden = b.dataset.report !== 'bank';
+  $('clockPanel').hidden = b.dataset.report !== 'clock';
   if (b.dataset.report === 'bank') loadBankCard();
+  if (b.dataset.report === 'clock') openClock();
 });
+
+// ================= clock in / out =================
+// Staff clock in and out on the Loyverse Time clock. Loyverse's API doesn't share those
+// timecards, so the owner exports them from Back Office (Employees → Timecards → Export) and
+// uploads the file here; finance/timecards.js reads it and builds the report, and
+// api/timecards.js keeps them in the Finance sheet (tab "Timecards").
+function setClockRange(kind) {
+  const now = new Date();
+  let from = now, to = now;
+  if (kind === 'yesterday') { from = to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1); }
+  if (kind === 'week') { from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7); to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1); }
+  if (kind === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1); }
+  if (kind === 'lastmonth') { from = new Date(now.getFullYear(), now.getMonth() - 1, 1); to = new Date(now.getFullYear(), now.getMonth(), 0); }
+  $('clockFrom').value = isoOf(from); $('clockTo').value = isoOf(to);
+  document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.toggle('on', c.dataset.range === kind));
+  loadClock();
+}
+function openClock() {
+  if (!$('clockFrom').value) setClockRange('week');
+  else loadClock();
+}
+const clockMins = (m) => `${m >= 60 ? Math.floor(m / 60) + 'h ' : ''}${m % 60 ? (m % 60) + 'm' : ''}`.trim();
+const clockHours = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
+
+async function loadClock() {
+  const from = $('clockFrom').value, to = $('clockTo').value;
+  const state = $('clockState'), doc = $('clockDoc');
+  if (!from || !to) return;
+  if (from > to) { state.hidden = false; state.classList.add('error'); state.textContent = 'The first date must be before the second.'; doc.innerHTML = ''; return; }
+  state.classList.remove('error'); state.hidden = false; state.textContent = 'Loading…';
+  try {
+    const resp = await api(`/api/timecards?from=${from}&to=${to}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    const status = $('clockStatus');
+    status.className = 'clock-status';
+    status.textContent = data.lastDay
+      ? `Timecards saved up to ${longDate(data.lastDay, true)}${data.uploaded ? ` · last upload ${longDate(data.uploaded)}` : ''}`
+      : 'No timecards uploaded yet.';
+    doc.innerHTML = clockHtml(Timecards.build(data.cards || [], from, to), data.lastDay);
+    state.hidden = true;
+  } catch (err) {
+    state.classList.add('error'); state.textContent = 'Could not load: ' + err.message;
+  }
+}
+
+function clockHtml(r, lastDay) {
+  if (!r.days.length) {
+    const why = lastDay && lastDay < r.from ? ` Timecards are saved only up to ${longDate(lastDay)}: upload a newer export.` : '';
+    return `<p class="load-state">No timecards in these dates.${why}</p>`;
+  }
+  const flags = (l) => (l.late ? `<span class="flag">${clockMins(l.late)} late</span>` : '');
+  const outFlags = (l) => (l.early ? `<span class="flag">${clockMins(l.early)} early</span>` : '') + (l.out ? '' : '<span class="flag open">no clock-out</span>');
+  const sum = r.days.length > 1 || r.totals.length ? `
+    <section class="card clock-sum">
+      <h3>Each person · ${r.from === r.to ? longDate(r.from) : `${shortDate(r.from)} – ${shortDate(r.to)}`}</h3>
+      <table class="clock-table">
+        <thead><tr><th>Name</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Late</th><th class="num">Left early</th></tr></thead>
+        <tbody>${r.totals.map((p) => `<tr><td class="who">${esc(p.employee)}${p.open ? ` <span class="flag open">${p.open} no clock-out</span>` : ''}</td>
+          <td class="num">${p.days}</td><td class="num">${clockHours(p.hours)}</td><td class="num">${p.late || '–'}</td><td class="num">${p.early || '–'}</td></tr>`).join('')}</tbody>
+      </table>
+    </section>` : '';
+  const days = r.days.map((d) => `
+    <section class="card clock-day">
+      <h3>${longDate(d.date, true)}</h3>
+      <table class="clock-table">
+        <thead><tr><th>Name</th><th>In</th><th>Out</th><th class="num">Hours</th></tr></thead>
+        <tbody>${d.lines.map((l) => `<tr><td><span class="who">${esc(l.employee)}</span><br><span class="shop">${esc(l.shop || '')}</span></td>
+          <td>${esc(l.in)}${flags(l)}</td><td>${esc(l.out || '–')}${outFlags(l)}</td><td class="num">${l.hours == null ? '' : clockHours(l.hours)}</td></tr>`).join('')}</tbody>
+      </table>
+    </section>`).join('');
+  return sum + days + `<p class="rule-hint">Late = clocked in more than 10 minutes after the shop opens; early = clocked out more than 10 minutes before it closes (Bicasso 1 and 2 10:00–21:30, Nana 13:00–midnight). A day runs to 5 AM, so "+1" is after midnight.</p>`;
+}
+
+async function uploadClockFile(file) {
+  const status = $('clockStatus');
+  status.className = 'clock-status'; status.textContent = 'Reading the file…';
+  try {
+    const parsed = Timecards.parseTimecards(await file.text());
+    if (parsed.error) throw new Error(parsed.error);
+    if (!parsed.cards.length) throw new Error('No timecards found in this file.');
+    status.textContent = `Saving ${parsed.cards.length} timecards…`;
+    const resp = await api('/api/timecards', { method: 'POST', body: JSON.stringify({ from: parsed.from, to: parsed.to, cards: parsed.cards }) });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    $('clockFrom').value = parsed.from; $('clockTo').value = parsed.to;
+    document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on'));
+    await loadClock();
+    status.className = 'clock-status good';
+    status.textContent = `Saved ${data.saved} timecards, ${shortDate(parsed.from)} – ${shortDate(parsed.to)}.${parsed.skipped ? ` ${parsed.skipped} line${parsed.skipped === 1 ? '' : 's'} skipped (no name or time).` : ''}`;
+  } catch (err) {
+    status.className = 'clock-status bad'; status.textContent = 'Could not upload: ' + err.message;
+  }
+}
+$('clockFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadClockFile(f); });
+$('clockQuick').addEventListener('click', (e) => { const c = e.target.closest('[data-range]'); if (c) setClockRange(c.dataset.range); });
+$('clockFrom').addEventListener('change', () => { document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on')); loadClock(); });
+$('clockTo').addEventListener('change', () => { document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on')); loadClock(); });
 
 $('stFrom').addEventListener('change', renderStatement);
 $('stTo').addEventListener('change', renderStatement);

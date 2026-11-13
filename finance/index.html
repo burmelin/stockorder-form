@@ -332,11 +332,12 @@
 
 </main>
 
-<!-- ============ REPORTS (statement + Bicasso card sales) ============ -->
+<!-- ============ REPORTS (statement, Bicasso card sales, clock in/out) ============ -->
 <main id="page-statement" class="page page-wide" hidden>
   <div class="seg" role="tablist" id="reportSeg">
     <button type="button" data-report="statement" class="on">Statement</button>
     <button type="button" data-report="bank">Bicasso card sales</button>
+    <button type="button" data-report="clock">Clock in/out</button>
   </div>
 
   <div id="stPanel">
@@ -379,6 +380,33 @@
       <ul id="bankDayList" class="rows"></ul>
     </details>
   </section>
+
+  <section id="clockPanel" hidden>
+    <div class="card">
+      <h2>Clock in/out <span class="hint">from the Loyverse Time clock</span></h2>
+      <div class="custom-range lv-range">
+        <input type="date" id="clockFrom" aria-label="From date">
+        <span>to</span>
+        <input type="date" id="clockTo" aria-label="To date">
+      </div>
+      <div class="stmt-quick chips" id="clockQuick">
+        <button type="button" class="chip" data-range="yesterday">Yesterday</button>
+        <button type="button" class="chip" data-range="week">Last 7 days</button>
+        <button type="button" class="chip" data-range="month">This month</button>
+        <button type="button" class="chip" data-range="lastmonth">Last month</button>
+      </div>
+      <label class="save-btn clock-upload">Upload Loyverse timecards
+        <input type="file" id="clockFile" accept=".csv,text/csv,text/plain" hidden>
+      </label>
+      <p class="clock-status" id="clockStatus"></p>
+      <details class="more clock-how">
+        <summary>How to get the file</summary>
+        <p class="rule-hint">In Loyverse Back Office: <b>Employees → Timecards</b>, pick the dates (the last week is enough), tap <b>Export</b>, then upload the file here. Uploading the same days again replaces them, so nothing is counted twice.</p>
+      </details>
+    </div>
+    <p id="clockState" class="load-state" hidden></p>
+    <div id="clockDoc"></div>
+  </section>
 </main>
 
 <!-- ============ NAV ============ -->
@@ -394,6 +422,7 @@
 <div id="printArea" class="print-only"></div>
 
 <script src="/finance/statement.js?v=7"></script>
-<script src="/finance/app.js?v=9"></script>
+<script src="/finance/timecards.js?v=1"></script>
+<script src="/finance/app.js?v=10"></script>
 </body>
 </html>
