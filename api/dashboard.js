@@ -138,6 +138,7 @@ function mockData() {
         { name: 'Gov Tax', type: 'Expense' },
         { name: 'Home Expenses', type: 'Expense' },
         { name: 'Other Expense', type: 'Expense' },
+        { name: 'Card Fee', type: 'Expense' },
         { name: 'Collection (to Palladium)', type: 'Transfer' },
         { name: 'Cash to Bank Deposit', type: 'Transfer' },
         { name: 'Bank to Cash (ATM)', type: 'Transfer' },

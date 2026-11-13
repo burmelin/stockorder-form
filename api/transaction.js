@@ -18,6 +18,7 @@ const RULES = {
   'Gov Tax': ['cashOut', 'bankOut'],
   'Home Expenses': ['cashOut', 'bankOut'],
   'Other Expense': ['cashOut', 'bankOut'],
+  'Card Fee': ['bankOut'],
   'Collection (to Palladium)': ['cashOut'],
   'Cash to Bank Deposit': ['cashOut', 'bankIn'],
   'Bank to Cash (ATM)': ['cashIn', 'bankOut'],
