@@ -206,6 +206,7 @@ tbody tr:last-child td{border-bottom:none}
 .cs-pill-in{background:#DCEBE1;color:#1D6E46}
 .cs-pill-out{background:#F7F5F1;color:#AEA9A1}
 .sp-empty{text-align:center;color:#AEA9A1;padding:28px 0;font-size:.88rem}
+.pal-old-btn{display:block;margin:14px auto 4px;background:none;border:none;color:#003D7A;font-weight:600;font-size:.86rem;padding:8px 12px;cursor:pointer;text-decoration:underline}
 
 /* PDF overlay */
 .btn-pdf{background:#1D6E46;border:none;color:#fff;padding:12px 22px;border-radius:10px;font-size:.97rem;font-weight:700;cursor:pointer;margin-top:12px;transition:.2s;display:block;width:100%}
@@ -1346,6 +1347,7 @@ function appLogout() {
   ALL_RETAIL_STOCK = null;
   ALL_ORDERS       = [];
   PAL_FILTER       = 'all';
+  PAL_SHOW_OLD     = false;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
   cart = []; nextId = 1; lastOrder = null;
@@ -3173,9 +3175,28 @@ function ownerDecide(id, decision, btn) {
 function palEsc(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 // ── ORDERS ───────────────────────────────────────────────────────
+// Only this month's orders show (Thai time). Unfinished orders always show, whatever their age.
+// Nothing is deleted: "Show older orders" brings the rest back until the app is reopened.
+var PAL_SHOW_OLD = false;
+function palMonthKey() {
+  try {
+    var p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: '2-digit', month: '2-digit' }).formatToParts(new Date());
+    var y = '', m = '';
+    p.forEach(function(x) { if (x.type === 'year') y = x.value; if (x.type === 'month') m = x.value; });
+    return y + m;
+  } catch (e) { var d = new Date(Date.now() + 7 * 3600000); return String(d.getUTCFullYear()).slice(-2) + ('0' + (d.getUTCMonth() + 1)).slice(-2); }
+}
+function palIsOld(o) {
+  var m = /^ORD-(\d{4})\d{2}-/.exec(o.orderId || '');
+  return !!m && m[1] < palMonthKey() && o.status === 'Completed';
+}
+function palOrders() { return PAL_SHOW_OLD ? ALL_ORDERS : ALL_ORDERS.filter(function(o) { return !palIsOld(o); }); }
+function palToggleOld() { PAL_SHOW_OLD = !PAL_SHOW_OLD; palUpdateCounts(); palFilterOrders(PAL_FILTER); }
+
 function palUpdateCounts() {
-  var c={all:ALL_ORDERS.length,Pending:0,Invoiced:0,Completed:0};
-  ALL_ORDERS.forEach(function(o){ c[o.status]=(c[o.status]||0)+1; });
+  var orders=palOrders();
+  var c={all:orders.length,Pending:0,Invoiced:0,Completed:0};
+  orders.forEach(function(o){ c[o.status]=(c[o.status]||0)+1; });
   var map={all:'all',Pending:'pending',Invoiced:'invoiced',Completed:'completed'};
   Object.keys(map).forEach(function(k){ var el=document.getElementById('pal-cnt-'+map[k]); if(el) el.textContent=c[k]||0; });
 }
@@ -3183,8 +3204,12 @@ function palUpdateCounts() {
 function palFilterOrders(filter) {
   PAL_FILTER=filter;
   document.querySelectorAll('.pal-filter-tab').forEach(function(t){ t.classList.toggle('active',t.dataset.pf===filter); });
-  var list=filter==='all'?ALL_ORDERS:ALL_ORDERS.filter(function(o){ return o.status===filter; });
+  var orders=palOrders();
+  var list=filter==='all'?orders:orders.filter(function(o){ return o.status===filter; });
   palShowOrderList(list, filter);
+  var older=ALL_ORDERS.filter(palIsOld).length;
+  if (older) document.getElementById('sp-body').insertAdjacentHTML('beforeend',
+    '<button class="pal-old-btn" onclick="palToggleOld()">' + (PAL_SHOW_OLD ? 'Hide older orders' : 'Show older orders (' + older + ')') + '</button>');
 }
 
 function palLoadOrders() {
@@ -3219,7 +3244,7 @@ function orderSortKey(o) {
 // One group per store or customer; "Bicasso2", "BICASSO 2" and "Bicasso 2" are the same group
 function palShowOrderList(list, filter) {
   var el = document.getElementById('sp-body');
-  if (!list.length) { el.innerHTML = '<div class="sp-empty">No ' + (filter === 'all' ? '' : filter.toLowerCase() + ' ') + 'orders.</div>'; return; }
+  if (!list.length) { el.innerHTML = '<div class="sp-empty">No ' + (filter === 'all' ? '' : filter.toLowerCase() + ' ') + 'orders' + (PAL_SHOW_OLD ? '' : ' this month') + '.</div>'; return; }
   var norm = function(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); };
   var groups = {}, keys = [];
   list.slice().sort(function(a, b) { return orderSortKey(b) < orderSortKey(a) ? -1 : 1; }).forEach(function(o) {
