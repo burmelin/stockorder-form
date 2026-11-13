@@ -13,6 +13,7 @@
   const COLLECTION = 'Collection (to Palladium)';
   const SALES = ['Retail Sale', 'Scan / QR Payment'];
   const TO_BANK = ['Cash to Bank Deposit', 'Collection to Bank'];
+  const CARD_FEE = 'Card Fee';   // the bank's estimated fee on card sales (Bank Out), see api/_loyverse.js planFees
   const FALLBACK_EXPENSES = ['Supplier Pay', 'Salary', 'Wages', 'Commission', 'Rent', 'Gov Tax', 'Home Expenses', 'Other Expense'];
   // Columns appear in this order when present; any other shop in the Lists tab follows
   const SHOP_ORDER = ['Bicasso 1', 'Bicasso 2', 'Nana', 'Palladium'];
@@ -20,7 +21,7 @@
   const zero = () => ({
     cash: 0, cashSales: 0, payIn: 0, collIn: 0, otherIn: 0,
     expCash: 0, collOut: 0, toBank: 0, otherOut: 0,
-    bankSales: 0, bankOtherIn: 0, bankOut: 0, credit: 0,
+    bankSales: 0, bankOtherIn: 0, bankOut: 0, cardFee: 0, credit: 0,
   });
 
   function build(tx, lists, from, to) {
@@ -28,6 +29,7 @@
     const shops = SHOP_ORDER.filter((s) => listed.includes(s)).concat(listed.filter((s) => !SHOP_ORDER.includes(s)));
     const expenseCats = new Set(((lists && lists.categories) || []).filter((c) => c.type === 'Expense').map((c) => c.name));
     if (!expenseCats.size) FALLBACK_EXPENSES.forEach((c) => expenseCats.add(c));
+    expenseCats.add(CARD_FEE);   // written by the import even if the Lists tab doesn't name it
     const customers = new Set((lists && lists.customers) || []);
     const hasPalladium = shops.includes('Palladium');
 
@@ -78,7 +80,7 @@
       else p.otherOut += t.cashOut;
       // bank and credit
       if (SALES.includes(cat)) p.bankSales += t.bankIn; else p.bankOtherIn += t.bankIn;
-      p.bankOut += t.bankOut;
+      if (cat === CARD_FEE) p.cardFee += t.bankOut; else p.bankOut += t.bankOut;
       if (cat === 'Credit Sale' && !isOpeningCredit) p.credit += t.creditAmount;
 
       // daily sales (cash + card/QR + credit)
@@ -126,6 +128,7 @@
       sales: { cash: salesCash, bank: salesBank, credit: salesCredit, total: salesCash + salesBank + salesCredit },
       expenseTotal: { cash: expenses.reduce((n, e) => n + e.cash, 0), bank: expenses.reduce((n, e) => n + e.bank, 0) },
       expByCat,
+      cardFee: totals.cardFee,   // estimated card fees in the period (already taken off Bank)
       days: [...days].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, byShop]) => ({ date, byShop, total: Object.values(byShop).reduce((n, v) => n + v, 0) })),
       expenses, moves, incomes,
     };

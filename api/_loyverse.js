@@ -123,12 +123,12 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
     const shop = storeShop.get(r.store_id);
     if (!shop) continue;
 
-    let cash = 0, bank = 0, skipped = 0;
+    let cash = 0, bank = 0, card = 0, skipped = 0;
     for (const p of r.payments || []) {
       const amt = num(p.money_amount);
       const kind = paymentKind(p, overrides);
       if (kind === 'cash') cash += amt;
-      else if (kind === 'bank') bank += amt;
+      else if (kind === 'bank') { bank += amt; if (!isQr(p.name || p.type)) card += amt; }
       else { skipped += amt; skippedPayments[p.name] = (skippedPayments[p.name] || 0) + amt; }
     }
     // If payments add up to more than the receipt (e.g. cash handed over before change),
@@ -140,9 +140,10 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
     const sign = r.receipt_type === 'REFUND' ? -1 : 1;
     const key = `${date}|${shop}`;
     if (sign < 0 && bank > 0) cardRefunds.set(key, [...(cardRefunds.get(key) || []), round2(bank)]);
-    const t = totals.get(key) || { date, shop, cash: 0, bank: 0, credit: 0, account: accounts[shop] || null, receipts: 0, refunds: 0 };
+    const t = totals.get(key) || { date, shop, cash: 0, bank: 0, card: 0, credit: 0, account: accounts[shop] || null, receipts: 0, refunds: 0 };
     t.cash += sign * cash;
-    if (t.account) t.credit += sign * bank; else t.bank += sign * bank;
+    // card: the card part of bank (QR / PromptPay excluded), the part the bank takes a fee on
+    if (t.account) t.credit += sign * bank; else { t.bank += sign * bank; t.card += sign * card; }
     if (sign < 0) t.refunds++; else t.receipts++;
     totals.set(key, t);
   }
@@ -152,7 +153,7 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
   }
   if (mismatched) warnings.push(`${mismatched} receipt(s) had payments that did not add up to the receipt total`);
 
-  const list = [...totals.values()].map((t) => ({ ...t, cash: round2(t.cash), bank: round2(t.bank), credit: round2(t.credit) }));
+  const list = [...totals.values()].map((t) => ({ ...t, cash: round2(t.cash), bank: round2(t.bank), card: round2(t.card), credit: round2(t.credit) }));
   list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.shop.localeCompare(b.shop)));
   return { totals: list, warnings, cardRefunds };
 }
@@ -371,6 +372,55 @@ function planMovements(shifts, storeShop, dates, accounts, cardRefunds, existing
   return { actions, warnings };
 }
 
+// Card fees. The bank pays card sales in less its fee (one deposit a day, QR money comes in
+// whole), so each day the import also writes a "Card Fee" row with the estimated fee as Bank
+// Out. Bank then shows what actually arrives, the sale itself stays at full value, and the fee
+// counts as an expense. The rate is an estimate (see api/_cardfees.js learnedRate); the note
+// says so and ends with "[fee X]", the amount written, so a fee corrected by hand is kept.
+const FEE_CATEGORY = 'Card Fee';
+const FEE_SHOPS = (process.env.CARD_FEE_SHOPS || 'Bicasso 1,Bicasso 2').split(',').map((s) => s.trim()).filter(Boolean);
+function readFeeStamp(notes) {
+  const m = String(notes || '').match(/\[fee (-?[\d.]+)\]\s*$/);
+  return m ? +m[1] : null;
+}
+
+// totals: from dailyTotals. rate: fee % (e.g. 2.89). Returns movement-shaped actions
+// ({ kind: 'movement', category: 'Card Fee', bankOut, action, ... }) for loyverse-sync.
+function planFees(totals, existingRows, rate, shops = FEE_SHOPS) {
+  const pct = round2(rate);
+  const actions = [];
+  for (const t of totals) {
+    if (!shops.includes(t.shop) || t.account) continue;
+    const card = round2(t.card || 0);
+    const fee = round2((card * pct) / 100);
+    const p = {
+      kind: 'movement', date: t.date, shop: t.shop, time: '23:59', category: FEE_CATEGORY, bankOut: fee, card, rate: pct,
+      note: `Card fee (estimate) ${pct}% of card sales ${fmtBaht(card)} · QR has no fee [fee ${fee}]`,
+    };
+    const day = existingRows.filter((r) => r.date === t.date && r.shop === t.shop && r.category === FEE_CATEGORY);
+    const hand = day.find((r) => r.enteredBy !== TAG);
+    const auto = day.filter((r) => r.enteredBy === TAG);
+    if (hand) {
+      if (auto.length) actions.push({ ...p, action: 'skip', row: hand.row, reason: `card fee in row ${hand.row} (typed by hand) and row ${auto[0].row} (Loyverse) — delete one of them` });
+      else if (fee) actions.push({ ...p, action: 'skip', row: hand.row, kept: true, reason: `card fee already entered by hand (row ${hand.row})` });
+      continue;
+    }
+    if (fee < 0) { actions.push({ ...p, action: 'skip', reason: 'card refunds are larger than card sales — enter the card fee by hand' }); continue; }
+    if (!auto.length) { if (fee > 0) actions.push({ ...p, action: 'add' }); continue; }
+    const cur = auto[0];
+    const sheet = round2(cur.bankOut);
+    const dup = auto.length > 1 ? `duplicate card fee rows ${auto.slice(1).map((r) => r.row).join(', ')} — delete them` : undefined;
+    if (sheet === fee) { actions.push({ ...p, action: 'unchanged', row: cur.row, reason: dup }); continue; }
+    const stamp = readFeeStamp(cur.notes);
+    if (stamp === null || stamp !== sheet) {
+      actions.push({ ...p, action: 'skip', row: cur.row, kept: true, reason: `card fee in row ${cur.row} was changed by hand (${fmtBaht(sheet)}) — kept as it is` });
+      continue;
+    }
+    actions.push({ ...p, action: 'update', row: cur.row, was: { bankOut: sheet }, reason: dup });
+  }
+  return actions;
+}
+
 // Used by the manual entry endpoints: once Loyverse has filled a shop-day's pay-outs, a
 // hand-typed cash expense or collection for it is probably the same money again. Returns a
 // message to confirm (the caller lets the owner save anyway), or null. Bank-paid expenses
@@ -405,4 +455,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, planSync, planMovements, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };

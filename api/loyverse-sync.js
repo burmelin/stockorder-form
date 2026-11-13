@@ -2,7 +2,9 @@
 // Master Entry: one Retail Sale per shop per day (cash payments -> Cash In, others -> Bank In;
 // at a shop with a neighbour-card account such as Nana, non-cash payments become a Credit
 // Sale to that account), plus one row per drawer pay-out/pay-in (collection, salary,
-// expense, neighbour payment), classified from the note staff typed in Loyverse.
+// expense, neighbour payment), classified from the note staff typed in Loyverse, plus at
+// Bicasso one "Card Fee" row per day: the bank's estimated fee on card sales as Bank Out, so
+// Bank shows what the bank actually pays in (see planFees).
 //
 //   ?date=YYYY-MM-DD   last day to sync (default: today, in LOYVERSE_TIMEZONE)
 //   ?days=N            how many days back from `date` (default 2 = yesterday + today, max 31;
@@ -14,7 +16,8 @@
 // by hand in the sheet is kept as it is (see planSync / planMovements). Vercel Cron calls it daily
 // (see vercel.json) with "Authorization: Bearer $CRON_SECRET".
 const { verifyWritten, logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
-const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements } = require('./_loyverse');
+const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements, planFees } = require('./_loyverse');
+const { DEPOSITS_TAB, depositsFromRows, learnedRate } = require('./_cardfees');
 
 const MOCK_SHOPS = ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'];
 
@@ -49,12 +52,16 @@ module.exports = async function handler(req, res) {
 
   try {
     let sheets = null, existing = [], nextRow = 2, lastRow = Infinity, sheetShops = MOCK_SHOPS, accounts = neighbourAccounts(MOCK_CUSTOMER_SHOPS);
+    let feeRate = learnedRate({}).rate;
     if (!MOCK) {
       sheets = getSheetsClient();
-      const [master, lists] = await Promise.all([
+      const [master, lists, deposits] = await Promise.all([
         readMasterEntry(sheets),
         sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: "'Lists'!D2:F30" }),
+        // the fee rate the Bicasso card sales screen uses; no tab yet means the default rate
+        sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range: `'${DEPOSITS_TAB}'!A1:D400` }).catch(() => null),
       ]);
+      if (deposits) feeRate = learnedRate(depositsFromRows(deposits.data.values)).rate;
       existing = master.rows;
       nextRow = master.nextRow;
       lastRow = master.lastRow;
@@ -79,7 +86,7 @@ module.exports = async function handler(req, res) {
     const { totals, warnings, cardRefunds } = dailyTotals(receipts, storeShop, dates, accounts);
     const moves = planMovements(shifts, storeShop, dates, accounts, cardRefunds, existing);
     warnings.push(...moves.warnings);
-    const plan = [...planSync(totals, existing, addDays(today, -1)), ...moves.actions];
+    const plan = [...planSync(totals, existing, addDays(today, -1)), ...moves.actions, ...planFees(totals, existing, feeRate)];
 
     // Receipts from stores we couldn't map, so the user knows money is being left out.
     const unmatchedCounts = unmatched.map((u) => {
@@ -91,7 +98,7 @@ module.exports = async function handler(req, res) {
     const toAdd = plan.filter((p) => p.action === 'add');
     const toUpdate = plan.filter((p) => p.action === 'update');
     const result = {
-      ok: true, dryRun, mock: MOCK, timezone: TIMEZONE, from, to,
+      ok: true, dryRun, mock: MOCK, timezone: TIMEZONE, from, to, feeRate,
       results: plan, unmatchedStores: unmatchedCounts, warnings,
       added: dryRun ? 0 : toAdd.length, updated: dryRun ? 0 : toUpdate.length,
     };
@@ -108,7 +115,7 @@ module.exports = async function handler(req, res) {
     const movementRow = (p) => [
       `${+p.date.slice(5, 7)}/${+p.date.slice(8, 10)}/${p.date.slice(0, 4)}`, // A Date (M/D/YYYY)
       p.shop, p.customer || '', p.category, null,                           // B Shop, C Customer, D Category, E (formula)
-      p.cashIn || '', p.bankIn || '', p.cashOut || '', '', '',              // F Cash In, G Bank In, H Cash Out, I, J
+      p.cashIn || '', p.bankIn || '', p.cashOut || '', p.bankOut || '', '', // F Cash In, G Bank In, H Cash Out, I Bank Out, J
       TAG, p.note,                                                          // K Entered By, L Notes
     ];
     const rowFor = (p) => (p.kind === 'movement' ? movementRow(p) : [

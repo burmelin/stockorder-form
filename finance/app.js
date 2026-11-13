@@ -16,6 +16,7 @@ const RULES = {
   'Gov Tax':                   { fields: ['cashOut', 'bankOut'], hint: 'Government taxes and fees.' },
   'Home Expenses':             { fields: ['cashOut', 'bankOut'], hint: 'Personal / home spending taken from the business.' },
   'Other Expense':             { fields: ['cashOut', 'bankOut'], hint: 'Small daily costs — tea, water, electricity…' },
+  'Card Fee':                  { fields: ['bankOut'],           hint: 'The bank’s fee on card sales. The Loyverse import adds it for Bicasso every day (an estimate); change it here only if you know the real fee.' },
   'Collection (to Palladium)': { fields: ['cashOut'],           hint: 'You physically take cash FROM this shop’s drawer to Palladium. Shop = the shop you collected from. The dashboard adds it to Palladium automatically.' },
   'Cash to Bank Deposit':      { fields: ['cashOut', 'bankIn'], hint: 'Depositing drawer cash into the bank: fill BOTH Cash Out and Bank In with the same amount.' },
   'Bank to Cash (ATM)':        { fields: ['cashIn', 'bankOut'], hint: 'ATM withdrawal into a shop’s till: fill BOTH Cash In and Bank Out.' },
@@ -647,6 +648,11 @@ function populateForm() {
       names.forEach((n) => { const o = document.createElement('option'); o.value = n; o.textContent = n; og.appendChild(o); });
       cat.appendChild(og);
     }
+    // The import's card fee rows: editable even if the sheet's Lists tab doesn't name the category.
+    if (![...cat.options].some((o) => o.value === 'Card Fee')) {
+      const og = cat.querySelector('optgroup[label="Expense"]') || cat.appendChild(Object.assign(document.createElement('optgroup'), { label: 'Expense' }));
+      const o = document.createElement('option'); o.value = o.textContent = 'Card Fee'; og.appendChild(o);
+    }
     // App-only shortcut for setting a credit customer's starting debt.
     const ogSetup = document.createElement('optgroup');
     ogSetup.label = 'Setup';
@@ -685,7 +691,7 @@ function populateForm() {
 // ---- expense categories for the Daily screen (everything the sheet marks "Expense") ----
 function expenseCategories() {
   const fromList = (LISTS && LISTS.categories || [])
-    .filter((c) => c.type === 'Expense')
+    .filter((c) => c.type === 'Expense' && c.name !== 'Card Fee')   // the import writes card fees
     .map((c) => c.name);
   return fromList.length ? fromList : ['Supplier Pay', 'Salary', 'Wages', 'Commission', 'Rent', 'Gov Tax', 'Home Expenses', 'Other Expense'];
 }
@@ -1140,6 +1146,12 @@ function renderLoyverse(d) {
       s.n[p.action] = (s.n[p.action] || 0) + 1;
       if (p.cashOut && p.action !== 'skip') { const b = bucket[p.category] || 'expenses'; s.out[b] = (s.out[b] || 0) + p.cashOut; }
       if (p.cashIn && p.action !== 'skip') s.paidIn += p.cashIn;
+      if (p.category === 'Card Fee') {
+        // the bank's estimated fee on the day's card sales (Bank Out)
+        if (p.action !== 'skip') s.out['card fee (est.)'] = (s.out['card fee (est.)'] || 0) + p.bankOut;
+        if (p.reason) note(`${fmtDate(p.date)} card fee: ${p.reason}`, p.action === 'skip' && !p.kept);
+        return;
+      }
       if (p.action === 'skip') note(p.row ? `${fmtDate(p.date)} pay-outs: ${p.reason}` : `${fmtDate(p.date)} ${p.time}: ${p.reason}`, !p.kept);
       else if (p.review) note(`${fmtDate(p.date)} ${p.note}: ${p.review}`, true);
       return;
@@ -1694,6 +1706,7 @@ function statementHtml(s) {
         ${line('Closing cash', 'cash', '', 'strong rule', true)}
         <tr class="sect"><td colspan="${cols.length + 2}">Bank (card / QR / transfer)</td></tr>
         ${line('Card / QR sales', 'bankSales', '+', '', true)}
+        ${line('Card fee (estimated)', 'cardFee', '−')}
         ${line('Other money into bank', 'bankOtherIn', '+')}
         ${line('Paid from bank', 'bankOut', '−')}
         <tr class="sect"><td colspan="${cols.length + 2}">Sales</td></tr>
@@ -1737,7 +1750,7 @@ function statementHtml(s) {
       <thead><tr><th></th><th class="num">Opening</th><th class="num">Change</th><th class="num">Closing</th></tr></thead>
       <tbody>
         <tr><td>Cash in all drawers</td><td class="num">${baht(s.open.cash)}</td><td class="num">${n0(s.close.cash - s.open.cash)}</td><td class="num">${baht(s.close.cash)}</td></tr>
-        <tr><td>Bank (one shared account)</td><td class="num">${baht(s.open.bank)}</td><td class="num">${n0(s.close.bank - s.open.bank)}</td><td class="num">${baht(s.close.bank)}</td></tr>
+        <tr><td>Bank (one shared account)${s.cardFee ? `<br><span class="note">after card fee ${baht(s.cardFee)} (estimate)</span>` : ''}</td><td class="num">${baht(s.open.bank)}</td><td class="num">${n0(s.close.bank - s.open.bank)}</td><td class="num">${baht(s.close.bank)}</td></tr>
         <tr class="strong"><td>Total cash + bank</td><td class="num">${baht(s.open.total)}</td><td class="num">${n0(s.close.total - s.open.total)}</td><td class="num">${baht(s.close.total)}</td></tr>
         <tr class="muted"><td>Credit customers owe</td><td class="num">${baht(s.open.credit)}</td><td class="num">${n0(s.close.credit - s.open.credit)}</td><td class="num">${baht(s.close.credit)}</td></tr>
       </tbody>
@@ -1755,7 +1768,7 @@ function statementHtml(s) {
     ${catLine}
     ${listTable(s.moves, 'Collections, deposits and adjustments', 'money moved, not spent')}
     ${listTable(s.incomes, 'Other money in', 'customer payments, adjustments')}
-    <p class="st-foot">Opening = everything recorded before ${longDate(s.from)}. Closing = opening + this period. Drawer and bank figures match the Finance dashboard. The bank is one account shared by all shops, so per shop it shows only what came in or went out through that shop.</p>`;
+    <p class="st-foot">Opening = everything recorded before ${longDate(s.from)}. Closing = opening + this period. Drawer and bank figures match the Finance dashboard. Card sales count in full as sales; the bank's card fee (QR has none) is an estimate until the bank's statement is checked, booked each day as a Card Fee expense, so Bank shows what the bank pays in. The bank is one account shared by all shops, so per shop it shows only what came in or went out through that shop.</p>`;
 }
 
 $('reportSeg').addEventListener('click', (e) => {
