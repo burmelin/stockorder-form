@@ -124,3 +124,23 @@ test('card receipts: one line per card / QR receipt, adding up to the day\'s Ban
   const { totals } = dailyTotals(receipts, STORES, DATES);
   assert.equal(lines.reduce((n, l) => n + l.amount, 0), totals[0].bank);
 });
+
+test('Nana: QR goes to bank (no fee) from 13 Nov; cards stay neighbour credit; earlier days unchanged', () => {
+  const scan = (n) => ({ type: 'OTHER', name: 'SCAN', money_amount: n });
+  const acct = { Nana: 'Nana Card (Neighbour)' };
+  const on = (iso) => ({ created_at: iso, receipt_date: iso });
+  const receipts = [
+    receipt('s2', [card(700)], { ...on('2026-11-13T09:00:00.000Z'), receipt_number: '3-1' }),
+    receipt('s2', [scan(400)], { ...on('2026-11-13T10:00:00.000Z'), receipt_number: '3-2' }),
+    receipt('s2', [cash(100), scan(200)], { ...on('2026-11-13T11:00:00.000Z'), receipt_number: '3-3' }),
+    receipt('s2', [scan(500)], { ...on('2026-11-12T10:00:00.000Z'), receipt_number: '3-0' }),
+  ];
+  const dates = new Set(['2026-11-12', '2026-11-13']);
+  const { totals } = dailyTotals(receipts, STORES, dates, acct);
+  const day = (d) => totals.find((t) => t.date === d);
+  assert.deepEqual([day('2026-11-13').cash, day('2026-11-13').bank, day('2026-11-13').credit, day('2026-11-13').card], [100, 600, 700, 0]);
+  assert.deepEqual([day('2026-11-12').bank, day('2026-11-12').credit], [0, 500]);
+  // the bank report lists only Nana's QR receipts, from 13 Nov, adding up to its Bank In
+  const lines = cardReceipts(receipts, STORES, dates);
+  assert.deepEqual(lines.map((l) => [l.number, l.amount, l.qr]), [['3-2', 400, 400], ['3-3', 200, 200]]);
+});

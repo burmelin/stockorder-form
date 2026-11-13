@@ -1,11 +1,12 @@
 // GET /api/card-receipts?from=YYYY-MM-DD&to=YYYY-MM-DD — every Bicasso 1 / Bicasso 2 receipt
+// (and Nana's QR receipts from 13 Nov 2026, which land in the same bank account)
 // paid (partly) by card or QR in those dates, read live from Loyverse. The sheet keeps only
 // one Retail Sale row per shop per day, so the single receipts behind its Bank In come from here.
 // Owner login only. At most 31 days per request.
 const { MOCK, checkPin } = require('./_google');
 const { lvGetAll, localDate, addDays, mapStores, cardReceipts } = require('./_loyverse');
 
-const SHOPS = ['Bicasso 1', 'Bicasso 2'];
+const SHOPS = ['Bicasso 1', 'Bicasso 2', 'Nana'];
 
 // Sample lines for local development without a Loyverse token.
 function mockLines(from, to) {
