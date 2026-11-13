@@ -97,6 +97,12 @@ function neighbourAccounts(customerShops) {
   return out;
 }
 
+// Shop -> the first day its QR / PromptPay ("SCAN") money goes into the shared KBank account
+// (Bank In, no fee) instead of onto its neighbour-card account. Card payments there still go
+// on the neighbour's machine. Nana from 13 Nov 2026 (owner); days before stay as they were.
+const QR_TO_BANK_FROM = { Nana: '2026-11-13' };
+const qrToBank = (shop, date) => !!QR_TO_BANK_FROM[shop] && date >= QR_TO_BANK_FROM[shop];
+
 // Cash payments go to Cash In, everything else (card, QR, transfer) to Bank In.
 // LOYVERSE_PAYMENT_MAP can force a payment type, by name, to "cash", "bank" or "skip".
 function paymentKind(p, overrides) {
@@ -106,7 +112,8 @@ function paymentKind(p, overrides) {
 }
 
 // Sums receipts into one { cash, bank, credit } total per shop per local date; at a shop
-// with a neighbour-card account, non-cash payments are credit instead of bank.
+// with a neighbour-card account, non-cash payments are credit instead of bank (except its
+// QR money from the day in QR_TO_BANK_FROM, which is bank).
 // Refunds subtract; cancelled receipts are ignored.
 function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
   const overrides = jsonMap('LOYVERSE_PAYMENT_MAP');
@@ -123,12 +130,12 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
     const shop = storeShop.get(r.store_id);
     if (!shop) continue;
 
-    let cash = 0, bank = 0, card = 0, skipped = 0;
+    let cash = 0, bank = 0, card = 0, qr = 0, skipped = 0;
     for (const p of r.payments || []) {
       const amt = num(p.money_amount);
       const kind = paymentKind(p, overrides);
       if (kind === 'cash') cash += amt;
-      else if (kind === 'bank') { bank += amt; if (!isQr(p.name || p.type)) card += amt; }
+      else if (kind === 'bank') { bank += amt; if (isQr(p.name || p.type)) qr += amt; else card += amt; }
       else { skipped += amt; skippedPayments[p.name] = (skippedPayments[p.name] || 0) + amt; }
     }
     // If payments add up to more than the receipt (e.g. cash handed over before change),
@@ -143,7 +150,11 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
     const t = totals.get(key) || { date, shop, cash: 0, bank: 0, card: 0, credit: 0, account: accounts[shop] || null, receipts: 0, refunds: 0 };
     t.cash += sign * cash;
     // card: the card part of bank (QR / PromptPay excluded), the part the bank takes a fee on
-    if (t.account) t.credit += sign * bank; else { t.bank += sign * bank; t.card += sign * card; }
+    if (t.account) {
+      const toBank = qrToBank(shop, date) ? qr : 0;
+      t.credit += sign * (bank - toBank);
+      t.bank += sign * toBank;
+    } else { t.bank += sign * bank; t.card += sign * card; }
     if (sign < 0) t.refunds++; else t.receipts++;
     totals.set(key, t);
   }
@@ -160,6 +171,8 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
 
 // One line per receipt that has a card / QR part (whatever dailyTotals counts as bank), for
 // the "Bicasso card sales" report: { date, time, shop, number, amount, qr, methods, refund }.
+// At a shop in QR_TO_BANK_FROM only its QR payments count, and only from that day (its
+// cards go on the neighbour's machine, not into the bank).
 // qr is the part paid by QR / PromptPay (amount includes it), so card = amount - qr.
 // Refunds come out negative, so the lines add up to the day's Bank In the import wrote.
 // A payment type that is QR / PromptPay rather than a card, by its Loyverse name. The shops'
@@ -176,12 +189,15 @@ function cardReceipts(receipts, storeShop, dates, tz = TIMEZONE) {
     if (!dates.has(date)) continue;
     const shop = storeShop.get(r.store_id);
     if (!shop) continue;
+    const qrOnly = shop in QR_TO_BANK_FROM;
+    if (qrOnly && !qrToBank(shop, date)) continue;
     let bank = 0, qr = 0;
     const methods = [];
     for (const p of r.payments || []) {
       if (paymentKind(p, overrides) !== 'bank') continue;
-      bank += num(p.money_amount);
       const name = String(p.name || p.type || 'Card').trim();
+      if (qrOnly && !isQr(name)) continue;
+      bank += num(p.money_amount);
       if (isQr(name)) qr += num(p.money_amount);
       if (!methods.includes(name)) methods.push(name);
     }
@@ -455,4 +471,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };

@@ -265,7 +265,10 @@ $('refreshBtn').addEventListener('click', () => { TX = null; loadDashboard(); })
 // deposit goes to someone else's account and is only checked now and then, so each day's
 // bank-in is estimated: card sales less the fee rate learned from the days checked (typed by
 // the owner, "Bank Deposits" tab; see api/_cardfees.js). ----
-const BANK_SHOPS = ['Bicasso 1', 'Bicasso 2'];
+// Nana's QR / PromptPay goes into the same account from 13 Nov 2026 (its cards still go on
+// the neighbour's machine, so Nana's Bank In is QR only).
+const BANK_SHOPS = ['Bicasso 1', 'Bicasso 2', 'Nana'];
+const shopTag = (s) => s.replace('Bicasso ', 'B');
 // Does the bank's card deposit also pay the QR / PromptPay money? If not, QR arrives on its
 // own and the fee is worked out on card sales only.
 const DEPOSIT_WITH_QR = false;
@@ -414,7 +417,7 @@ function renderBankDays(note) {
       <li class="bank-line"><div class="row"><span class="name">Card deposit · 23:59<span class="sub">card ${fmt2(f.card)} − ${pct(BANK_RATE.rate)} fee (est.)${dep ? ` · bank paid ${fmt2(dep.amount)}` : ''}</span></span><span class="amount">≈ ${fmt2(f.expected)}</span></div></li>
       ${qrs.map((l) => `<li class="bank-line"><div class="row"><span class="name">QR / Scan · ${esc(l.time)}<span class="sub">${esc(l.shop.replace('Bicasso ', 'B'))} #${esc(l.number)}${l.refund ? ' · refund' : ''}</span></span><span class="amount">${fmt2(l.qr)}</span></div></li>`).join('')}`;
     return `
-    <li class="bank-day-block"><div class="row bank-day-head"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.map((s) => `${s.replace('Bicasso ', 'B')} ${fmt(d[s])}`).join(' · ')}</span></span>
+    <li class="bank-day-block"><div class="row bank-day-head"><span class="name">${fmtDate(date)}<span class="sub">${BANK_SHOPS.filter((s) => s !== 'Nana' || d[s]).map((s) => `${shopTag(s)} ${fmt(d[s])}`).join(' · ')}</span></span>
       <span class="amount">${f && f.sales != null ? fmt2(f.expected + f.qr) : fmt(BANK_SHOPS.reduce((n, s) => n + d[s], 0))}</span></div>
       <ul class="rows bank-lines">${lines}</ul>
       <details class="bank-day" data-date="${date}"><summary class="link-btn">All receipts</summary>
