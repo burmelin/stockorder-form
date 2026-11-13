@@ -1875,9 +1875,9 @@ function clockHtml(r) {
   const people = r.totals.length ? `
     <h3>Each person <span>${one ? '' : `${shortDate(r.from)} – ${shortDate(r.to)}`}</span></h3>
     <table class="st-list">
-      <thead><tr><th>Name</th><th class="num">Days</th><th class="num">Hours</th><th class="num">Late</th><th class="num">Left early</th><th class="num">No clock-out</th></tr></thead>
+      <thead><tr><th>Name</th><th class="num">Days</th><th class="num">Hours</th><th class="num">No clock-out</th></tr></thead>
       <tbody>${r.totals.map((p) => `<tr><td><b>${esc(p.employee)}</b></td><td class="num">${p.days}</td><td class="num">${clockHours(p.hours)}</td>
-        <td class="num">${p.late || '–'}</td><td class="num">${p.early || '–'}</td><td class="num">${p.open || '–'}</td></tr>`).join('')}</tbody>
+        <td class="num">${p.open || '–'}</td></tr>`).join('')}</tbody>
     </table>`
     : `<h3>Each person</h3><p class="st-none">No timecards in these dates.${r.lastDay && r.lastDay < r.from ? ` Timecards are saved up to ${longDate(r.lastDay)}: upload a newer export.` : r.lastDay ? '' : ' Upload the Loyverse timecards file first.'}</p>`;
 
@@ -1909,8 +1909,7 @@ function clockHtml(r) {
     </header>
     ${people}
     ${leave}
-    ${days}
-    <p class="st-foot">Times are the staff's own Loyverse Time clock punches, uploaded from Back Office. Late = clocked in more than 10 minutes after the shop opens; left early = clocked out more than 10 minutes before it closes (Bicasso 1 and 2 10:00–21:30, Nana 13:00–midnight). Hours are h:mm. Leave counts approved days off and sick leave in ${monthName}; "Waiting for OK" are requests not yet approved. A half day shows as ½.</p>`;
+    ${days}`;
 }
 
 async function uploadClockFile(file) {
