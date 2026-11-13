@@ -144,12 +144,12 @@
     if (dayFirst === null) dayFirst = true;
 
     const cards = [];
-    let skipped = 0;
+    let skipped = 0, noClockIn = 0;
     for (const r of body) {
       const employee = cell(r, col.employee);
       if (!employee || /^total/i.test(employee)) { skipped++; continue; }
       const inAt = stamp(cell(r, col.inDate) || cell(r, col.inTime), cell(r, col.inTime), dayFirst);
-      if (!inAt) { skipped++; continue; }
+      if (!inAt) { skipped++; if (/missing/i.test(cell(r, col.inTime))) noClockIn++; continue; }
       let outAt = '';
       const outTimeCell = cell(r, col.outTime);
       if (outTimeCell && readTime(outTimeCell)) {
@@ -164,7 +164,7 @@
       cards.push({ employee, store: cell(r, col.store), inAt, outAt });
     }
     const days = cards.map((c) => businessDay(c.inAt)).sort();
-    return { cards, from: days[0] || '', to: days[days.length - 1] || '', skipped, dayFirst };
+    return { cards, from: days[0] || '', to: days[days.length - 1] || '', skipped, noClockIn, dayFirst };
   }
 
   // ---- the report ----

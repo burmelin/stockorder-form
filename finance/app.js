@@ -1900,7 +1900,7 @@ async function uploadClockFile(file) {
     document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on'));
     await loadClock();
     status.className = 'clock-status good';
-    status.textContent = `Saved ${data.saved} timecards, ${shortDate(parsed.from)} – ${shortDate(parsed.to)}.${parsed.skipped ? ` ${parsed.skipped} line${parsed.skipped === 1 ? '' : 's'} skipped (no name or time).` : ''}`;
+    status.textContent = `Saved ${data.saved} timecards, ${shortDate(parsed.from)} – ${shortDate(parsed.to)}.${parsed.noClockIn ? ` ${parsed.noClockIn} left out: clock-in "Missing" in Loyverse (fix it in Back Office and upload again).` : ''}`;
   } catch (err) {
     status.className = 'clock-status bad'; status.textContent = 'Could not upload: ' + err.message;
   }

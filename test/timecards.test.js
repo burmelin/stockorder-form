@@ -73,3 +73,19 @@ test('store names map to shops', () => {
   assert.strictEqual(shopFor('Bicasso Nana'), 'Nana');
   assert.strictEqual(shopFor('Somewhere'), 'Somewhere');
 });
+
+test('the real Loyverse export layout: combined date-time, Open and Missing', () => {
+  const csv = 'Employee,Store,Clock in,Clock out,Total hours\n'
+    + 'Staff A,Burmelin,Missing,04/11/2026 21:17,\n'
+    + 'Staff B,Burmelin,13/11/2026 10:08,Open,0.82\n'
+    + 'Staff C,BICASSO 3 Nana,12/11/2026 13:45,12/11/2026 23:43,9.95\n'
+    + 'Staff B,Burmelin,10/11/2026 10:22,Missing,\n'
+    + 'Staff B,Burmelin,08/11/2026 9:56,08/11/2026 20:58,11.02\n';
+  const r = T.parseTimecards(csv);
+  assert.deepStrictEqual([r.cards.length, r.noClockIn, r.from, r.to], [4, 1, '2026-11-08', '2026-11-13']);
+  assert.deepStrictEqual(r.cards[0], { employee: 'Staff B', store: 'Burmelin', inAt: '2026-11-13 10:08', outAt: '' });
+  assert.strictEqual(r.cards[2].outAt, '');
+  assert.strictEqual(r.cards[3].inAt, '2026-11-08 09:56');
+  assert.strictEqual(shopFor('BICASSO 2 Terminal 21'), 'Bicasso 2');
+  assert.strictEqual(shopFor('BICASSO 3 Nana'), 'Nana');
+});
