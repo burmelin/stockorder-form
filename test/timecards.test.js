@@ -50,7 +50,7 @@ test('report: late, early, totals, after-midnight belongs to the evening', () =>
   assert.deepStrictEqual(r.days.map((d) => d.date), ['2026-11-14', '2026-11-13']);
   const d13 = r.days[1].lines;
   assert.deepStrictEqual([d13[0].late, d13[0].early, d13[0].hours], [25, 30, 10.58]);
-  assert.deepStrictEqual([d13[1].in, d13[1].out, d13[1].late, d13[1].early], ['12:58', '00:05 +1', 0, 0]);
+  assert.deepStrictEqual([d13[1].in, d13[1].out, d13[1].late, d13[1].early], ['12:58', '00:05 (next day)', 0, 0]);
   const aye = r.totals.find((p) => p.employee === 'Aye');
   assert.deepStrictEqual([aye.days, aye.late, aye.early, aye.open], [2, 1, 1, 1]);
 });
@@ -103,5 +103,5 @@ test('leave this month: approved day off, sick (half), waiting requests, other m
     row('Aye', 'Day off', '2026-11-21', 'Declined'),
     row('Mon', 'Day off', '2026-10-30', 'Approved'),
   ], '2026-11');
-  assert.deepStrictEqual(out, [{ name: 'Aye', dayOff: 1, sick: 0.5, pending: 1, dates: { dayOff: ['4'], sick: ['9½'], pending: ['20 off'] } }]);
+  assert.deepStrictEqual(out, [{ name: 'Aye', dayOff: 1, sick: 0.5, pending: 1, dates: { dayOff: [{ date: '2026-11-04', half: false, sick: false }], sick: [{ date: '2026-11-09', half: true, sick: true }], pending: [{ date: '2026-11-20', half: false, sick: false }] } }]);
 });

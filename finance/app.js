@@ -1834,7 +1834,10 @@ function openClock() {
   else loadClock();
 }
 const clockHours = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
-const halfDays = (n) => (n ? String(Math.floor(n)).replace(/^0$/, '') + (n % 1 ? '½' : '') : '–');
+// 0.5 -> "half day", 1 -> "1 day", 2.5 -> "2½ days"
+const halfDays = (n) => (!n ? '–' : n === 0.5 ? 'half day' : `${Math.floor(n)}${n % 1 ? '½' : ''} day${n > 1 ? 's' : ''}`);
+// one leave date: "4 Nov", "9 Nov (half)", for requests also "(sick)"
+const leaveDate = (d, showSick) => `${shortDate(d.date)}${d.half ? ' (half)' : ''}${showSick && d.sick ? ' (sick)' : ''}`;
 
 async function loadClock() {
   const from = $('clockFrom').value, to = $('clockTo').value;
@@ -1875,7 +1878,7 @@ function clockHtml(r) {
   const empty = `<p class="st-none">No timecards in these dates.${r.lastDay && r.lastDay < r.from ? ` Timecards are saved up to ${longDate(r.lastDay)}: upload a newer export.` : r.lastDay ? '' : ' Upload the Loyverse timecards file first.'}</p>`;
 
   const leaveRows = r.leave || [];
-  const dates = (list) => (list.length ? `<br><span class="note">${list.map(esc).join(', ')}</span>` : '');
+  const dates = (list, showSick) => (list.length ? `<br><span class="note">${list.map((d) => esc(leaveDate(d, showSick))).join(', ')}</span>` : '');
   const leave = r.leave === null
     ? `<h3>Leave · ${monthName}</h3><p class="st-none">Could not read the staff app's Leave tab.</p>`
     : `<h3>Leave · ${monthName} <span>from the staff app</span></h3>${leaveRows.length ? `
@@ -1883,11 +1886,11 @@ function clockHtml(r) {
       <thead><tr><th>Name</th><th class="num">Day off</th><th class="num">Sick leave</th><th class="num">Waiting for OK</th></tr></thead>
       <tbody>${leaveRows.map((p) => `<tr><td><b>${esc(p.name)}</b></td>
         <td class="num">${halfDays(p.dayOff)}${dates(p.dates.dayOff)}</td><td class="num">${halfDays(p.sick)}${dates(p.dates.sick)}</td>
-        <td class="num">${halfDays(p.pending)}${dates(p.dates.pending)}</td></tr>`).join('')}</tbody>
+        <td class="num">${halfDays(p.pending)}${dates(p.dates.pending, true)}</td></tr>`).join('')}</tbody>
     </table>` : '<p class="st-none">No leave this month.</p>'}`;
 
   const days = r.days.length ? `
-    <h3>Day by day <span>Thai time · +1 = after midnight</span></h3>
+    <h3>Day by day <span>Thai time</span></h3>
     <table class="st-list st-clock">
       <thead><tr><th>Name</th><th>Shop</th><th>In</th><th>Out</th><th class="num">Hours</th></tr></thead>
       <tbody>${r.days.slice().reverse().map((d) => `<tr class="sect"><td colspan="5">${longDate(d.date, true)}</td></tr>`

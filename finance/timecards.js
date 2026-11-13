@@ -172,7 +172,7 @@
   function build(cards, from, to) {
     const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
     const dayMin = (st) => { const h = +st.slice(11, 13), m = +st.slice(14, 16); return (h < DAY_START_HOUR ? h + 24 : h) * 60 + m; };
-    const show = (st, day) => (st ? st.slice(11, 16) + (st.slice(0, 10) !== day ? ' +1' : '') : '');
+    const show = (st, day) => (st ? st.slice(11, 16) + (st.slice(0, 10) !== day ? ' (next day)' : '') : '');
     const byDay = new Map();
     const people = new Map();
     for (const c of cards) {

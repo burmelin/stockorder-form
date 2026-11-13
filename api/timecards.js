@@ -73,7 +73,7 @@ function leaveFromRows(values, month) {
     const half = halfC > -1 && /half|morning|afternoon/i.test(String(r[halfC] || ''));
     const p = people.get(name) || { name, dayOff: 0, sick: 0, pending: 0, dates: { dayOff: [], sick: [], pending: [] } };
     p[kind] += half ? 0.5 : 1;
-    p.dates[kind].push(+date.slice(8, 10) + (half ? '½' : '') + (kind === 'pending' ? (sick ? ' sick' : ' off') : ''));
+    p.dates[kind].push({ date, half, sick });
     people.set(name, p);
   }
   return [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
