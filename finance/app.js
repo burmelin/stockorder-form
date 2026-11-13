@@ -1807,8 +1807,145 @@ $('reportSeg').addEventListener('click', (e) => {
   $('reportSeg').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   $('stPanel').hidden = b.dataset.report !== 'statement';
   $('bankCard').hidden = b.dataset.report !== 'bank';
+  $('clockPanel').hidden = b.dataset.report !== 'clock';
   if (b.dataset.report === 'bank') loadBankCard();
+  if (b.dataset.report === 'clock') openClock();
 });
+
+// ================= clock in / out =================
+// Staff clock in and out on the Loyverse Time clock. Loyverse's API doesn't share those
+// timecards, so the owner exports them from Back Office (Employees → Timecards → Export) and
+// uploads the file here; finance/timecards.js reads it and builds the report, and
+// api/timecards.js keeps them in the Finance sheet (tab "Timecards"). The report also shows
+// the month's leave from the staff app. Printed / shared as an A4 PDF like the statement.
+let CLOCK = null;   // the last report drawn
+function setClockRange(kind) {
+  const now = new Date();
+  let from = now, to = now;
+  if (kind === 'week') { from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7); to = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1); }
+  if (kind === 'month') { from = new Date(now.getFullYear(), now.getMonth(), 1); }
+  if (kind === 'lastmonth') { from = new Date(now.getFullYear(), now.getMonth() - 1, 1); to = new Date(now.getFullYear(), now.getMonth(), 0); }
+  $('clockFrom').value = isoOf(from); $('clockTo').value = isoOf(to);
+  document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.toggle('on', c.dataset.range === kind));
+  loadClock();
+}
+function openClock() {
+  if (!$('clockFrom').value) setClockRange('week');
+  else loadClock();
+}
+const clockHours = (h) => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
+// 0.5 -> "half day", 1 -> "1 day", 2.5 -> "2½ days"
+const halfDays = (n) => (!n ? '–' : n === 0.5 ? 'half day' : `${Math.floor(n)}${n % 1 ? '½' : ''} day${n > 1 ? 's' : ''}`);
+// one leave date: "4 Nov", "9 Nov (half)", for requests also "(sick)"
+const leaveDate = (d, showSick) => `${shortDate(d.date)}${d.half ? ' (half)' : ''}${showSick && d.sick ? ' (sick)' : ''}`;
+
+async function loadClock() {
+  const from = $('clockFrom').value, to = $('clockTo').value;
+  const state = $('clockState'), doc = $('clockDoc');
+  if (!from || !to) return;
+  if (from > to) { state.hidden = false; state.classList.add('error'); state.textContent = 'The first date must be before the second.'; doc.innerHTML = ''; CLOCK = null; return; }
+  const redraw = !!doc.innerHTML;
+  state.classList.remove('error');
+  if (redraw) { state.hidden = true; doc.classList.add('stale'); }
+  else { state.hidden = false; state.textContent = 'Loading…'; }
+  try {
+    const resp = await api(`/api/timecards?from=${from}&to=${to}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    const status = $('clockStatus');
+    if (!status.classList.contains('good') && !status.classList.contains('bad')) {
+      status.textContent = data.lastDay
+        ? `Timecards saved up to ${longDate(data.lastDay, true)}${data.uploaded ? ` · last upload ${longDate(data.uploaded)}` : ''}.`
+        : 'No timecards uploaded yet.';
+    }
+    CLOCK = { ...Timecards.build(data.cards || [], from, to), lastDay: data.lastDay, month: data.month, leave: data.leave, madeAt: new Date() };
+    doc.innerHTML = clockHtml(CLOCK);
+    state.hidden = true;
+  } catch (err) {
+    state.hidden = false; state.classList.add('error'); state.textContent = 'Could not load: ' + err.message;
+  } finally {
+    doc.classList.remove('stale');
+  }
+}
+
+function clockHtml(r) {
+  const one = r.from === r.to;
+  const period = one ? longDate(r.from, true) : `${longDate(r.from, true)} – ${longDate(r.to, true)}`;
+  const [my, mm] = (r.month || r.to.slice(0, 7)).split('-').map(Number);
+  const monthName = `${MONTH_NAMES[mm - 1]} ${my}`;
+  const out = (l) => (l.out ? esc(l.out) : '<span class="st-flag open">no clock-out</span>');
+
+  const empty = `<p class="st-none">No timecards in these dates.${r.lastDay && r.lastDay < r.from ? ` Timecards are saved up to ${longDate(r.lastDay)}: upload a newer export.` : r.lastDay ? '' : ' Upload the Loyverse timecards file first.'}</p>`;
+
+  const leaveRows = r.leave || [];
+  const dates = (list, showSick) => (list.length ? `<br><span class="note">${list.map((d) => esc(leaveDate(d, showSick))).join(', ')}</span>` : '');
+  const leave = r.leave === null
+    ? `<h3>Leave · ${monthName}</h3><p class="st-none">Could not read the staff app's Leave tab.</p>`
+    : `<h3>Leave · ${monthName} <span>from the staff app</span></h3>${leaveRows.length ? `
+    <table class="st-list">
+      <thead><tr><th>Name</th><th class="num">Day off</th><th class="num">Sick leave</th><th class="num">Waiting for OK</th></tr></thead>
+      <tbody>${leaveRows.map((p) => `<tr><td><b>${esc(p.name)}</b></td>
+        <td class="num">${halfDays(p.dayOff)}${dates(p.dates.dayOff)}</td><td class="num">${halfDays(p.sick)}${dates(p.dates.sick)}</td>
+        <td class="num">${halfDays(p.pending)}${dates(p.dates.pending, true)}</td></tr>`).join('')}</tbody>
+    </table>` : '<p class="st-none">No leave this month.</p>'}`;
+
+  const days = r.days.length ? `
+    <h3>Day by day <span>Thai time</span></h3>
+    <table class="st-list st-clock">
+      <thead><tr><th>Name</th><th>Shop</th><th>In</th><th>Out</th><th class="num">Hours</th></tr></thead>
+      <tbody>${r.days.slice().reverse().map((d) => `<tr class="sect"><td colspan="5">${longDate(d.date, true)}</td></tr>`
+        + d.lines.map((l) => `<tr><td><b>${esc(l.employee)}</b></td><td class="nowrap">${esc(l.shop || '')}</td><td class="nowrap">${esc(l.in)}</td>
+          <td class="nowrap">${out(l)}</td><td class="num">${l.hours == null ? '' : clockHours(l.hours)}</td></tr>`).join('')).join('')}</tbody>
+    </table>` : '';
+
+  return `
+    <header class="st-head">
+      <div><div class="st-brand">Burmelin</div><h2>Clock in / out</h2><div class="st-period">${period}</div></div>
+      <div class="st-made">Made ${longDate(isoOf(r.madeAt))}, ${r.madeAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}<br>From the Loyverse Time clock</div>
+    </header>
+    ${days || empty}
+    ${leave}`;
+}
+
+async function uploadClockFile(file) {
+  const status = $('clockStatus');
+  status.className = 'clock-status'; status.textContent = 'Reading the file…';
+  try {
+    const parsed = Timecards.parseTimecards(await file.text());
+    if (parsed.error) throw new Error(parsed.error);
+    if (!parsed.cards.length) throw new Error('No timecards found in this file.');
+    status.textContent = `Saving ${parsed.cards.length} timecards…`;
+    const resp = await api('/api/timecards', { method: 'POST', body: JSON.stringify({ from: parsed.from, to: parsed.to, cards: parsed.cards }) });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    status.className = 'clock-status good';
+    status.textContent = `Saved ${data.saved} timecards, ${shortDate(parsed.from)} – ${shortDate(parsed.to)}.${parsed.noClockIn ? ` ${parsed.noClockIn} left out: clock-in "Missing" in Loyverse (fix it in Back Office and upload again).` : ''}`;
+    $('clockFrom').value = parsed.from; $('clockTo').value = parsed.to;
+    document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on'));
+    await loadClock();
+  } catch (err) {
+    status.className = 'clock-status bad'; status.textContent = 'Could not upload: ' + err.message;
+  }
+}
+function clockFileName() {
+  if (!CLOCK) return 'Burmelin-clock-in-out';
+  return 'Burmelin-clock-in-out-' + (CLOCK.from === CLOCK.to ? CLOCK.from : CLOCK.from + '_to_' + CLOCK.to);
+}
+function printClock() {
+  if (!CLOCK) return;
+  if (window.navigator.standalone === true) { shareClock(); return; }
+  $('printArea').innerHTML = `<article class="stmt">${$('clockDoc').innerHTML}</article>`;
+  window.print();
+}
+function shareClock() {
+  if (CLOCK) sharePdf($('clockShareBtn'), $('clockDoc').innerHTML, clockFileName());
+}
+$('clockFile').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) uploadClockFile(f); });
+$('clockQuick').addEventListener('click', (e) => { const c = e.target.closest('[data-range]'); if (c) { $('clockStatus').className = 'clock-status'; setClockRange(c.dataset.range); } });
+$('clockFrom').addEventListener('change', () => { document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on')); loadClock(); });
+$('clockTo').addEventListener('change', () => { document.querySelectorAll('#clockQuick .chip').forEach((c) => c.classList.remove('on')); loadClock(); });
+$('clockShareBtn').addEventListener('click', shareClock);
+$('clockPrintBtn').addEventListener('click', printClock);
 
 $('stFrom').addEventListener('change', renderStatement);
 $('stTo').addEventListener('change', renderStatement);
@@ -1844,12 +1981,13 @@ function loadHtml2Pdf() {
     document.head.appendChild(sc);
   });
 }
-async function statementPdf() {
+// Any report (statement, clock in/out) as an A4 PDF, drawn off-screen at A4 width so it
+// looks the same from any phone
+async function reportPdf(html, name) {
   await loadHtml2Pdf();
-  // Drawn off-screen at A4 width so the PDF looks the same from any phone
   const box = document.createElement('div');
   box.className = 'pdf-stage';
-  box.innerHTML = `<article class="stmt pdf">${$('stDoc').innerHTML}</article>`;
+  box.innerHTML = `<article class="stmt pdf">${html}</article>`;
   document.body.appendChild(box);
   try {
     const blob = await html2pdf().set({
@@ -1859,18 +1997,17 @@ async function statementPdf() {
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', 'h3', '.st-kpis'] },
     }).from(box.firstElementChild).outputPdf('blob');
-    return new File([blob], statementFileName() + '.pdf', { type: 'application/pdf' });
+    return new File([blob], name + '.pdf', { type: 'application/pdf' });
   } finally {
     box.remove();
   }
 }
-async function shareStatement() {
-  if (!ST) return;
-  const btn = $('stShareBtn');
+// Share sheet (Print is in it on iPhone), or a download where sharing files isn't possible
+async function sharePdf(btn, html, name) {
   const label = btn.innerHTML;
   btn.disabled = true; btn.textContent = 'Making PDF…';
   try {
-    const file = await statementPdf();
+    const file = await reportPdf(html, name);
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/, '') }); }
       catch (e) { if (e.name !== 'AbortError') throw e; }
@@ -1885,6 +2022,9 @@ async function shareStatement() {
   } finally {
     btn.disabled = false; btn.innerHTML = label;
   }
+}
+function shareStatement() {
+  if (ST) sharePdf($('stShareBtn'), $('stDoc').innerHTML, statementFileName());
 }
 $('stShareBtn').addEventListener('click', shareStatement);
 

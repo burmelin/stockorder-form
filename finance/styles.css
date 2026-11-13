@@ -397,6 +397,20 @@ button, input, select, textarea { font-family: inherit; }
 .stmt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .stmt-actions .save-btn, .stmt-actions .ghost-btn { padding: 12px; font-size: 15px; }
 .stmt.stale { opacity: .45; transition: opacity .15s; }
+.clock-upload { display: block; text-align: center; cursor: pointer; }
+.clock-status:empty { display: none; }
+.clock-status { font-size: 13px; color: var(--stone); margin-top: 8px; }
+.clock-status.bad { color: var(--bad); }
+.clock-status.good { color: var(--good); }
+.clock-how { margin-top: 6px; }
+.clock-steps { padding-left: 18px; margin: 6px 0; }
+.clock-steps li { margin-bottom: 4px; }
+.clock-upload { margin-bottom: 4px; }
+#clockPanel .stmt-actions { margin-top: 12px; }
+.stmt .st-flag { display: inline-block; font-size: 9.5px; font-weight: 700; color: #B42318; background: #FEE4E2; border-radius: 4px; padding: 0 4px; margin-left: 2px; white-space: nowrap;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.stmt .st-flag.open { color: #93370D; background: #FEF0C7; margin-left: 0; }
+.stmt .st-clock td { vertical-align: top; }
 .stmt-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -14px; padding: 0 14px 6px; }
 
 /* The statement itself: the same markup on screen, in print and in the PDF */
@@ -511,7 +525,7 @@ button, input, select, textarea { font-family: inherit; }
   .home-grid, .staff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   .home-grid .card, .staff-grid .card { margin-bottom: 16px; }
   .hero-value { font-size: 2.8rem; }
-  #page-statement .seg, #stPanel .stmt-controls, #bankCard { max-width: 640px; }
+  #page-statement .seg, #stPanel .stmt-controls, #bankCard, #clockPanel { max-width: 640px; }
   .daily-foot { margin: 8px -28px -32px; padding: 12px 28px; bottom: -32px; }
   .toast { bottom: 40px; left: calc(50% + 105px); }
 }
