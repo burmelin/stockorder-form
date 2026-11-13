@@ -1685,6 +1685,9 @@ async function renderStatement() {
   state.classList.remove('error');
   if (redraw) { state.hidden = true; $('stDoc').classList.add('stale'); }
   else { state.hidden = false; state.textContent = 'Loading…'; }
+  // Staff times come live from Loyverse: loaded beside the sheet, and a failure there only
+  // shows a line in that section instead of stopping the statement.
+  const staff = loadStaffTimes(from, to);
   try {
     const tx = await loadTx();
     if (!LISTS) {
@@ -1694,6 +1697,7 @@ async function renderStatement() {
     }
     ST = Statement.build(tx, LISTS, from, to);
     ST.madeAt = new Date();
+    ST.staff = await staff;
     $('stDoc').innerHTML = statementHtml(ST);
     state.hidden = true;
   } catch (err) {
@@ -1701,6 +1705,50 @@ async function renderStatement() {
   } finally {
     $('stDoc').classList.remove('stale');
   }
+}
+
+async function loadStaffTimes(from, to) {
+  if (daysBetween(from, to) > 31) return { note: 'Staff times show for 31 days or fewer.' };
+  try {
+    const resp = await api(`/api/staff-times?from=${from}&to=${to}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Server error');
+    return { days: data.days || [] };
+  } catch (err) {
+    return { note: 'Could not load staff times from Loyverse: ' + err.message };
+  }
+}
+
+// "Staff on shift": till open/close (with who) and each person's first and last sale.
+// Loyverse's API has no clock-in records, so these are the closest times it keeps.
+function staffHtml(s) {
+  const st = s.staff;
+  if (!st) return '';
+  const title = '<h3>Staff on shift <span>from Loyverse, Thai time</span></h3>';
+  if (st.note) return `${title}<p class="st-none">${esc(st.note)}</p>`;
+  const order = (shop) => { const i = s.shops.indexOf(shop); return i < 0 ? 99 : i; };
+  const days = st.days.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : order(a.shop) - order(b.shop)));
+  if (!days.length) return `${title}<p class="st-none">No till opened and no sales in these dates.</p>`;
+  const one = s.from === s.to;
+  const flag = (mins, word) => (mins ? ` <span class="st-flag">${mins >= 60 ? Math.floor(mins / 60) + 'h ' : ''}${mins % 60 ? (mins % 60) + 'm ' : ''}${word}</span>` : '');
+  const rows = days.map((d) => {
+    const where = `${one ? '' : `<b>${shortDate(d.date)}</b> · `}<b>${esc(d.shop)}</b>${d.hours ? ` <span class="note">open ${d.hours}</span>` : ''}`;
+    const tills = d.tills.length
+      ? d.tills.map((t) => `<tr><td class="st-who">Till</td>
+          <td>${esc(t.opened)}${flag(t.late, 'late')}${t.openedBy ? `<br><span class="note">${esc(t.openedBy)}</span>` : ''}</td>
+          <td>${t.closed ? esc(t.closed) + flag(t.early, 'early') : '<span class="note">still open</span>'}${t.closedBy ? `<br><span class="note">${esc(t.closedBy)}</span>` : ''}</td>
+          <td class="num">${t.hours == null ? '' : t.hours.toFixed(1)}</td></tr>`).join('')
+      : '<tr><td class="st-who">Till</td><td colspan="3" class="note">not opened</td></tr>';
+    const people = d.staff.map((p) => `<tr><td class="st-who">${esc(p.name)}</td><td>${esc(p.firstSale)}</td><td>${esc(p.lastSale)}</td>
+          <td class="num note">${p.receipts} sale${p.receipts === 1 ? '' : 's'}</td></tr>`).join('');
+    return `<tr class="sect"><td colspan="4">${where}</td></tr>${tills}${people}`;
+  }).join('');
+  return `${title}
+    <table class="st-list st-staff">
+      <thead><tr><th></th><th>In / first sale</th><th>Out / last sale</th><th class="num">Hours</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="st-cats">Till = when the POS shift was opened and closed, and by whom. A name = that person's first and last sale. Loyverse doesn't share its Time clock through the API, so these are the closest times it keeps. Late or early is against the shop's hours with 10 minutes' grace.</p>`;
 }
 
 function statementHtml(s) {
@@ -1794,6 +1842,7 @@ function statementHtml(s) {
     <h3>By shop</h3>
     <div class="st-wide">${shopTable}</div>
     ${daily}
+    ${staffHtml(s)}
     ${listTable(s.expenses, 'Expenses and pay-outs', 'salary, rent, stock, small costs', 'No expenses in these dates.')}
     ${catLine}
     ${listTable(s.moves, 'Collections, deposits and adjustments', 'money moved, not spent')}

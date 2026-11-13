@@ -193,6 +193,93 @@ function cardReceipts(receipts, storeShop, dates, tz = TIMEZONE) {
   return out.map(({ at, ...x }) => x);
 }
 
+// ---- staff on shift (daily statement) ----
+// Loyverse's public API has no timecards (the Time clock report lives only in Back Office),
+// so the statement shows the two things the API does record, per shop per day:
+//  - tills: each POS shift's open and close time and who opened / closed it;
+//  - staff: each employee's first and last receipt that day.
+// A "day" runs 05:00 to 05:00 Thai time, so Nana's till closed at 00:20 still counts for the
+// evening before. Times come back as "HH:MM", with "+1" when after midnight.
+const SHOP_HOURS = { 'Bicasso 1': ['10:00', '21:30'], 'Bicasso 2': ['10:00', '21:30'], Nana: ['13:00', '24:00'] };
+const DAY_START_HOUR = 5;
+const LATE_GRACE_MIN = 10;   // opened up to 10 min after opening time / closed up to 10 min early = on time
+
+function businessDate(instant, tz = TIMEZONE) {
+  return localDate(new Date(instant).getTime() - DAY_START_HOUR * 3600000, tz);
+}
+// minutes since midnight of the business day (01:30 next morning = 25:30 = 1530)
+function dayMinutes(instant, tz = TIMEZONE) {
+  const [h, m] = localTime(instant, tz).split(':').map(Number);
+  return (h < DAY_START_HOUR ? h + 24 : h) * 60 + m;
+}
+const hhmm = (mins) => `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}${mins >= 1440 ? ' +1' : ''}`;
+const toMins = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const hoursBetween = (a, b) => Math.round(((new Date(b) - new Date(a)) / 3600000) * 10) / 10;
+
+function staffDays(shifts, receipts, employees, storeShop, dates, tz = TIMEZONE) {
+  const names = new Map((employees || []).map((e) => [e.id, String(e.name || '').trim() || 'No name']));
+  const who = (id) => (id ? names.get(id) || 'Unknown staff' : '');
+  const days = new Map();   // "date|shop" -> { date, shop, tills, staff: Map }
+  const slot = (date, shop) => {
+    const k = `${date}|${shop}`;
+    if (!days.has(k)) days.set(k, { date, shop, tills: [], staff: new Map() });
+    return days.get(k);
+  };
+
+  for (const s of shifts || []) {
+    if (!s.opened_at) continue;
+    const shop = storeShop.get(s.store_id);
+    const date = businessDate(s.opened_at, tz);
+    if (!shop || !dates.has(date)) continue;
+    const hours = SHOP_HOURS[shop];
+    const open = dayMinutes(s.opened_at, tz);
+    const till = { opened: hhmm(open), openedBy: who(s.opened_by_employee), closed: '', closedBy: '', hours: null, late: 0, early: 0, openDays: 0, at: new Date(s.opened_at).getTime() };
+    if (hours && open > toMins(hours[0]) + LATE_GRACE_MIN) till.late = open - toMins(hours[0]);
+    if (s.closed_at) {
+      const closeDate = businessDate(s.closed_at, tz);
+      till.closedBy = who(s.closed_by_employee);
+      till.hours = hoursBetween(s.opened_at, s.closed_at);
+      if (closeDate !== date) {
+        // left open past the business day: show the close date, no early/late check
+        const [, m, d] = closeDate.split('-').map(Number);
+        till.closed = `${localTime(s.closed_at, tz)} on ${d}/${m}`;
+        till.openDays = Math.round((Date.parse(closeDate) - Date.parse(date)) / 86400000);
+      } else {
+        const close = dayMinutes(s.closed_at, tz);
+        till.closed = hhmm(close);
+        if (hours && close < toMins(hours[1]) - LATE_GRACE_MIN) till.early = toMins(hours[1]) - close;
+      }
+    }
+    slot(date, shop).tills.push(till);
+  }
+
+  for (const r of receipts || []) {
+    if (r.cancelled_at) continue;
+    const at = r.receipt_date || r.created_at;
+    if (!at) continue;
+    const shop = storeShop.get(r.store_id);
+    const date = businessDate(at, tz);
+    if (!shop || !dates.has(date)) continue;
+    const day = slot(date, shop);
+    const key = r.employee_id || '';
+    const t = new Date(at).getTime();
+    const p = day.staff.get(key) || { name: who(key) || 'Not recorded', first: t, last: t, receipts: 0 };
+    p.first = Math.min(p.first, t); p.last = Math.max(p.last, t); p.receipts++;
+    day.staff.set(key, p);
+  }
+
+  const out = [...days.values()].map((d) => ({
+    date: d.date,
+    shop: d.shop,
+    hours: SHOP_HOURS[d.shop] ? SHOP_HOURS[d.shop].join('–') : '',
+    tills: d.tills.sort((a, b) => a.at - b.at).map(({ at, ...x }) => x),
+    staff: [...d.staff.values()].sort((a, b) => a.first - b.first).map((p) => ({
+      name: p.name, firstSale: hhmm(dayMinutes(p.first, tz)), lastSale: hhmm(dayMinutes(p.last, tz)), receipts: p.receipts,
+    })),
+  }));
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
 // Every sales row the import writes ends its note with the amounts it wrote, e.g.
 // "Loyverse · 12 receipts [3000|1500|0]" (cash|bank|credit). If the sheet's amounts no
 // longer match that stamp, someone corrected the row by hand, and the import keeps it.
@@ -455,4 +542,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, staffDays, businessDate, SHOP_HOURS, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };

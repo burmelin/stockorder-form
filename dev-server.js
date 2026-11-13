@@ -26,6 +26,7 @@ app.all('/api/commission', require('./api/commission'));
 app.all('/api/advances', require('./api/advances'));
 app.all('/api/card-receipts', require('./api/card-receipts'));
 app.all('/api/bank-deposits', require('./api/bank-deposits'));
+app.all('/api/staff-times', require('./api/staff-times'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

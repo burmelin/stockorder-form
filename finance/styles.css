@@ -436,6 +436,10 @@ button, input, select, textarea { font-family: inherit; }
 .stmt .st-wide { overflow-x: auto; }
 .stmt .st-list .note { color: #666; font-size: 11px; }
 .stmt .st-none { color: #666; }
+.stmt .st-staff td { vertical-align: top; }
+.stmt .st-staff .st-who { font-weight: 600; width: 34%; }
+.stmt .st-staff tr.sect .note { text-transform: none; letter-spacing: 0; font-weight: 500; color: #666; }
+.stmt .st-flag { display: inline-block; font-size: 10px; font-weight: 700; color: #B42318; background: #FEE4E2; border-radius: 4px; padding: 0 4px; margin-left: 2px; }
 .stmt .st-cats { font-size: 11px; color: #444; margin-top: 6px; }
 .stmt .st-foot { margin-top: 16px; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 6px; }
 .stmt tr { break-inside: avoid; page-break-inside: avoid; }
