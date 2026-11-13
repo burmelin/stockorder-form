@@ -1872,14 +1872,7 @@ function clockHtml(r) {
   const monthName = `${MONTH_NAMES[mm - 1]} ${my}`;
   const out = (l) => (l.out ? esc(l.out) : '<span class="st-flag open">no clock-out</span>');
 
-  const people = r.totals.length ? `
-    <h3>Each person <span>${one ? '' : `${shortDate(r.from)} – ${shortDate(r.to)}`}</span></h3>
-    <table class="st-list">
-      <thead><tr><th>Name</th><th class="num">Days</th><th class="num">Hours</th><th class="num">No clock-out</th></tr></thead>
-      <tbody>${r.totals.map((p) => `<tr><td><b>${esc(p.employee)}</b></td><td class="num">${p.days}</td><td class="num">${clockHours(p.hours)}</td>
-        <td class="num">${p.open || '–'}</td></tr>`).join('')}</tbody>
-    </table>`
-    : `<h3>Each person</h3><p class="st-none">No timecards in these dates.${r.lastDay && r.lastDay < r.from ? ` Timecards are saved up to ${longDate(r.lastDay)}: upload a newer export.` : r.lastDay ? '' : ' Upload the Loyverse timecards file first.'}</p>`;
+  const empty = `<p class="st-none">No timecards in these dates.${r.lastDay && r.lastDay < r.from ? ` Timecards are saved up to ${longDate(r.lastDay)}: upload a newer export.` : r.lastDay ? '' : ' Upload the Loyverse timecards file first.'}</p>`;
 
   const leaveRows = r.leave || [];
   const dates = (list) => (list.length ? `<br><span class="note">${list.map(esc).join(', ')}</span>` : '');
@@ -1907,9 +1900,8 @@ function clockHtml(r) {
       <div><div class="st-brand">Burmelin</div><h2>Clock in / out</h2><div class="st-period">${period}</div></div>
       <div class="st-made">Made ${longDate(isoOf(r.madeAt))}, ${r.madeAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}<br>From the Loyverse Time clock</div>
     </header>
-    ${people}
-    ${leave}
-    ${days}`;
+    ${days || empty}
+    ${leave}`;
 }
 
 async function uploadClockFile(file) {
