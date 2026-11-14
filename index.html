@@ -1110,9 +1110,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
+  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
   var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -2985,7 +2985,7 @@ var OWNER_TAB = 'leave';
 var OWNER_EDIT = null;     // employee being edited ({} for a new one), or null for the list
 var PLACE_LABEL = { 'Bicasso 1': 'Bicasso 1', 'Bicasso 2': 'Bicasso 2', 'Bicasso Nana': 'Nana', 'Palladium': 'Warehouse' };
 
-function ownerTab(tab) { OWNER_TAB = tab; OWNER_EDIT = null; ownerRender(); document.getElementById('owner-body').scrollTop = 0; }
+function ownerTab(tab) { OWNER_TAB = tab; OWNER_EDIT = null; OWNER_ADD = null; ownerRender(); document.getElementById('owner-body').scrollTop = 0; }
 function ownerTabsHtml(pending) {
   return '<div class="ms-tabs rp-tabs">'
     + '<button class="mstab' + (OWNER_TAB === 'leave' ? ' active' : '') + '" onclick="ownerTab(\'leave\')">Leave' + (pending ? ' · ' + pending : '') + '</button>'
@@ -3105,6 +3105,9 @@ function ownerRender() {
     igRefreshEntries();
     return;
   }
+  if (OWNER_ADD) { document.getElementById('owner-body').innerHTML = h + ownerAddHtml(); ownerAddCount(); return; }
+  h += '<button class="btn-submit" style="margin:0 0 6px" onclick="ownerAddOpen()">Write leave for staff</button>'
+    + '<div class="lv-hint" style="margin:0 0 4px">No PIN needed. It is saved as approved.</div>';
   h += '<div class="lv-title">Waiting for you' + (pending.length ? ' · ' + pending.length : '') + '</div>';
   h += pending.length ? pending.map(function(q) {
     return '<div class="card lv-ask"><div class="lv-req-top"><span class="lv-who">' + lvEsc(q.name) + '</span><span class="lv-type ' + q.type + '">' + LEAVE_TYPE_LABEL[q.type] + '</span></div>'
@@ -3143,6 +3146,86 @@ function ownerRender() {
     + '</div>';
   document.getElementById('owner-body').innerHTML = h;
 }
+// ── Owner: write leave for an employee (no PIN), saved as approved ──
+var OWNER_ADD = null;   // { staffId, type, len, half } while the form is open
+function ownerAddOpen() { OWNER_ADD = { staffId: '', type: 'dayoff', len: 'full', half: 'morning' }; ownerRender(); document.getElementById('owner-body').scrollTop = 0; }
+function ownerAddClose() { OWNER_ADD = null; ownerRender(); }
+function ownerAddStaff() { return OWNER_DATA.staff.filter(function(x) { return x.id === OWNER_ADD.staffId; })[0]; }
+// Keep the dates and reason when a tap redraws the form
+function ownerAddKeep() {
+  ['oa-from', 'oa-to', 'oa-date', 'oa-reason'].forEach(function(id) { var el = document.getElementById(id); if (el) OWNER_ADD[id] = el.value; });
+}
+function ownerAddSet(key, val) { ownerAddKeep(); OWNER_ADD[key] = val; ownerRender(); }
+function ownerAddHtml() {
+  var a = OWNER_ADD, today = OWNER_DATA.today, s = ownerAddStaff();
+  var tab = function(key, val, label) {
+    return '<button type="button" class="mstab' + (a[key] === val ? ' active' : '') + '" onclick="ownerAddSet(\'' + key + '\', \'' + val + '\')">' + label + '</button>';
+  };
+  var names = OWNER_DATA.staff.map(function(x) {
+    return '<button type="button" class="ad-chip' + (x.id === a.staffId ? ' on' : '') + '" data-id="' + lvEsc(x.id) + '" onclick="ownerAddSet(\'staffId\', this.dataset.id)">' + lvEsc(x.name) + '</button>';
+  }).join('');
+  var from = a['oa-from'] || today, to = a['oa-to'] || from, date = a['oa-date'] || today;
+  var times = (s && s.halfTimes) || {};
+  var h = '<div class="card ad-card"><label>Write leave for staff</label>'
+    + '<div class="form-group"><label>Who</label><div class="ad-chips">' + (names || '<span class="lv-hint">No employees yet. Add them in the Staff tab.</span>') + '</div>'
+    + (s && s.dayOffRule === 'fixed' ? '<div class="lv-hint">' + lvEsc(s.name) + ' is off every ' + lvEsc(s.fixedDayOff) + ': that day is left out.</div>' : '') + '</div>'
+    + '<div class="ms-tabs rp-tabs">' + tab('type', 'dayoff', 'Day off') + tab('type', 'sick', 'Sick leave') + '</div>'
+    + '<div class="ms-tabs rp-tabs lv-len">' + tab('len', 'full', 'Full day') + tab('len', 'half', 'Half day') + '</div>';
+  if (a.len === 'full') {
+    h += '<div class="row2"><div class="form-group"><label for="oa-from">From</label><input type="date" id="oa-from" value="' + from + '" onchange="ownerAddFrom()"></div>'
+      + '<div class="form-group"><label for="oa-to">To</label><input type="date" id="oa-to" min="' + from + '" value="' + to + '" onchange="ownerAddCount()"></div></div>'
+      + '<div class="lv-count" id="oa-count"></div>'
+      + '<div class="lv-hint">For one day, leave From and To the same. Past days (up to a month back) are fine.</div>';
+  } else {
+    h += '<div class="form-group"><label for="oa-date">Date</label><input type="date" id="oa-date" value="' + date + '"></div>'
+      + '<div class="ms-tabs rp-tabs lv-len">' + tab('half', 'morning', 'First half') + tab('half', 'afternoon', 'Second half') + '</div>'
+      + '<div class="lv-count">' + (times[a.half] ? 'Off ' + times[a.half] : '') + '</div>';
+  }
+  h += '<div class="form-group" style="margin-top:12px"><label for="oa-reason">Reason (optional)</label><textarea id="oa-reason" rows="2" maxlength="300">' + lvEsc(a['oa-reason'] || '') + '</textarea></div>'
+    + '<div id="oa-err" class="lv-err"></div>'
+    + '<button class="btn-submit" id="oa-save" onclick="ownerAddSave()">Save leave</button>'
+    + '<div class="ad-actions"><button class="btn-new" onclick="ownerAddClose()">Cancel</button></div></div>';
+  return h;
+}
+function ownerAddFrom() {
+  var f = document.getElementById('oa-from'), t = document.getElementById('oa-to');
+  t.min = f.value; if (!t.value || t.value < f.value) t.value = f.value;
+  ownerAddCount();
+}
+function ownerAddCount() {
+  var el = document.getElementById('oa-count'); if (!el) return;
+  var f = document.getElementById('oa-from').value, t = document.getElementById('oa-to').value || f, n = 0;
+  if (f && t >= f) for (var k = f; k <= t && n < 99; k = lvAddDays(k, 1)) n++;
+  el.textContent = n ? n + (n === 1 ? ' day' : ' days') : '';
+}
+function ownerAddSave() {
+  ownerAddKeep();
+  var a = OWNER_ADD, err = document.getElementById('oa-err'), btn = document.getElementById('oa-save'), dates = [], half = '';
+  err.textContent = '';
+  if (!a.staffId) { err.textContent = 'Choose who the leave is for.'; return; }
+  if (a.len === 'half') {
+    if (!a['oa-date']) { err.textContent = 'Choose the date.'; return; }
+    dates = [a['oa-date']]; half = a.half;
+  } else {
+    var from = a['oa-from'], to = a['oa-to'] || from;
+    if (!from) { err.textContent = 'Choose the first day.'; return; }
+    if (to < from) to = from;
+    for (var k = from; k <= to && dates.length <= 31; k = lvAddDays(k, 1)) dates.push(k);
+    if (dates.length > 31) { err.textContent = 'Up to 31 days at a time.'; return; }
+  }
+  var name = (ownerAddStaff() || {}).name || '';
+  btn.disabled = true; btn.textContent = 'Saving…';
+  google.script.run
+    .withSuccessHandler(function(r) {
+      btn.disabled = false; btn.textContent = 'Save leave';
+      if (!r || !r.success) { err.textContent = (r && r.error) || 'Could not save.'; return; }
+      OWNER_DATA = r; OWNER_ADD = null; ownerRender();
+      showToast(r.warning ? 'Saved. Note: ' + lvEsc(r.warning) + '.' : 'Leave saved for ' + lvEsc(name), null, null, r.warning ? 8000 : 3000);
+    })
+    .withFailureHandler(function() { btn.disabled = false; btn.textContent = 'Save leave'; err.textContent = 'Connection error. Check Coming up before saving again.'; ownerLoad(); })
+    .ownerAddLeave(a.staffId, a.type, dates, a['oa-reason'] || '', half);
+}
+
 function ownerDecide(id, decision, btn) {
   var note = (document.getElementById('on-' + id) || {}).value || '';
   var card = btn.closest('.lv-ask'), buttons = card.querySelectorAll('button');
