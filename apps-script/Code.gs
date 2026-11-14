@@ -235,6 +235,7 @@ function handleApi(action, params, body) {
     case 'leaveCancel':          out = leaveCancel(body, body.requestId); break;
     case 'ownerLeave':           out = ownerLeave(body); break;
     case 'ownerDecideLeave':     out = ownerDecideLeave(body, body.requestId, body.decision, body.note); break;
+    case 'ownerAddLeave':        out = ownerAddLeave(body, body.staffId, body.type, body.dates, body.reason, body.half); break;
     case 'ownerSaveStaff':       out = ownerSaveStaff(body, body.staff); break;
     case 'ownerDeleteStaff':     out = ownerDeleteStaff(body, body.id); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
@@ -1938,6 +1939,75 @@ function ownerDecideLeave(b, requestId, decision, note) {
   return ownerLeave(b);
 }
 
+// Owner writes leave for an employee (no PIN): saved already approved, with "Entered by owner"
+// in the Owner note. The owner may record past days (up to OWNER_LEAVE_BACK_DAYS back) and skip the
+// 3-day notice; going over the monthly allowance or leaving a shop short is allowed but warned.
+var OWNER_LEAVE_BACK_DAYS = 31;
+var OWNER_LEAVE_MAX_DAYS  = 31;
+var OWNER_ENTERED_NOTE    = 'Entered by owner';
+function ownerAddLeave(b, staffId, type, dates, reason, half) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  if (!LEAVE_TYPES[type]) return { success: false, error: 'Choose day off or sick leave.' };
+  half = String(half || '').toLowerCase();
+  if (half && !LEAVE_HALVES[half]) return { success: false, error: 'Choose the first or second half of the day.' };
+  dates = (dates || []).map(String).filter(function(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
+    .filter(function(d, i, a) { return a.indexOf(d) === i; }).sort();
+  reason = String(reason || '').trim().slice(0, 300);
+  if (!dates.length) return { success: false, error: 'Choose the date.' };
+  if (half && dates.length > 1) return { success: false, error: 'A half day is for one date only.' };
+  if (dates.length > OWNER_LEAVE_MAX_DAYS) return { success: false, error: 'Up to ' + OWNER_LEAVE_MAX_DAYS + ' days at a time.' };
+  var amount = half ? 0.5 : 1, warnings = [];
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss);
+    var s = staff.filter(function(x) { return x.id === String(staffId); })[0];
+    if (!s) return { success: false, error: 'Choose who the leave is for.' };
+    var earliest = addDaysKey(todayKey(), -OWNER_LEAVE_BACK_DAYS);
+    if (dates[0] < earliest) return { success: false, error: 'The earliest date you can enter is ' + prettyDay(earliest) + '.' };
+    // A day that is already their weekly day off is left out
+    if (s.dayOffRule === 'fixed') dates = dates.filter(function(d) { return weekdayOf(d) !== s.fixedDayOff; });
+    if (!dates.length) return { success: false, error: 'That is already ' + s.name + '\'s day off.' };
+    var leave = readLeave(ss);
+    for (var j = 0; j < dates.length; j++) {
+      var d = dates[j];
+      if (leave.some(function(l) { return l.staffId === s.id && l.date === d && isActiveLeave(l); })) {
+        return { success: false, error: s.name + ' already has leave on ' + prettyDay(d) + '.' };
+      }
+    }
+    if (type === 'dayoff' && s.dayOffRule !== 'fixed') {
+      var perMonth = {};
+      dates.forEach(function(d) { perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + amount; });
+      for (var month in perMonth) {
+        var used = leave.filter(function(l) { return l.staffId === s.id && l.type === 'dayoff' && isActiveLeave(l) && l.date.slice(0, 7) === month; })
+          .reduce(function(t, l) { return t + leaveAmount(l); }, 0);
+        if (used + perMonth[month] > s.daysOffPerMonth) {
+          warnings.push(s.name + ' now has ' + (used + perMonth[month]) + ' days off in ' + prettyMonth(month) + ' (allowance ' + s.daysOffPerMonth + ')');
+        }
+      }
+    }
+    var planned = leave.slice(), gap = null;
+    for (var k = 0; k < dates.length; k++) {
+      gap = gap || coverageGap(dates[k], staff, planned, s.id);
+      planned.push({ staffId: s.id, date: dates[k], status: 'Approved' });
+    }
+    if (gap) warnings.push(gap);
+    var sh = leaveSheet(ss), now = new Date(), start = sh.getLastRow() + 1;
+    var id = 'L' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4).toUpperCase();
+    var rows = dates.map(function(d) { return [id, now, s.id, s.name, LEAVE_TYPES[type], d, reason, 'Approved', now, OWNER_ENTERED_NOTE, half ? LEAVE_HALVES[half] : '']; });
+    sh.getRange(start, 6, rows.length, 1).setNumberFormat('@');
+    sh.getRange(start, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
+    sh.getRange(start, 2, rows.length, 1).setNumberFormat(DATE_FMT);
+    sh.getRange(start, 9, rows.length, 1).setNumberFormat(DATE_FMT);
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  var out = ownerLeave(b);
+  out.added = id;
+  out.addedDays = dates.length * amount;
+  if (warnings.length) out.warning = warnings.join('. ');
+  return out;
+}
+
 // ─── OWNER: STAFF SETTINGS ────────────────────────────────────
 // The Owner screen's Staff tab edits the same Staff tab the leave requests read. PINs set here
 // are stored only as a salted hash, like the ones typed in New PIN.
@@ -1946,6 +2016,7 @@ var STAFF_HEADERS = ['ID', 'Name', 'Works at', 'Day off rule', 'Days off per mon
 function ownerStaffOut(s) {
   var o = staffOut(s);
   o.hasPin = !!(s.hash || s.newPin);
+  o.halfTimes = halfTimesFor(s);
   return o;
 }
 // The Staff tab with every column this code writes (missing ones are added at the end)

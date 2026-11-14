@@ -142,3 +142,43 @@ test('half-day hours come from each person\'s own shop, split at the middle', ()
   assert.equal(r.requests[0].time, '10:00 AM – 3:45 PM');
   assert.equal(ctx.halfTimesFor({ places: ['Palladium'] }).morning, '');
 });
+
+// Owner writes leave for an employee without their PIN
+function ownerCtx(leaveRows) {
+  const env = load(leaveRows || [HEAD10]);
+  env.ctx.isOwner = () => true;
+  return env;
+}
+
+test('owner leave: saved approved with "Entered by owner", no notice needed', () => {
+  const { ctx, sheets } = ownerCtx();
+  const r = ctx.ownerAddLeave({}, 'E2', 'dayoff', ['2026-11-11', '2026-11-12'], 'family', '');
+  assert.equal(r.success, true, r.error);
+  const rows = sheets.Leave.grid.slice(1);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0][2], 'E2');
+  assert.equal(rows[0][7], 'Approved');
+  assert.equal(rows[0][9], 'Entered by owner');
+  assert.equal(r.addedDays, 2);
+});
+
+test('owner leave: half day, past day allowed within a month, too old refused', () => {
+  const { ctx, sheets } = ownerCtx();
+  assert.equal(ctx.ownerAddLeave({}, 'E1', 'sick', ['2026-11-08'], '', 'afternoon').success, true);
+  assert.equal(sheets.Leave.grid[1][10], 'Second half');
+  assert.equal(ctx.ownerAddLeave({}, 'E1', 'sick', ['2026-09-01'], '', '').success, false);
+});
+
+test('owner leave: same day twice refused; over allowance saved with a warning', () => {
+  const { ctx } = ownerCtx();
+  assert.equal(ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-20', '2026-11-21'], '', '').success, true);
+  assert.equal(ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-21'], '', '').success, false);
+  const r = ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-25'], '', '');
+  assert.equal(r.success, true, r.error);
+  assert.match(r.warning, /3 days off in November/);
+});
+
+test('owner leave: refused without the owner login', () => {
+  const { ctx } = load([HEAD10]);
+  assert.equal(ctx.ownerAddLeave({ auth: 'x' }, 'E1', 'dayoff', ['2026-11-20'], '', '').success, false);
+});
