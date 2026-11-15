@@ -229,6 +229,7 @@ function handleApi(action, params, body) {
     case 'getSalesReport':       out = getSalesReport(body, body.days); break;
     case 'verifyOwner':          out = verifyOwner(body.password); break;
     // Which login a token is for (the finance server asks, e.g. for the Palladium cash drawer)
+    case 'palladiumSell':        out = palladiumSell(body, body.items, body.saleId); break;
     case 'whoAmI':               out = (body && body.token && body.authStore) ? { success: true, login: body.authStore } : { success: false, error: 'Please log in again.', needLogin: true }; break;
     case 'leaveStaffList':       out = leaveStaffList(body); break;
     case 'leaveSignIn':          out = leaveSignIn(body, body.staffId, body.pin); break;
@@ -1435,6 +1436,63 @@ function onEdit(e) {
     hs.getRange(start, 1, out.length, HISTORY_HEADERS.length).setValues(out);
     hs.getRange(start, 1, out.length, 1).setNumberFormat(DATE_FMT);
   } catch (err) { /* never interrupt typing in the sheet */ }
+}
+
+// Palladium's direct sale (relatives / walk-in customers), from its Cash tab: takes the pieces
+// off Palladium Stock, and logs them in the Sales Log and Stock History. The money is saved to
+// the Finance sheet separately by /api/drawer. All lines are checked before anything changes;
+// a repeated saleId (a retry) changes nothing. items: [{ pid, col, sz, qty }]
+function palladiumSell(b, items, saleId) {
+  if (!b || !isEmployee(b.auth)) return { success: false, error: 'Please log out and log in again as Palladium.', needLogin: true };
+  if (!saleId) return { success: false, error: 'Missing sale ID.' };
+  items = (items || []).map(function(it) {
+    return { pid: String(it.pid || '').trim(), col: String(it.col || '').trim(), sz: String(it.sz || '').trim(), qty: parseInt(it.qty) || 0 };
+  }).filter(function(it) { return it.pid; });
+  if (!items.length || items.length > 10) return { success: false, error: 'Pick the item.' };
+  for (var i = 0; i < items.length; i++) if (items[i].qty <= 0) return { success: false, error: 'Quantity must be at least 1.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var log = getSalesLogSheet(ss);
+    if (findLoggedSale(log, saleId + '#1')) return { success: true, alreadyDone: true };
+    var sheet = getPalladiumSheet(ss);
+    if (!sheet) return { success: false, error: 'Palladium stock tab not found.' };
+    var data = sheet.getDataRange().getValues();
+    var rowOf = {};
+    for (var r = sheetDataStart(data); r < data.length; r++) {
+      var k = String(data[r][1]).trim() + '|' + String(data[r][3]).trim() + '|' + String(data[r][4]).trim();
+      if (rowOf[k] === undefined) rowOf[k] = r;
+    }
+    var left = {};
+    for (var j = 0; j < items.length; j++) {
+      var key = items[j].pid + '|' + items[j].col + '|' + items[j].sz;
+      if (rowOf[key] === undefined) return { success: false, error: items[j].pid + ' colour ' + items[j].col + ' size ' + items[j].sz + ' is not in Palladium Stock.' };
+      if (left[key] === undefined) left[key] = parseInt(data[rowOf[key]][5]) || 0;
+      left[key] -= items[j].qty;
+      if (left[key] < 0) return { success: false, error: items[j].pid + ' colour ' + items[j].col + ' size ' + items[j].sz + ': only ' + (parseInt(data[rowOf[key]][5]) || 0) + ' in stock.' };
+    }
+    var now = new Date(), stock = {}, logRows = [];
+    items.forEach(function(it, n) {
+      var key = it.pid + '|' + it.col + '|' + it.sz, row = rowOf[key];
+      if (stock[key] === undefined) stock[key] = parseInt(data[row][5]) || 0;
+      stock[key] -= it.qty;
+      logRows.push([now, 'Palladium', String(data[row][0] || (it.pid + it.col + it.sz)), it.pid, it.col, it.sz, it.qty, stock[key], saleId + '#' + (n + 1)]);
+    });
+    Object.keys(stock).forEach(function(key) { sheet.getRange(rowOf[key] + 1, 6).setValue(stock[key]); });
+    log.getRange(log.getLastRow() + 1, 1, logRows.length, SALES_LOG_HEADERS.length).setValues(logRows);
+    logHistory(ss, Object.keys(stock).map(function(key) {
+      var row = rowOf[key];
+      return { store: 'Palladium', pid: String(data[row][1]).trim(), col: String(data[row][3]).trim(), sz: String(data[row][4]).trim(),
+               before: parseInt(data[row][5]) || 0, after: stock[key] };
+    }), 'Sale', saleId, 'Palladium');
+    SpreadsheetApp.flush();
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ─── SALES REPORT ─────────────────────────────────────────────
