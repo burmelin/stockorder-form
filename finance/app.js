@@ -14,12 +14,9 @@ const RULES = {
   'Commission':                { fields: ['cashOut', 'bankOut'], hint: 'Staff performance bonuses.' },
   'Rent':                      { fields: ['cashOut', 'bankOut'], hint: 'Shop, warehouse or office rent.' },
   'Gov Tax':                   { fields: ['cashOut', 'bankOut'], hint: 'Government taxes and fees.' },
-  'Home Expenses':             { fields: ['cashOut', 'bankOut'], hint: 'Personal / home spending taken from the business.' },
+  'Home Expenses':             { fields: ['cashOut', 'bankOut'], hint: 'House costs: groceries, gas, cleaning… Easiest from Home → Home expense (type + amount). One line a day on the statement.' },
   'Other Expense':             { fields: ['cashOut', 'bankOut'], hint: 'Small daily costs — tea, water, ice…' },
   'Electricity':               { fields: ['cashOut', 'bankOut'], hint: 'Office / house electricity. One entry a month. Shop = Office.' },
-  'Gas':                       { fields: ['cashOut', 'bankOut'], hint: 'Cooking gas for the house. Shop = Office.' },
-  'Groceries':                 { fields: ['cashOut', 'bankOut'], hint: 'House food shopping. One total a week is enough. Shop = Office.' },
-  'Cleaning':                  { fields: ['cashOut', 'bankOut'], hint: 'Cleaner and cleaning things for the house. One total a week is enough. Shop = Office.' },
   'Drawer Float':              { fields: ['cashIn', 'cashOut'], hint: 'Cash given from Office to the Palladium drawer. Easiest from Home → Give cash to Palladium.' },
   'Card Fee':                  { fields: ['bankOut'],           hint: 'The bank’s fee on card sales. The Loyverse import adds it for Bicasso every day (an estimate); change it here only if you know the real fee.' },
   'Collection (to Palladium)': { fields: ['cashOut'],           hint: 'You physically take cash FROM this shop’s drawer to Office (home). Shop = the shop you collected from. The dashboard adds it to Office Cash automatically.' },
@@ -192,6 +189,31 @@ const DRAWER = 'Warehouse';   // sheet name of the Palladium manager's drawer (s
 
 // Home → Give cash to Palladium: Office Cash hands the manager a float. Two "Drawer Float"
 // rows, so total cash doesn't change: Office Cash Out, Palladium drawer Cash In.
+// Home → Home expense: tap what it was, type the amount. Saved as a Home Expenses row from
+// Office Cash with the type as its note; the statement adds a day's home rows into one line.
+let HOME_KIND = 'Groceries';
+$('homeKinds').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-kind]');
+  if (!b) return;
+  HOME_KIND = b.dataset.kind;
+  $('homeKinds').querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b));
+  $('homeAmount').focus();
+});
+$('homeSave').addEventListener('click', async () => {
+  const amount = Math.round(parseFloat($('homeAmount').value) || 0);
+  if (!(amount > 0)) return showToast('Type the amount', 'error', 'homeToast');
+  const btn = $('homeSave');
+  btn.disabled = true;
+  try {
+    await saveJSON('/api/transaction', 'POST', { category: 'Home Expenses', shop: Statement.OFFICE, date: isoOf(new Date()), cashOut: amount, notes: HOME_KIND });
+    $('homeAmount').value = '';
+    showToast(`${HOME_KIND} ${fmt(amount)} saved`, 'success', 'homeToast');
+    loadDashboardSoon();
+  } catch (err) {
+    showToast('Not saved: ' + err.message, 'error', 'homeToast');
+  } finally { btn.disabled = false; }
+});
+
 $('floatSave').addEventListener('click', async () => {
   const amount = Math.round(parseFloat($('floatAmount').value) || 0);
   if (!(amount > 0)) return showToast('Type the amount', 'error', 'floatToast');

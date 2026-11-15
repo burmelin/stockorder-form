@@ -25,9 +25,14 @@ test('statement: a float moves cash without counting as income; profit = shops â
     t({ shop: 'Warehouse', category: 'Other Expense', cashOut: 100 }),
     t({ shop: 'Bicasso 1', category: 'Retail Sale', cashIn: 5000, bankIn: 3000 }),
     t({ shop: 'Bicasso 1', category: 'Rent', bankOut: 2000 }),
-    t({ shop: 'Palladium', category: 'Groceries', cashOut: 700 }),
+    t({ shop: 'Palladium', category: 'Home Expenses', cashOut: 500, notes: 'Groceries' }),
+    t({ shop: 'Palladium', category: 'Home Expenses', cashOut: 200, notes: 'Gas' }),
   ], lists, '2026-11-15', '2026-11-15');
   assert.strictEqual(s.incomes.length, 0);
+  const home = s.expenses.filter((e) => e.category === 'Home Expenses');
+  assert.strictEqual(home.length, 1);
+  assert.strictEqual(home[0].cash, 700);
+  assert.strictEqual(home[0].notes, 'Groceries 500 Â· Gas 200');
   assert.strictEqual(s.per.Warehouse.cash, 900);
   assert.strictEqual(s.close.cash, 5000 - 100 - 700);
   const b1 = s.profit.shops.find((r) => r.shop === 'Bicasso 1');

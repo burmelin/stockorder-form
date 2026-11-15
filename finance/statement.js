@@ -15,7 +15,8 @@
   const TO_BANK = ['Cash to Bank Deposit', 'Collection to Bank'];
   const CARD_FEE = 'Card Fee';   // the bank's estimated fee on card sales (Bank Out), see api/_loyverse.js planFees
   const FALLBACK_EXPENSES = ['Supplier Pay', 'Salary', 'Wages', 'Commission', 'Rent', 'Gov Tax', 'Home Expenses', 'Other Expense',
-    'Electricity', 'Gas', 'Groceries', 'Cleaning'];
+    'Electricity'];
+  const HOME = 'Home Expenses';  // shown as one line per shop per day, its notes joined
   const FLOAT = 'Drawer Float';  // Office Cash -> Palladium drawer (two rows), money moved, not earned
   // Sheet shop names kept from before 15 Nov 2026 (see api/_google.js): "Palladium" is the
   // owner's Office Cash, "Warehouse" is the Palladium manager's drawer. Screens show labels.
@@ -105,7 +106,12 @@
       const line = { date: t.date, shop: t.shop, category: cat, customer: t.customer, notes: t.notes || '' };
       if (t.cashOut || t.bankOut) {
         const item = { ...line, cash: t.cashOut, bank: t.bankOut };
-        if (expenseCats.has(cat)) expenses.push(item);
+        const same = cat === HOME && expenses.find((e) => e.category === HOME && e.date === t.date && e.shop === t.shop);
+        if (same) {
+          same.cash += t.cashOut; same.bank += t.bankOut;
+          same.parts.push(item);
+          same.notes = same.parts.map((x) => `${x.notes || 'home'} ${Math.round(x.cash + x.bank).toLocaleString('en-US')}`).join(' · ');
+        } else if (expenseCats.has(cat)) expenses.push(cat === HOME ? { ...item, parts: [item] } : item);
         else moves.push(item);
       }
       if ((t.cashIn || t.bankIn) && !SALES.includes(cat)) {

@@ -80,6 +80,18 @@
             <div id="floatToast" class="toast" hidden></div>
           </div>
         </section>
+
+        <section class="card">
+          <h2>Home expense <span class="hint">from Office Cash</span></h2>
+          <div class="chips" id="homeKinds">
+            <button type="button" class="chip on" data-kind="Groceries">Groceries</button>
+            <button type="button" class="chip" data-kind="Gas">Gas</button>
+            <button type="button" class="chip" data-kind="Cleaning">Cleaning</button>
+            <button type="button" class="chip" data-kind="Other home">Other</button>
+          </div>
+          <div class="float-row" style="margin-top:10px"><input id="homeAmount" type="number" inputmode="numeric" min="1" placeholder="฿"><button type="button" id="homeSave" class="save-btn">Save</button></div>
+          <div id="homeToast" class="toast" hidden></div>
+        </section>
       </div>
 
       <div class="home-col">
