@@ -34,7 +34,7 @@ There are two halves. They share the Owner login but not the server.
 | Commission, salary, advances, payday | `finance/app.js` (Staff tab) | `api/commission.js`, `api/advances.js` |
 | Timecards (clock in/out report) | `finance/timecards.js` | `api/timecards.js` (weekly Loyverse CSV upload) |
 | Palladium manager's cash drawer | `index.html` (Palladium login), `finance/app.js` | `api/drawer.js` |
-Names in the Finance sheet: **Warehouse** = the Palladium manager's cash drawer. **Office Cash** = the owner's cash in the home safe. Shop collections go there, and it gives the warehouse drawer its float.
+Names in the Finance sheet: **Warehouse** = the Palladium manager's cash drawer. **Office Cash** (saved as shop **Palladium** in the sheet) = the owner's cash in the home safe. Shop collections go there, and it gives the warehouse drawer its float.
 
 ## Rules
 - **Never put a password, key or token in the code**, not even for a test. The repo history is kept forever.
