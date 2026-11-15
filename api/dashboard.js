@@ -108,6 +108,7 @@ function mockData() {
       { name: 'Bicasso 2', cash: 5530 },
       { name: 'Nana', cash: 420 },
       { name: 'Burmelin', cash: 1100 },
+      { name: 'Warehouse', cash: 1230 },
     ],
     credit: [
       { name: 'Shyam Gtm', balance: 630383, lastPayment: '2026-06-20', daysSince: 16 },
@@ -121,7 +122,7 @@ function mockData() {
     ].map((c) => ({ ...c, overdueDays: overdueDays(MOCK_CUSTOMER_SHOPS[c.name] || 'Palladium') })),
     totalCredit: 2030130,
     lists: {
-      shops: ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'],
+      shops: ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin', 'Warehouse'],
       customers: ['Shyam Gtm', 'Sunil Platinium', 'Five Star', 'Sunil Grand 5', 'Raja Indra', 'Mars', 'Shyam Btr', 'Nana Card (Neighbour)'],
       customerShops: { ...Object.fromEntries(['Shyam Gtm', 'Sunil Platinium', 'Five Star', 'Sunil Grand 5', 'Raja Indra', 'Mars', 'Shyam Btr'].map((c) => [c, 'Palladium'])), ...MOCK_CUSTOMER_SHOPS },
       categories: [
@@ -138,12 +139,14 @@ function mockData() {
         { name: 'Gov Tax', type: 'Expense' },
         { name: 'Home Expenses', type: 'Expense' },
         { name: 'Other Expense', type: 'Expense' },
+        { name: 'Electricity', type: 'Expense' },
         { name: 'Card Fee', type: 'Expense' },
         { name: 'Collection (to Palladium)', type: 'Transfer' },
         { name: 'Cash to Bank Deposit', type: 'Transfer' },
         { name: 'Bank to Cash (ATM)', type: 'Transfer' },
         { name: 'Collection to Bank', type: 'Transfer' },
         { name: 'Opening Balance', type: 'Transfer' },
+        { name: 'Drawer Float', type: 'Transfer' },
       ],
     },
     loyverse: Boolean(process.env.LOYVERSE_TOKEN),

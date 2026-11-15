@@ -5,22 +5,24 @@ const RULES = {
   'Retail Sale':               { fields: ['cashIn', 'bankIn'],  hint: 'Cash sales in Cash In, card/QR sales in Bank In. One row per shop per day.' },
   'Bank Received':             { fields: ['bankIn'],            hint: 'Money that arrived directly in the bank account.' },
   'Scan / QR Payment':         { fields: ['bankIn'],            hint: 'QR payment received at the shop (goes to the shared bank).' },
-  'Credit Sale':               { fields: ['creditAmount'],      hint: 'Palladium → customer: goods given on credit, their debt goes UP. No cash moves now.' },
-  'Customer Payment':          { fields: ['cashIn', 'bankIn'],  hint: 'Customer → Palladium: they pay their debt DOWN. Cash In if cash, Bank In if transfer.' },
+  'Credit Sale':               { fields: ['creditAmount'],      hint: 'Office → customer: goods given on credit, their debt goes UP. No cash moves now.' },
+  'Customer Payment':          { fields: ['cashIn', 'bankIn'],  hint: 'Customer → Office: they pay their debt DOWN. Cash In if cash, Bank In if transfer.' },
   'Credit Opening Balance':    { fields: ['creditAmount'],      hint: 'The debt a customer ALREADY owes when you start tracking. Sets their starting balance (recorded as a credit sale, noted “Opening balance”).' },
   'Supplier Pay':              { fields: ['cashOut', 'bankOut'], hint: 'Paying for stock/production. Use whichever account it left from.' },
-  'Salary':                    { fields: ['cashOut', 'bankOut'], hint: 'Monthly staff salary. If paid from collected cash, use Shop = Palladium.' },
+  'Salary':                    { fields: ['cashOut', 'bankOut'], hint: 'Monthly staff salary. If paid from your cash at home, use Shop = Office.' },
   'Wages':                     { fields: ['cashOut', 'bankOut'], hint: 'Daily helpers or casual staff.' },
   'Commission':                { fields: ['cashOut', 'bankOut'], hint: 'Staff performance bonuses.' },
   'Rent':                      { fields: ['cashOut', 'bankOut'], hint: 'Shop, warehouse or office rent.' },
   'Gov Tax':                   { fields: ['cashOut', 'bankOut'], hint: 'Government taxes and fees.' },
-  'Home Expenses':             { fields: ['cashOut', 'bankOut'], hint: 'Personal / home spending taken from the business.' },
-  'Other Expense':             { fields: ['cashOut', 'bankOut'], hint: 'Small daily costs — tea, water, electricity…' },
+  'Home Expenses':             { fields: ['cashOut', 'bankOut'], hint: 'House costs: groceries, gas, cleaning… Easiest from Home → Home expense (type + amount). One line a day on the statement.' },
+  'Other Expense':             { fields: ['cashOut', 'bankOut'], hint: 'Small daily costs — tea, water, ice…' },
+  'Electricity':               { fields: ['cashOut', 'bankOut'], hint: 'Office / house electricity. One entry a month. Shop = Office.' },
+  'Drawer Float':              { fields: ['cashIn', 'cashOut'], hint: 'Cash given from Office to the Palladium drawer. Easiest from Home → Give cash to Palladium.' },
   'Card Fee':                  { fields: ['bankOut'],           hint: 'The bank’s fee on card sales. The Loyverse import adds it for Bicasso every day (an estimate); change it here only if you know the real fee.' },
-  'Collection (to Palladium)': { fields: ['cashOut'],           hint: 'You physically take cash FROM this shop’s drawer to Palladium. Shop = the shop you collected from. The dashboard adds it to Palladium automatically.' },
+  'Collection (to Palladium)': { fields: ['cashOut'],           hint: 'You physically take cash FROM this shop’s drawer to Office (home). Shop = the shop you collected from. The dashboard adds it to Office Cash automatically.' },
   'Cash to Bank Deposit':      { fields: ['cashOut', 'bankIn'], hint: 'Depositing drawer cash into the bank: fill BOTH Cash Out and Bank In with the same amount.' },
   'Bank to Cash (ATM)':        { fields: ['cashIn', 'bankOut'], hint: 'ATM withdrawal into a shop’s till: fill BOTH Cash In and Bank Out.' },
-  'Collection to Bank':        { fields: ['cashOut', 'bankIn'], hint: 'Collected cash at Palladium deposited to the bank: fill BOTH Cash Out and Bank In.' },
+  'Collection to Bank':        { fields: ['cashOut', 'bankIn'], hint: 'Office cash deposited to the bank: fill BOTH Cash Out and Bank In.' },
   'Opening Balance':           { fields: ['cashIn', 'bankIn'],  hint: 'Only when setting up a shop for the first time.' },
   'Adjustment':                { fields: ['cashIn', 'bankIn', 'cashOut', 'bankOut'], hint: 'Fix a mismatch. If the real amount is HIGHER than the app, add it in Cash In / Bank In. If it is LOWER, put the difference in Cash Out / Bank Out. Always explain why in Notes.' },
 };
@@ -183,6 +185,53 @@ async function loadDashboard() {
 }
 
 let DASH = null;
+const DRAWER = 'Warehouse';   // sheet name of the Palladium manager's drawer (see api/_google.js)
+
+// Home → Give cash to Palladium: Office Cash hands the manager a float. Two "Drawer Float"
+// rows, so total cash doesn't change: Office Cash Out, Palladium drawer Cash In.
+// Home → Home expense: tap what it was, type the amount. Saved as a Home Expenses row from
+// Office Cash with the type as its note; the statement adds a day's home rows into one line.
+let HOME_KIND = 'Groceries';
+$('homeKinds').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-kind]');
+  if (!b) return;
+  HOME_KIND = b.dataset.kind;
+  $('homeKinds').querySelectorAll('.chip').forEach((c) => c.classList.toggle('on', c === b));
+  $('homeAmount').focus();
+});
+$('homeSave').addEventListener('click', async () => {
+  const amount = Math.round(parseFloat($('homeAmount').value) || 0);
+  if (!(amount > 0)) return showToast('Type the amount', 'error', 'homeToast');
+  const btn = $('homeSave');
+  btn.disabled = true;
+  try {
+    await saveJSON('/api/transaction', 'POST', { category: 'Home Expenses', shop: Statement.OFFICE, date: isoOf(new Date()), cashOut: amount, notes: HOME_KIND });
+    $('homeAmount').value = '';
+    showToast(`${HOME_KIND} ${fmt(amount)} saved`, 'success', 'homeToast');
+    loadDashboardSoon();
+  } catch (err) {
+    showToast('Not saved: ' + err.message, 'error', 'homeToast');
+  } finally { btn.disabled = false; }
+});
+
+$('floatSave').addEventListener('click', async () => {
+  const amount = Math.round(parseFloat($('floatAmount').value) || 0);
+  if (!(amount > 0)) return showToast('Type the amount', 'error', 'floatToast');
+  const btn = $('floatSave');
+  btn.disabled = true;
+  try {
+    const date = isoOf(new Date());
+    await saveJSON('/api/batch', 'POST', { rows: [
+      { category: 'Drawer Float', shop: Statement.OFFICE, date, cashOut: amount, notes: 'Cash for Palladium drawer' },
+      { category: 'Drawer Float', shop: DRAWER, date, cashIn: amount, notes: 'From Office Cash' },
+    ] });
+    $('floatAmount').value = '';
+    showToast(`Gave ${fmt(amount)} to Palladium`, 'success', 'floatToast');
+    loadDashboardSoon();
+  } catch (err) {
+    showToast('Not saved: ' + err.message, 'error', 'floatToast');
+  } finally { btn.disabled = false; }
+});
 let showAllCustomers = false;
 function renderDashboard(d) {
   DASH = d;
@@ -195,9 +244,10 @@ function renderDashboard(d) {
 
   $('shopList').innerHTML = d.shops.map((s) => `
     <li><div class="row tappable" data-shop="${esc(s.name)}">
-      <span class="name">${esc(s.name)}</span>
+      <span class="name">${esc(Statement.label(s.name))}${s.name === Statement.OFFICE ? ' Cash' : s.name === DRAWER ? ' drawer' : ''}</span>
       <span class="amount ${s.cash < 0 ? 'neg' : 'pos'}">${fmt(s.cash)}<span class="chevron">›</span></span>
     </div></li>`).join('');
+  $('floatBox').hidden = !d.shops.some((s) => s.name === DRAWER);
 
   renderCredit();
   $('totalCredit').textContent = fmt(d.totalCredit);
@@ -518,7 +568,7 @@ let currentDetail = null;
 
 async function openDetail(kind, name) {
   showPage('detail');
-  $('detailTitle').textContent = name;
+  $('detailTitle').textContent = kind === 'shop' ? Statement.label(name) : name;
   $('detailSub').textContent = 'Loading…';
   $('detailSummary').innerHTML = '';
   $('detailList').innerHTML = '';
@@ -648,7 +698,7 @@ function populateForm() {
       if (!names.length) continue;
       const og = document.createElement('optgroup');
       og.label = type;
-      names.forEach((n) => { const o = document.createElement('option'); o.value = n; o.textContent = n; og.appendChild(o); });
+      names.forEach((n) => { const o = document.createElement('option'); o.value = n; o.textContent = Statement.catLabel(n); og.appendChild(o); });
       cat.appendChild(og);
     }
     // The import's card fee rows: editable even if the sheet's Lists tab doesn't name the category.
@@ -677,7 +727,7 @@ function populateForm() {
   }
   const shop = $('fShop');
   if (!shop.options.length) {
-    LISTS.shops.forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = s; shop.appendChild(o); });
+    LISTS.shops.forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = Statement.label(s); shop.appendChild(o); });
   }
   const cust = $('fCustomer');
   if (!cust.options.length) {
@@ -685,7 +735,7 @@ function populateForm() {
   }
   const dShop = $('dShop');
   if (!dShop.options.length) {
-    LISTS.shops.forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = s; dShop.appendChild(o); });
+    LISTS.shops.forEach((s) => { const o = document.createElement('option'); o.value = s; o.textContent = Statement.label(s); dShop.appendChild(o); });
   }
   renderShopChips();
   updateCollectionVisibility();
@@ -942,7 +992,7 @@ let SAVED_SHOPS = new Set();
 function renderShopChips() {
   const shops = (LISTS && LISTS.shops) || [];
   const cur = $('dShop').value;
-  $('dShopChips').innerHTML = shops.map((s) => `<button type="button" class="chip${s === cur ? ' on' : ''}" data-shop="${esc(s)}">${esc(s)}${SAVED_SHOPS.has(s) ? '<i class="dot" title="already has entries for this day"></i>' : ''}</button>`).join('');
+  $('dShopChips').innerHTML = shops.map((s) => `<button type="button" class="chip${s === cur ? ' on' : ''}" data-shop="${esc(s)}">${esc(Statement.label(s))}${SAVED_SHOPS.has(s) ? '<i class="dot" title="already has entries for this day"></i>' : ''}</button>`).join('');
   $('dSavedHint').hidden = !SAVED_SHOPS.size;
 }
 $('dShopChips').addEventListener('click', (e) => {
@@ -1712,7 +1762,7 @@ function statementHtml(s) {
   const period = one ? longDate(s.from, true) : `${longDate(s.from, true)} – ${longDate(s.to, true)} · ${nDays} days`;
   const cols = s.shops.concat(s.other ? ['Other'] : []);
   const colOf = (name) => (name === 'Other' ? s.other : s.per[name]);
-  const head = `<tr><th></th>${cols.map((c) => `<th class="num">${esc(c)}</th>`).join('')}<th class="num tot">Total</th></tr>`;
+  const head = `<tr><th></th>${cols.map((c) => `<th class="num">${esc(Statement.label(c))}</th>`).join('')}<th class="num tot">Total</th></tr>`;
   // one line of the shop table; skipped when every shop has nothing (unless keep)
   const line = (label, key, sign, cls = '', keep = false) => {
     const vals = cols.map((c) => colOf(c)[key] || 0);
@@ -1733,7 +1783,7 @@ function statementHtml(s) {
         ${line('Collected from shops', 'collIn', '+')}
         ${line('Other cash in', 'otherIn', '+')}
         ${line('Expenses paid from drawer', 'expCash', '−', '', true)}
-        ${line('Collection sent to Palladium', 'collOut', '−')}
+        ${line('Collection sent to Office', 'collOut', '−')}
         ${line('Deposited to bank', 'toBank', '−')}
         ${line('Adjustments / other out', 'otherOut', '−')}
         ${line('Closing cash', 'cash', '', 'strong rule', true)}
@@ -1751,7 +1801,7 @@ function statementHtml(s) {
   const daily = one || !s.days.length ? '' : `
     <h3>Daily sales <span>cash + card/QR + credit</span></h3>
     <table class="st-days">
-      <thead><tr><th>Date</th>${s.shops.map((c) => `<th class="num">${esc(c)}</th>`).join('')}<th class="num tot">Total</th></tr></thead>
+      <thead><tr><th>Date</th>${s.shops.map((c) => `<th class="num">${esc(Statement.label(c))}</th>`).join('')}<th class="num tot">Total</th></tr></thead>
       <tbody>${s.days.map((d) => `<tr><td>${WEEKDAYS[new Date(d.date + 'T00:00').getDay()]} ${shortDate(d.date)}</td>${s.shops.map((c) => `<td class="num">${n0(d.byShop[c] || 0)}</td>`).join('')}<td class="num tot">${n0(d.total)}</td></tr>`).join('')}</tbody>
       <tfoot><tr><td>Total</td>${s.shops.map((c) => `<td class="num">${n0(shopSales(c))}</td>`).join('')}<td class="num tot">${n0(s.sales.total)}</td></tr></tfoot>
     </table>`;
@@ -1763,12 +1813,24 @@ function statementHtml(s) {
     <h3>${title} <span>${sub}</span></h3>
     <table class="st-list">
       <thead><tr>${one ? '' : '<th>Date</th>'}<th>Shop</th><th>What</th><th class="num">Cash</th><th class="num">Bank</th></tr></thead>
-      <tbody>${rows.map((r) => `<tr>${one ? '' : `<td class="nowrap">${shortDate(r.date)}</td>`}<td class="nowrap">${esc(r.shop)}</td>
-        <td><b>${esc(r.category)}</b>${r.customer ? ' · ' + esc(r.customer) : ''}${r.notes ? `<br><span class="note">${esc(r.notes)}</span>` : ''}</td>
+      <tbody>${rows.map((r) => `<tr>${one ? '' : `<td class="nowrap">${shortDate(r.date)}</td>`}<td class="nowrap">${esc(Statement.label(r.shop))}</td>
+        <td><b>${esc(Statement.catLabel(r.category))}</b>${r.customer ? ' · ' + esc(r.customer) : ''}${r.notes ? `<br><span class="note">${esc(r.notes)}</span>` : ''}</td>
         <td class="num">${n0(r.cash)}</td><td class="num">${n0(r.bank)}</td></tr>`).join('')}</tbody>
       <tfoot><tr><td colspan="${one ? 2 : 3}">Total · ${rows.length} item${rows.length === 1 ? '' : 's'}</td><td class="num">${n0(cash)}</td><td class="num">${n0(bank)}</td></tr></tfoot>
     </table>`;
   };
+  // Profit: each shop, then Office's own costs (house, rent, salaries paid from home…) come off
+  const pf = s.profit;
+  const sgn = (v) => (Math.round(v) < 0 ? '− ' + n0(-v) : n0(v));
+  const profitTable = `
+    <h3>Profit <span>sales − costs</span></h3>
+    <table class="st-list st-profit">
+      <thead><tr><th></th><th class="num">Sales</th><th class="num">Costs</th><th class="num">Profit</th></tr></thead>
+      <tbody>${pf.shops.map((r) => `<tr><td>${esc(Statement.label(r.shop))}</td><td class="num">${n0(r.sales)}</td><td class="num">${n0(r.costs)}</td><td class="num">${sgn(r.profit)}</td></tr>`).join('')}
+        <tr class="strong"><td>Shops</td><td></td><td></td><td class="num">${sgn(pf.shopsTotal)}</td></tr>
+        <tr><td>Office (head office)${pf.office.sales ? '<br><span class="note">incl. wholesale credit sales</span>' : ''}</td><td class="num">${n0(pf.office.sales)}</td><td class="num">${n0(pf.office.costs)}</td><td class="num">${sgn(pf.office.profit)}</td></tr></tbody>
+      <tfoot><tr><td>Company profit</td><td></td><td></td><td class="num">${sgn(pf.company)}</td></tr></tfoot>
+    </table>`;
   const byCat = Object.entries(s.expByCat).sort((a, b) => b[1] - a[1]);
   const catLine = byCat.length > 1 ? `<p class="st-cats">${byCat.map(([c, v]) => `${esc(c)} <b>${baht(v)}</b>`).join(' · ')}</p>` : '';
 
@@ -1794,6 +1856,7 @@ function statementHtml(s) {
       <div><span>Expenses</span><b>${baht(expTotal)}</b><small>cash ${n0(s.expenseTotal.cash)} · bank ${n0(s.expenseTotal.bank)}</small></div>
     </div>
 
+    ${profitTable}
     <h3>By shop</h3>
     <div class="st-wide">${shopTable}</div>
     ${daily}

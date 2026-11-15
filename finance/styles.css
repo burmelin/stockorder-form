@@ -532,3 +532,12 @@ button, input, select, textarea { font-family: inherit; }
 
 .delete-btn { display: block; width: 100%; margin-top: 10px; padding: 12px; background: none; border: 1px solid var(--bad); color: var(--bad); border-radius: 10px; font: inherit; font-weight: 600; cursor: pointer; }
 .delete-btn:disabled { opacity: .6; }
+
+/* ---------- Home: give cash to the Palladium drawer ---------- */
+.float-box { border-top: 1px solid var(--line, #ECE8E1); margin-top: 8px; padding-top: 12px; }
+.float-box label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.float-box label .hint { font-weight: 500; color: var(--stone); font-size: 12px; }
+.float-row { display: flex; gap: 8px; }
+.float-row input { flex: 1; min-width: 0; font-size: 16px; padding: 10px 12px; border: 1px solid var(--line, #DDD6CB); border-radius: 8px; }
+.float-row .save-btn { width: auto; flex: none; padding: 10px 20px; }
+.st-profit tfoot td { font-weight: 700; }

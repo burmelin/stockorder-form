@@ -228,6 +228,8 @@ function handleApi(action, params, body) {
     case 'getStockHistory':      out = getStockHistory(body, body.store, body.productId); break;
     case 'getSalesReport':       out = getSalesReport(body, body.days); break;
     case 'verifyOwner':          out = verifyOwner(body.password); break;
+    // Which login a token is for (the finance server asks, e.g. for the Palladium cash drawer)
+    case 'whoAmI':               out = (body && body.token && body.authStore) ? { success: true, login: body.authStore } : { success: false, error: 'Please log in again.', needLogin: true }; break;
     case 'leaveStaffList':       out = leaveStaffList(body); break;
     case 'leaveSignIn':          out = leaveSignIn(body, body.staffId, body.pin); break;
     case 'leaveMine':            out = leaveMine(body); break;

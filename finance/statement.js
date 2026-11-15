@@ -14,13 +14,23 @@
   const SALES = ['Retail Sale', 'Scan / QR Payment'];
   const TO_BANK = ['Cash to Bank Deposit', 'Collection to Bank'];
   const CARD_FEE = 'Card Fee';   // the bank's estimated fee on card sales (Bank Out), see api/_loyverse.js planFees
-  const FALLBACK_EXPENSES = ['Supplier Pay', 'Salary', 'Wages', 'Commission', 'Rent', 'Gov Tax', 'Home Expenses', 'Other Expense'];
+  const FALLBACK_EXPENSES = ['Supplier Pay', 'Salary', 'Wages', 'Commission', 'Rent', 'Gov Tax', 'Home Expenses', 'Other Expense',
+    'Electricity'];
+  const HOME = 'Home Expenses';  // shown as one line per shop per day, its notes joined
+  const FLOAT = 'Drawer Float';  // Office Cash -> Palladium drawer (two rows), money moved, not earned
+  // Sheet shop names kept from before 15 Nov 2026 (see api/_google.js): "Palladium" is the
+  // owner's Office Cash, "Warehouse" is the Palladium manager's drawer. Screens show labels.
+  const OFFICE = 'Palladium';
+  const LABELS = { Palladium: 'Office', Warehouse: 'Palladium' };
+  const label = (shop) => LABELS[shop] || shop;
+  const CAT_LABELS = { 'Collection (to Palladium)': 'Collection (to Office)' };
+  const catLabel = (c) => CAT_LABELS[c] || c;
   // Columns appear in this order when present; any other shop in the Lists tab follows
-  const SHOP_ORDER = ['Bicasso 1', 'Bicasso 2', 'Nana', 'Palladium'];
+  const SHOP_ORDER = ['Bicasso 1', 'Bicasso 2', 'Nana', 'Warehouse', 'Palladium'];
 
   const zero = () => ({
     cash: 0, cashSales: 0, payIn: 0, collIn: 0, otherIn: 0,
-    expCash: 0, collOut: 0, toBank: 0, otherOut: 0,
+    expCash: 0, expBank: 0, collOut: 0, toBank: 0, otherOut: 0,
     bankSales: 0, bankOtherIn: 0, bankOut: 0, cardFee: 0, credit: 0,
   });
 
@@ -81,6 +91,7 @@
       // bank and credit
       if (SALES.includes(cat)) p.bankSales += t.bankIn; else p.bankOtherIn += t.bankIn;
       if (cat === CARD_FEE) p.cardFee += t.bankOut; else p.bankOut += t.bankOut;
+      if (cat !== CARD_FEE && expenseCats.has(cat)) p.expBank += t.bankOut;
       if (cat === 'Credit Sale' && !isOpeningCredit) p.credit += t.creditAmount;
 
       // daily sales (cash + card/QR + credit)
@@ -95,12 +106,17 @@
       const line = { date: t.date, shop: t.shop, category: cat, customer: t.customer, notes: t.notes || '' };
       if (t.cashOut || t.bankOut) {
         const item = { ...line, cash: t.cashOut, bank: t.bankOut };
-        if (expenseCats.has(cat)) expenses.push(item);
+        const same = cat === HOME && expenses.find((e) => e.category === HOME && e.date === t.date && e.shop === t.shop);
+        if (same) {
+          same.cash += t.cashOut; same.bank += t.bankOut;
+          same.parts.push(item);
+          same.notes = same.parts.map((x) => `${x.notes || 'home'} ${Math.round(x.cash + x.bank).toLocaleString('en-US')}`).join(' · ');
+        } else if (expenseCats.has(cat)) expenses.push(cat === HOME ? { ...item, parts: [item] } : item);
         else moves.push(item);
       }
       if ((t.cashIn || t.bankIn) && !SALES.includes(cat)) {
         // the other half of a deposit / ATM is already in "moves"
-        if (!TO_BANK.includes(cat) && cat !== 'Bank to Cash (ATM)') incomes.push({ ...line, cash: t.cashIn, bank: t.bankIn });
+        if (!TO_BANK.includes(cat) && cat !== 'Bank to Cash (ATM)' && cat !== FLOAT) incomes.push({ ...line, cash: t.cashIn, bank: t.bankIn });
       }
     }
 
@@ -118,11 +134,22 @@
 
     const close = { cash: open.cash + periodCash, bank: open.bank + periodBank, credit: open.credit + periodCredit };
     const salesCash = totals.cashSales, salesBank = totals.bankSales, salesCredit = totals.credit;
+    // Profit (sales − costs) per shop; Office's own costs (house, rent, salaries paid from
+    // home…) come off the shops' total to give the company's profit.
+    const profitOf = (p) => {
+      const sales = p.cashSales + p.bankSales + p.credit;
+      const costs = p.expCash + p.expBank + p.cardFee;
+      return { sales, costs, profit: sales - costs };
+    };
+    const profit = { shops: shops.filter((s) => s !== OFFICE).map((s) => ({ shop: s, ...profitOf(per[s]) })) };
+    profit.shopsTotal = profit.shops.reduce((n, r) => n + r.profit, 0);
+    profit.office = shops.includes(OFFICE) ? profitOf(per[OFFICE]) : { sales: 0, costs: 0, profit: 0 };
+    profit.company = profit.shopsTotal + profit.office.profit;
     const expByCat = {};
     for (const e of expenses) expByCat[e.category] = (expByCat[e.category] || 0) + e.cash + e.bank;
 
     return {
-      from, to, shops, per, other: otherUsed ? other : null, totals,
+      from, to, shops, per, profit, other: otherUsed ? other : null, totals,
       open: { cash: open.cash, bank: open.bank, total: open.cash + open.bank, credit: open.credit, shop: open.shop },
       close: { cash: close.cash, bank: close.bank, total: close.cash + close.bank, credit: close.credit },
       sales: { cash: salesCash, bank: salesBank, credit: salesCredit, total: salesCash + salesBank + salesCredit },
@@ -134,7 +161,7 @@
     };
   }
 
-  const api = { build };
+  const api = { build, label, catLabel, OFFICE };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Statement = api;
 })(typeof window !== 'undefined' ? window : globalThis);
