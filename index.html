@@ -330,7 +330,19 @@ tbody tr:last-child td{border-bottom:none}
 .cd-row .cd-what{flex:1;min-width:0;font-size:.9rem}
 .cd-row .cd-what small{display:block;color:var(--stone);font-size:.76rem;margin-top:2px;overflow-wrap:anywhere}
 .cd-row .cd-amt{font-weight:700;white-space:nowrap}
-.cd-row .cd-del{background:none;border:1px solid var(--line);border-radius:999px;color:var(--stone);font-size:.72rem;padding:4px 9px;cursor:pointer}
+.cd-step{font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:var(--stone);margin:2px 0 8px}
+.cd-sub{font-size:.78rem;color:var(--stone);margin:8px 0 6px}
+.cd-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.cd-chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 13px;font-size:.88rem;font-weight:600;color:var(--ink);cursor:pointer}
+.cd-chip small{color:var(--stone);font-weight:500;margin-left:6px;font-size:.74rem}
+.cd-picked{display:flex;align-items:center;gap:6px;font-size:.92rem;margin-bottom:12px;flex-wrap:wrap}
+.cd-picked .cd-del{margin-left:auto}
+.cd-qty{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.cd-qty button{width:44px;height:44px;border-radius:10px;border:1.5px solid var(--blue);background:#fff;color:var(--blue);font-size:1.3rem;font-weight:700;cursor:pointer}
+.cd-qty b{font-size:1.4rem;min-width:28px;text-align:center}
+.cd-qty small{color:var(--stone);margin-left:auto}
+.cd-total{font-size:.95rem;margin:0 0 10px;min-height:1.2em}
+.cd-del{background:none;border:1px solid var(--line);border-radius:999px;color:var(--stone);font-size:.72rem;padding:4px 9px;cursor:pointer}
 .pal-mode .nav-btn{padding-left:2px;padding-right:2px}
 /* ── STOCK HISTORY ── */
 .sg-hist{padding:8px 14px 12px;border-top:1px solid #ECE8E1}
@@ -1140,9 +1152,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
-  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, palladiumSell:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
+  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, palladiumSell:1, markDone:1, transferStock:1, submitOrder:1 };
+  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], palladiumSell:['items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -1378,7 +1390,7 @@ function appLogout() {
   ALL_ORDERS       = [];
   PAL_FILTER       = 'all';
   PAL_SHOW_OLD     = false;
-  CASH_DATA = null; CASH_KIND = '';
+  CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
   cart = []; nextId = 1; lastOrder = null;
@@ -1701,16 +1713,80 @@ function palShowCash() {
   cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash(); })
     .catch(function(e) { el.innerHTML = '<p class="cd-msg">Could not load: ' + lvEsc(e.message) + '</p>'; });
 }
+// A sale = one item: product → colour → size (tapped from Palladium's stock), quantity and
+// price per piece (remembered per product on this phone). The pieces come off Palladium Stock
+// (Apps Script palladiumSell), then qty × price goes into the drawer (/api/drawer).
+var SALE = null;
+function palInventory() { return (STOCK_DATA && STOCK_DATA.inventory) || ((cacheGet('palinv') || {}).inventory) || null; }
+function palLoadInventory() {
+  if (palInventory()) return;
+  google.script.run.withSuccessHandler(function(r) {
+    if (r && r.success) { STOCK_DATA = r; cacheSet('palinv', r); if (CURRENT_PANEL === 'cash' && CASH_KIND === 'sale') palRenderCash(); }
+  }).withFailureHandler(function() {}).getInventory();
+}
+function salePrice(pid) { try { return parseFloat(localStorage.getItem('bm_price_' + pid)) || ''; } catch (e) { return ''; } }
+function pcs(obj) { return Object.keys(obj || {}).reduce(function(n, k) { return n + (typeof obj[k] === 'object' ? pcs(obj[k]) : (parseInt(obj[k]) || 0)); }, 0); }
+function chipsHtml(list, on, fn) {
+  return '<div class="cd-chips">' + list.map(function(c) {
+    return '<button class="cd-chip' + (c.v === on ? ' on' : '') + '" onclick="' + fn + '(\'' + palEsc(c.v) + '\')">' + lvEsc(c.t) + '<small>' + c.n + '</small></button>';
+  }).join('') + '</div>';
+}
+function saleFormHtml() {
+  var inv = palInventory();
+  if (!inv) { palLoadInventory(); return '<div class="cd-form"><p class="cd-msg">Loading Palladium stock…</p></div>'; }
+  var S = SALE, h = '<div class="cd-form">';
+  var groups = (STOCK_DATA && STOCK_DATA.groups) || [{ label: '', products: Object.keys(inv) }];
+  if (!S.pid) {
+    h += '<div class="cd-step">1 · Item</div>';
+    groups.forEach(function(g) {
+      var list = g.products.filter(function(p) { return inv[p] && pcs(inv[p]) > 0; }).map(function(p) { return { v: p, t: p, n: pcs(inv[p]) }; });
+      if (!list.length) return;
+      if (g.label) h += '<div class="cd-sub">' + lvEsc(g.label) + '</div>';
+      h += chipsHtml(list, '', 'salePick');
+    });
+    return h + '</div>';
+  }
+  h += '<div class="cd-picked"><b>' + lvEsc(S.pid) + '</b>' + (S.col ? ' · ' + lvEsc(S.col) : '') + (S.sz ? ' · Size ' + lvEsc(S.sz) : '') + '<button class="cd-del" onclick="saleBack()">Change</button></div>';
+  if (!S.col) {
+    var cols = Object.keys(inv[S.pid]).filter(function(c) { return pcs(inv[S.pid][c]) > 0; }).map(function(c) { return { v: c, t: c.replace(/^Color /, ''), n: pcs(inv[S.pid][c]) }; });
+    return h + '<div class="cd-step">2 · Colour</div>' + chipsHtml(cols, '', 'salePickCol') + '</div>';
+  }
+  if (!S.sz) {
+    var sizes = inv[S.pid][S.col], list = Object.keys(sizes).filter(function(z) { return (parseInt(sizes[z]) || 0) > 0; }).map(function(z) { return { v: z, t: z, n: sizes[z] }; });
+    return h + '<div class="cd-step">3 · Size</div>' + chipsHtml(list, '', 'salePickSize') + '</div>';
+  }
+  var have = parseInt(inv[S.pid][S.col][S.sz]) || 0;
+  var total = (S.qty || 0) * (parseFloat(S.price) || 0);
+  h += '<div class="cd-step">4 · How many and price</div>'
+    + '<div class="cd-qty"><button onclick="saleQty(-1)">−</button><b>' + S.qty + '</b><button onclick="saleQty(1)">+</button><small>' + have + ' in stock</small></div>'
+    + '<input id="cd-price" type="number" inputmode="numeric" min="1" placeholder="Price per piece ฿" value="' + (S.price || '') + '" oninput="SALE.price=this.value;saleTotal()">'
+    + '<input id="cd-note" type="text" maxlength="60" placeholder="Who bought? (optional)" value="' + lvEsc(S.who || '') + '" oninput="SALE.who=this.value">'
+    + '<div class="cd-total" id="cd-total">' + (total ? S.qty + ' × ' + cashBaht(parseFloat(S.price)) + ' = <b>' + cashBaht(total) + '</b>' : '') + '</div>'
+    + '<button class="cd-save" id="cd-save" onclick="palSaveCash()">' + (S.stockDone ? 'Save the money again' : 'Save sale') + '</button>';
+  return h + '</div>';
+}
+function salePick(p) { SALE = { pid: p, col: '', sz: '', qty: 1, price: salePrice(p), who: SALE ? SALE.who : '' }; palRenderCash(); }
+function salePickCol(c) { SALE.col = c; palRenderCash(); }
+function salePickSize(z) { SALE.sz = z; SALE.qty = 1; palRenderCash(); }
+function saleBack() { if (SALE.stockDone) return; if (SALE.sz) SALE.sz = ''; else if (SALE.col) SALE.col = ''; else SALE.pid = ''; palRenderCash(); }
+function saleQty(d) {
+  var have = parseInt(palInventory()[SALE.pid][SALE.col][SALE.sz]) || 0;
+  SALE.qty = Math.min(Math.max(1, SALE.qty + d), Math.max(1, have)); palRenderCash();
+}
+function saleTotal() {
+  var t = SALE.qty * (parseFloat(SALE.price) || 0), el = document.getElementById('cd-total');
+  if (el) el.innerHTML = t ? SALE.qty + ' × ' + cashBaht(parseFloat(SALE.price)) + ' = <b>' + cashBaht(t) + '</b>' : '';
+}
 function palRenderCash(msg) {
   var d = CASH_DATA, el = document.getElementById('cash-content');
-  var form = !CASH_KIND ? '' : '<div class="cd-form">'
+  var form = CASH_KIND === 'sale' ? saleFormHtml() : CASH_KIND !== 'expense' ? '' : '<div class="cd-form">'
     + '<input id="cd-amount" type="number" inputmode="numeric" min="1" placeholder="Amount ฿">'
-    + '<input id="cd-note" type="text" maxlength="120" placeholder="' + (CASH_KIND === 'sale' ? 'Who bought? (optional)' : 'What for? e.g. water, taxi') + '">'
-    + '<button class="cd-save" id="cd-save" onclick="palSaveCash()">Save ' + (CASH_KIND === 'sale' ? 'sale' : 'expense') + '</button></div>';
+    + '<input id="cd-note" type="text" maxlength="120" placeholder="What for? e.g. water, taxi">'
+    + '<button class="cd-save" id="cd-save" onclick="palSaveCash()">Save expense</button></div>';
   var rows = d.entries.map(function(e, i) {
     return '<div class="cd-row"><div class="cd-what">' + lvEsc(e.what) + '<small>' + cashDay(e.date) + (e.notes ? ' · ' + lvEsc(e.notes) : '') + '</small></div>'
       + '<span class="cd-amt">' + (e.amount > 0 ? '+ ' : '− ') + cashBaht(Math.abs(e.amount)) + '</span>'
-      + (e.canDelete ? '<button class="cd-del" onclick="palDeleteCash(' + i + ')">Delete</button>' : '') + '</div>';
+      + (e.canDelete && e.category !== 'Retail Sale' ? '<button class="cd-del" onclick="palDeleteCash(' + i + ')">Delete</button>' : '') + '</div>';
   }).join('');
   el.innerHTML = '<div class="cd-hand"><span>Cash in hand</span><b>' + cashBaht(d.cash) + '</b></div>'
     + '<div class="cd-btns"><button class="' + (CASH_KIND === 'sale' ? 'on' : '') + '" onclick="palCashKind(\'sale\')">+ Sale</button>'
@@ -1718,21 +1794,52 @@ function palRenderCash(msg) {
     + form + (msg ? '<p class="cd-msg">' + lvEsc(msg) + '</p>' : '')
     + '<div class="rp-title" style="margin:16px 2px 8px">This month</div>'
     + (rows ? '<div class="cd-list">' + rows + '</div>' : '<p class="cd-msg">Nothing yet this month.</p>');
-  if (CASH_KIND) { var a = document.getElementById('cd-amount'); if (a) a.focus(); }
+  if (CASH_KIND === 'expense') { var a = document.getElementById('cd-amount'); if (a) a.focus(); }
 }
-function palCashKind(k) { CASH_KIND = CASH_KIND === k ? '' : k; palRenderCash(); }
+function palCashKind(k) {
+  if (SALE && SALE.stockDone && k !== 'sale') { alert('The pieces were taken off stock but the money is not saved yet. Tap “Save the money again” first.'); return; }
+  CASH_KIND = CASH_KIND === k ? '' : k;
+  if (CASH_KIND === 'sale' && !(SALE && SALE.stockDone)) SALE = { pid: '', col: '', sz: '', qty: 1, price: '', who: '' };
+  palRenderCash();
+}
 function palSaveCash() {
+  if (CASH_KIND === 'sale') return palSaveSale();
   var amount = parseFloat(document.getElementById('cd-amount').value) || 0;
   var note = document.getElementById('cd-note').value.trim();
   if (!(amount > 0)) { alert('Type the amount'); return; }
-  if (CASH_KIND === 'expense' && !note) { alert('Write what the money was for'); return; }
+  if (!note) { alert('Write what the money was for'); return; }
   var btn = document.getElementById('cd-save');
   btn.disabled = true; btn.textContent = 'Saving…';
-  var kind = CASH_KIND;
-  cashFetch('POST', { kind: kind, amount: amount, note: note }).then(function() {
+  cashFetch('POST', { kind: 'expense', amount: amount, note: note }).then(function() {
     CASH_KIND = '';
-    return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash((kind === 'sale' ? 'Sale' : 'Expense') + ' saved: ' + cashBaht(amount)); });
-  }).catch(function(e) { btn.disabled = false; btn.textContent = 'Save'; alert('Not saved: ' + e.message); });
+    return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Expense saved: ' + cashBaht(amount)); });
+  }).catch(function(e) { btn.disabled = false; btn.textContent = 'Save expense'; alert('Not saved: ' + e.message); });
+}
+// Stock first (a retry with the same saleId never takes pieces twice), then the money.
+function palSaveSale() {
+  var S = SALE, price = parseFloat(S.price) || 0;
+  if (!(price > 0)) { alert('Type the price per piece'); return; }
+  S.saleId = S.saleId || ('PS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+  var btn = document.getElementById('cd-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var colNo = S.col.replace(/^Color /, '');
+  var fail = function(e) { btn.disabled = false; btn.textContent = S.stockDone ? 'Save the money again' : 'Save sale'; alert('Not saved: ' + (e && e.message || e)); };
+  var saveMoney = function() {
+    try { localStorage.setItem('bm_price_' + S.pid, String(price)); } catch (e) {}
+    var note = S.pid + ' · Colour ' + colNo + ' · Size ' + S.sz + ' · ' + S.qty + ' × ' + price + (S.who && S.who.trim() ? ' · ' + S.who.trim() : '');
+    cashFetch('POST', { kind: 'sale', amount: S.qty * price, note: note }).then(function() {
+      var inv = palInventory(); if (inv && inv[S.pid] && inv[S.pid][S.col]) inv[S.pid][S.col][S.sz] = Math.max(0, (parseInt(inv[S.pid][S.col][S.sz]) || 0) - S.qty);
+      if (STOCK_DATA) cacheSet('palinv', STOCK_DATA);
+      CASH_KIND = ''; SALE = null;
+      return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Sale saved: ' + cashBaht(S.qty * price) + ', ' + S.qty + ' pc taken off stock'); });
+    }).catch(fail);
+  };
+  if (S.stockDone) return saveMoney();
+  google.script.run.withSuccessHandler(function(r) {
+    if (!r || !r.success) return fail((r && r.error) || 'Stock not changed');
+    S.stockDone = true; saveMoney();
+  }).withFailureHandler(function() { fail('Connection error. Nothing was taken off stock, try again.'); })
+    .palladiumSell([{ pid: S.pid, col: colNo, sz: S.sz, qty: S.qty }], S.saleId);
 }
 function palDeleteCash(i) {
   var e = CASH_DATA.entries[i];

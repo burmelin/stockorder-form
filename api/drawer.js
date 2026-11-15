@@ -20,7 +20,7 @@ function summarize(rows, day) {
   const entries = mine.filter((r) => r.date.slice(0, 7) === month && (r.cashIn || r.cashOut)).map((r) => ({
     row: r.row, date: r.date, category: r.category, notes: r.notes,
     amount: r.cashIn - r.cashOut,
-    what: r.category === 'Drawer Float' ? 'Cash from office'
+    what: (r.category === 'Drawer Float' || r.category === 'Opening Balance') ? 'Opening cash'
       : r.category === 'Retail Sale' ? 'Sale'
       : /^Collection/.test(r.category) ? 'Given to office'
       : r.cashIn ? r.category : 'Expense',
@@ -110,7 +110,7 @@ function mockRows() {
   return [
     { ...base, row: 900, date: day.slice(0, 8) + '01', category: 'Drawer Float', cashIn: 3000, cashOut: 0, enteredBy: 'App', notes: 'From Office Cash' },
     { ...base, row: 901, date: day, category: 'Other Expense', cashIn: 0, cashOut: 120, enteredBy: BY, notes: 'Water and ice' },
-    { ...base, row: 902, date: day, category: 'Retail Sale', cashIn: 850, cashOut: 0, enteredBy: BY, notes: 'Cousin, 2 shirts' },
+    { ...base, row: 902, date: day, category: 'Retail Sale', cashIn: 850, cashOut: 0, enteredBy: BY, notes: 'T9027 · Colour 24 · Size 50 · 2 × 425 · Cousin' },
   ];
 }
 
