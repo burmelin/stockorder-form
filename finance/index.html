@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Caladea:wght@700&display=swap">
-<link rel="stylesheet" href="/finance/styles.css?v=8">
+<link rel="stylesheet" href="/finance/styles.css?v=9">
 </head>
 <body>
 
@@ -74,6 +74,11 @@
         <section class="card">
           <h2>Cash in drawers <span class="h-amount" id="drawerTotal"></span></h2>
           <ul id="shopList" class="rows"></ul>
+          <div id="floatBox" class="float-box" hidden>
+            <label for="floatAmount">Give cash to Palladium <span class="hint">from Office Cash</span></label>
+            <div class="float-row"><input id="floatAmount" type="number" inputmode="numeric" min="1" placeholder="฿"><button type="button" id="floatSave" class="save-btn">Give</button></div>
+            <div id="floatToast" class="toast" hidden></div>
+          </div>
         </section>
       </div>
 
@@ -428,8 +433,8 @@
 <!-- printable statement (only visible when printing) -->
 <div id="printArea" class="print-only"></div>
 
-<script src="/finance/statement.js?v=7"></script>
+<script src="/finance/statement.js?v=8"></script>
 <script src="/finance/timecards.js?v=1"></script>
-<script src="/finance/app.js?v=11"></script>
+<script src="/finance/app.js?v=12"></script>
 </body>
 </html>

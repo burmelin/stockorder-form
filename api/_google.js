@@ -1,6 +1,14 @@
 // Shared helpers for the Sheets API. Files starting with "_" are not exposed as routes on Vercel.
 const { google } = require('googleapis');
 
+// Two shop names in the sheet don't mean what they say, kept so history stays as it was (15 Nov 2026):
+// - "Palladium" is the OWNER'S cash kept at home, the head office. The app calls it "Office".
+//   Office pays the house and Palladium's costs, takes collections, wholesale customers pay it.
+// - "Warehouse" is the cash drawer the Palladium manager holds (a float from Office, small
+//   expenses, the odd direct sale). The app calls it "Palladium".
+const OFFICE = 'Palladium';
+const DRAWER = 'Warehouse';
+
 const SHEET_ID = process.env.SHEET_ID || '1UG4WQG3vOiytArJT1U03CdQPwjPlMb9-3wy1OGzoLmw';
 const MOCK = !process.env.GOOGLE_PRIVATE_KEY || !(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || /client_email/.test(process.env.GOOGLE_PRIVATE_KEY));
 
@@ -78,6 +86,48 @@ async function isOwnerRequest(req) {
     ownerChecking.set(token, askOwner(token).finally(() => ownerChecking.delete(token)));
   }
   return ownerChecking.get(token);
+}
+
+// Which staff-app login a token belongs to ('Palladium', 'Bicasso 1', 'Owner'…), or ''.
+// Asks the Apps Script server (action whoAmI), which alone can read its tokens; remembered
+// for a few minutes like the owner check.
+const loginCache = new Map();   // token -> { login, until }
+async function loginOfToken(token) {
+  token = String(token || '').trim();
+  if (!token || token.length > 2000) return '';
+  const hit = loginCache.get(token);
+  if (hit && hit.until > Date.now()) return hit.login;
+  let login = '';
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const resp = await fetch(OWNER_CHECK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'whoAmI', token }),
+      redirect: 'follow',
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const data = await resp.json();
+    if (data && data.success === true) login = String(data.login || '');
+  } catch (err) {
+    console.error('Login check failed:', err.message);
+    return '';
+  }
+  if (loginCache.size > 200) loginCache.clear();
+  if (login) loginCache.set(token, { login, until: Date.now() + OWNER_OK_MS });
+  return login;
+}
+
+// Gate for the Palladium cash drawer: the Palladium login (x-staff-token) or the owner.
+// Returns 'Palladium manager' / 'Owner' for the Entered By column, or null after a 401.
+async function checkDrawer(req, res) {
+  if (MOCK) return 'Palladium manager';
+  if ((await loginOfToken(req.headers['x-staff-token'])) === 'Palladium') return 'Palladium manager';
+  if (await isOwnerRequest(req)) return 'Owner';
+  res.status(401).json({ error: 'Please log out and log in again.', needLogin: true });
+  return null;
 }
 
 async function askOwner(token) {
@@ -271,4 +321,4 @@ async function lastSync(sheets) {
 // Shown when a save would go past the bottom of Master Entry.
 const sheetFullError = (lastRow) => `Master Entry is full (row ${lastRow}). Add more rows at the bottom of the sheet, copying the last row's formulas.`;
 
-module.exports = { rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
+module.exports = { OFFICE, DRAWER, checkDrawer, rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };

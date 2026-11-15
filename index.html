@@ -307,9 +307,30 @@ tbody tr:last-child td{border-bottom:none}
 /* ── MASTER / REORDER VIEWS ── */
 #nav-plan{display:none}
 .pal-mode #nav-plan{display:flex}
-.pal-mode #app-nav{grid-template-columns:repeat(5,1fr)}
+.pal-mode #app-nav{grid-template-columns:repeat(6,1fr)}
 #nav-report{display:none}
 .pal-mode #nav-report{display:flex}
+#nav-cash{display:none}
+.pal-mode #nav-cash{display:flex}
+/* ── PALLADIUM CASH DRAWER ── */
+.cd-hand{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 16px;margin-bottom:12px;text-align:center}
+.cd-hand span{display:block;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.2em;color:var(--stone)}
+.cd-hand b{display:block;font-family:var(--f-display);font-size:2.4rem;line-height:1.1;margin-top:6px;color:var(--ink)}
+.cd-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.cd-btns button{padding:16px 8px;border-radius:10px;border:1.5px solid var(--blue);background:#fff;color:var(--blue);font-weight:700;font-size:.95rem;cursor:pointer}
+.cd-btns button.on{background:var(--blue);color:#fff}
+.cd-form{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.cd-form input{width:100%;box-sizing:border-box;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:10px}
+.cd-form .cd-save{width:100%;padding:14px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-weight:700;font-size:1rem;cursor:pointer}
+.cd-form .cd-save:disabled{opacity:.6}
+.cd-msg{font-size:.85rem;color:var(--stone);margin:8px 0 0;text-align:center}
+.cd-list{background:#fff;border:1px solid var(--line);border-radius:12px;padding:4px 14px}
+.cd-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--sunk)}
+.cd-row:last-child{border-bottom:none}
+.cd-row .cd-what{flex:1;min-width:0;font-size:.9rem}
+.cd-row .cd-what small{display:block;color:var(--stone);font-size:.76rem;margin-top:2px;overflow-wrap:anywhere}
+.cd-row .cd-amt{font-weight:700;white-space:nowrap}
+.cd-row .cd-del{background:none;border:1px solid var(--line);border-radius:999px;color:var(--stone);font-size:.72rem;padding:4px 9px;cursor:pointer}
 .pal-mode .nav-btn{padding-left:2px;padding-right:2px}
 /* ── STOCK HISTORY ── */
 .sg-hist{padding:8px 14px 12px;border-top:1px solid #ECE8E1}
@@ -513,6 +534,7 @@ tbody tr:last-child td{border-bottom:none}
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
   <symbol id="i-order" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></symbol>
   <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-cash" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18M6 20v-7M11 20V5M16 20v-10M21 20v-4"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="18" r=".6"/></symbol>
   <symbol id="i-shop" viewBox="0 0 24 24"><path d="M3.5 9 5.5 4h13l2 5M3.5 9h17M5 9v11h14V9M10 20v-6h4v6"/></symbol>
@@ -695,6 +717,11 @@ tbody tr:last-child td{border-bottom:none}
       <div class="panel-inner" id="report-content"></div>
     </div>
 
+    <!-- Panel 6: Cash drawer (Palladium only) -->
+    <div id="panel-cash" class="panel">
+      <div class="panel-inner" id="cash-content"></div>
+    </div>
+
   </div><!-- /app-body -->
 
   <div id="ig-banner" hidden><button class="ig-banner-open" onclick="openInstallGuide()"><svg class="ig-i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg><span class="ig-banner-text">Get the app</span></button><button class="ig-banner-x" onclick="igHideBanner()" aria-label="Hide this">✕</button></div>
@@ -713,6 +740,9 @@ tbody tr:last-child td{border-bottom:none}
     </button>
     <button class="nav-btn" id="nav-report" onclick="navTap('report')">
       <span class="nav-icon"><svg><use href="#i-chart"/></svg></span><span>Sales</span>
+    </button>
+    <button class="nav-btn" id="nav-cash" onclick="navTap('cash')">
+      <span class="nav-icon"><svg><use href="#i-cash"/></svg></span><span>Cash</span>
     </button>
   </nav>
 </div><!-- /screen-app -->
@@ -1348,6 +1378,7 @@ function appLogout() {
   ALL_ORDERS       = [];
   PAL_FILTER       = 'all';
   PAL_SHOW_OLD     = false;
+  CASH_DATA = null; CASH_KIND = '';
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
   cart = []; nextId = 1; lastOrder = null;
@@ -1397,6 +1428,7 @@ function refreshCurrent() {
     else if (CURRENT_PANEL === 'order')  { ALL_RETAIL_STOCK=null; palLoadRetail(); }
     else if (CURRENT_PANEL === 'plan')   { ALL_RETAIL_STOCK=null; STOCK_DATA=null; palShowPlan(); }
     else if (CURRENT_PANEL === 'report') { ALL_RETAIL_STOCK=null; REPORT_DATA={}; palShowReport(); }
+    else if (CURRENT_PANEL === 'cash')   { palShowCash(); }
   } else {
     if (CURRENT_PANEL === 'mystore') { ALL_RETAIL_STOCK=null; CS_ROWS=null; INVENTORY_LOADED=false; loadStoreStock(); }
     else if (CURRENT_PANEL === 'stores') { ALL_RETAIL_STOCK=null; CS_ROWS=null; renderOtherStores(); }
@@ -1407,7 +1439,7 @@ function refreshCurrent() {
 // ── APP NAVIGATION ────────────────────────────────────────────────
 function showPanel(name) {
   CURRENT_PANEL = name;
-  ['mystore','stores','order','plan','report'].forEach(function(p) {
+  ['mystore','stores','order','plan','report','cash'].forEach(function(p) {
     document.getElementById('panel-' + p).classList.toggle('active', p === name);
     var nb = document.getElementById('nav-' + p);
     if (nb) nb.classList.toggle('active', p === name);
@@ -1418,6 +1450,7 @@ function showPanel(name) {
     if (name === 'order')  palLoadRetail();
     if (name === 'plan')   palShowPlan();
     if (name === 'report') palShowReport();
+    if (name === 'cash')   palShowCash();
   } else {
     if (name === 'stores') renderOtherStores();
     if (name === 'order')  loadInventory();
@@ -1646,6 +1679,67 @@ function showHistory(btn, store, pid) {
       box.dataset.open = ''; btn.textContent = '🕘 History';
     })
     .getStockHistory(store, pid);
+}
+
+// ── CASH DRAWER (Palladium only) ──────────────────────────────────
+// The manager's cash: the owner gives a float from Office Cash (in Finance), the manager writes
+// down what he spends and the odd direct sale, and sees the cash he should have in hand.
+// Saved by /api/drawer (this same site) into the Finance sheet, shop "Warehouse".
+var CASH_DATA = null, CASH_KIND = '';
+function cashFetch(method, body) {
+  var opts = { method: method, headers: { 'Content-Type': 'application/json', 'x-staff-token': (SESSION_STORE && SESSION_STORE.token) || '' } };
+  if (body) opts.body = JSON.stringify(body);
+  return fetch('/api/drawer', opts).then(function(r) {
+    return r.json().catch(function() { return {}; }).then(function(d) { if (!r.ok) throw new Error(d.error || 'Server error'); return d; });
+  });
+}
+function cashBaht(n) { return (n < 0 ? '−฿' : '฿') + Math.abs(Math.round(n)).toLocaleString('en-US'); }
+function cashDay(iso) { var d = new Date(iso + 'T00:00'); return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); }
+function palShowCash() {
+  var el = document.getElementById('cash-content');
+  if (!CASH_DATA) el.innerHTML = '<p class="cd-msg">Loading…</p>';
+  cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash(); })
+    .catch(function(e) { el.innerHTML = '<p class="cd-msg">Could not load: ' + lvEsc(e.message) + '</p>'; });
+}
+function palRenderCash(msg) {
+  var d = CASH_DATA, el = document.getElementById('cash-content');
+  var form = !CASH_KIND ? '' : '<div class="cd-form">'
+    + '<input id="cd-amount" type="number" inputmode="numeric" min="1" placeholder="Amount ฿">'
+    + '<input id="cd-note" type="text" maxlength="120" placeholder="' + (CASH_KIND === 'sale' ? 'Who bought? (optional)' : 'What for? e.g. water, taxi') + '">'
+    + '<button class="cd-save" id="cd-save" onclick="palSaveCash()">Save ' + (CASH_KIND === 'sale' ? 'sale' : 'expense') + '</button></div>';
+  var rows = d.entries.map(function(e, i) {
+    return '<div class="cd-row"><div class="cd-what">' + lvEsc(e.what) + '<small>' + cashDay(e.date) + (e.notes ? ' · ' + lvEsc(e.notes) : '') + '</small></div>'
+      + '<span class="cd-amt">' + (e.amount > 0 ? '+ ' : '− ') + cashBaht(Math.abs(e.amount)) + '</span>'
+      + (e.canDelete ? '<button class="cd-del" onclick="palDeleteCash(' + i + ')">Delete</button>' : '') + '</div>';
+  }).join('');
+  el.innerHTML = '<div class="cd-hand"><span>Cash in hand</span><b>' + cashBaht(d.cash) + '</b></div>'
+    + '<div class="cd-btns"><button class="' + (CASH_KIND === 'sale' ? 'on' : '') + '" onclick="palCashKind(\'sale\')">+ Sale</button>'
+    + '<button class="' + (CASH_KIND === 'expense' ? 'on' : '') + '" onclick="palCashKind(\'expense\')">− Expense</button></div>'
+    + form + (msg ? '<p class="cd-msg">' + lvEsc(msg) + '</p>' : '')
+    + '<div class="rp-title" style="margin:16px 2px 8px">This month</div>'
+    + (rows ? '<div class="cd-list">' + rows + '</div>' : '<p class="cd-msg">Nothing yet this month.</p>');
+  if (CASH_KIND) { var a = document.getElementById('cd-amount'); if (a) a.focus(); }
+}
+function palCashKind(k) { CASH_KIND = CASH_KIND === k ? '' : k; palRenderCash(); }
+function palSaveCash() {
+  var amount = parseFloat(document.getElementById('cd-amount').value) || 0;
+  var note = document.getElementById('cd-note').value.trim();
+  if (!(amount > 0)) { alert('Type the amount'); return; }
+  if (CASH_KIND === 'expense' && !note) { alert('Write what the money was for'); return; }
+  var btn = document.getElementById('cd-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var kind = CASH_KIND;
+  cashFetch('POST', { kind: kind, amount: amount, note: note }).then(function() {
+    CASH_KIND = '';
+    return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash((kind === 'sale' ? 'Sale' : 'Expense') + ' saved: ' + cashBaht(amount)); });
+  }).catch(function(e) { btn.disabled = false; btn.textContent = 'Save'; alert('Not saved: ' + e.message); });
+}
+function palDeleteCash(i) {
+  var e = CASH_DATA.entries[i];
+  if (!e || !confirm('Delete ' + e.what.toLowerCase() + ' ' + cashBaht(Math.abs(e.amount)) + '?')) return;
+  cashFetch('DELETE', { row: e.row, original: e.original }).then(function() {
+    return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Deleted'); });
+  }).catch(function(err) { alert(err.message); });
 }
 
 // ── SALES REPORT (Palladium only) ─────────────────────────────────

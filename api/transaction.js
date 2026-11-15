@@ -17,6 +17,10 @@ const RULES = {
   'Rent': ['cashOut', 'bankOut'],
   'Gov Tax': ['cashOut', 'bankOut'],
   'Home Expenses': ['cashOut', 'bankOut'],
+  'Electricity': ['cashOut', 'bankOut'],
+  'Gas': ['cashOut', 'bankOut'],
+  'Groceries': ['cashOut', 'bankOut'],
+  'Cleaning': ['cashOut', 'bankOut'],
   'Other Expense': ['cashOut', 'bankOut'],
   'Card Fee': ['bankOut'],
   'Collection (to Palladium)': ['cashOut'],
@@ -24,6 +28,7 @@ const RULES = {
   'Bank to Cash (ATM)': ['cashIn', 'bankOut'],
   'Collection to Bank': ['cashOut', 'bankIn'],
   'Opening Balance': ['cashIn', 'bankIn'],
+  'Drawer Float': ['cashIn', 'cashOut'],   // Office Cash -> Palladium drawer: two rows, see api/drawer.js
   'Adjustment': ['cashIn', 'bankIn', 'cashOut', 'bankOut'],
 };
 
