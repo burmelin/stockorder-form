@@ -239,6 +239,8 @@ function handleApi(action, params, body) {
     case 'ownerLeave':           out = ownerLeave(body); break;
     case 'ownerDecideLeave':     out = ownerDecideLeave(body, body.requestId, body.decision, body.note); break;
     case 'ownerAddLeave':        out = ownerAddLeave(body, body.staffId, body.type, body.dates, body.reason, body.half); break;
+    case 'ownerEditLeave':       out = ownerEditLeave(body, body.requestId, body.staffId, body.type, body.dates, body.reason, body.half); break;
+    case 'ownerRemoveLeave':     out = ownerRemoveLeave(body, body.requestId); break;
     case 'ownerSaveStaff':       out = ownerSaveStaff(body, body.staff); break;
     case 'ownerDeleteStaff':     out = ownerDeleteStaff(body, body.id); break;
     default:                     out = { success: false, error: 'Unknown action: ' + action };
@@ -2005,66 +2007,134 @@ function ownerDecideLeave(b, requestId, decision, note) {
 var OWNER_LEAVE_BACK_DAYS = 31;
 var OWNER_LEAVE_MAX_DAYS  = 31;
 var OWNER_ENTERED_NOTE    = 'Entered by owner';
-function ownerAddLeave(b, staffId, type, dates, reason, half) {
-  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
-  if (!LEAVE_TYPES[type]) return { success: false, error: 'Choose day off or sick leave.' };
+// Checks shared by writing and changing leave. leave = the Leave rows to check against (when
+// changing a request, its own rows are left out). Returns { error } or { s, dates, amount, warnings }.
+function ownerLeaveCheck(staff, leave, staffId, type, dates, half, earliest) {
+  if (!LEAVE_TYPES[type]) return { error: 'Choose day off or sick leave.' };
   half = String(half || '').toLowerCase();
-  if (half && !LEAVE_HALVES[half]) return { success: false, error: 'Choose the first or second half of the day.' };
+  if (half && !LEAVE_HALVES[half]) return { error: 'Choose the first or second half of the day.' };
   dates = (dates || []).map(String).filter(function(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d); })
     .filter(function(d, i, a) { return a.indexOf(d) === i; }).sort();
-  reason = String(reason || '').trim().slice(0, 300);
-  if (!dates.length) return { success: false, error: 'Choose the date.' };
-  if (half && dates.length > 1) return { success: false, error: 'A half day is for one date only.' };
-  if (dates.length > OWNER_LEAVE_MAX_DAYS) return { success: false, error: 'Up to ' + OWNER_LEAVE_MAX_DAYS + ' days at a time.' };
+  if (!dates.length) return { error: 'Choose the date.' };
+  if (half && dates.length > 1) return { error: 'A half day is for one date only.' };
+  if (dates.length > OWNER_LEAVE_MAX_DAYS) return { error: 'Up to ' + OWNER_LEAVE_MAX_DAYS + ' days at a time.' };
   var amount = half ? 0.5 : 1, warnings = [];
+  var s = staff.filter(function(x) { return x.id === String(staffId); })[0];
+  if (!s) return { error: 'Choose who the leave is for.' };
+  if (dates[0] < earliest) return { error: 'The earliest date you can enter is ' + prettyDay(earliest) + '.' };
+  // A day that is already their weekly day off is left out
+  if (s.dayOffRule === 'fixed') dates = dates.filter(function(d) { return weekdayOf(d) !== s.fixedDayOff; });
+  if (!dates.length) return { error: 'That is already ' + s.name + '\'s day off.' };
+  for (var j = 0; j < dates.length; j++) {
+    var d = dates[j];
+    if (leave.some(function(l) { return l.staffId === s.id && l.date === d && isActiveLeave(l); })) {
+      return { error: s.name + ' already has leave on ' + prettyDay(d) + '.' };
+    }
+  }
+  if (type === 'dayoff' && s.dayOffRule !== 'fixed') {
+    var perMonth = {};
+    dates.forEach(function(d) { perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + amount; });
+    for (var month in perMonth) {
+      var used = leave.filter(function(l) { return l.staffId === s.id && l.type === 'dayoff' && isActiveLeave(l) && l.date.slice(0, 7) === month; })
+        .reduce(function(t, l) { return t + leaveAmount(l); }, 0);
+      if (used + perMonth[month] > s.daysOffPerMonth) {
+        warnings.push(s.name + ' now has ' + (used + perMonth[month]) + ' days off in ' + prettyMonth(month) + ' (allowance ' + s.daysOffPerMonth + ')');
+      }
+    }
+  }
+  var planned = leave.slice(), gap = null;
+  for (var k = 0; k < dates.length; k++) {
+    gap = gap || coverageGap(dates[k], staff, planned, s.id);
+    planned.push({ staffId: s.id, date: dates[k], status: 'Approved' });
+  }
+  if (gap) warnings.push(gap);
+  return { s: s, dates: dates, half: half, amount: amount, warnings: warnings };
+}
+// Appends one request's rows (one per date) to the Leave tab
+function writeLeaveRows(sh, rows) {
+  var start = sh.getLastRow() + 1;
+  sh.getRange(start, 6, rows.length, 1).setNumberFormat('@');
+  sh.getRange(start, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
+  sh.getRange(start, 2, rows.length, 1).setNumberFormat(DATE_FMT);
+  sh.getRange(start, 9, rows.length, 1).setNumberFormat(DATE_FMT);
+}
+
+function ownerAddLeave(b, staffId, type, dates, reason, half) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  reason = String(reason || '').trim().slice(0, 300);
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  var c, id;
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss);
-    var s = staff.filter(function(x) { return x.id === String(staffId); })[0];
-    if (!s) return { success: false, error: 'Choose who the leave is for.' };
-    var earliest = addDaysKey(todayKey(), -OWNER_LEAVE_BACK_DAYS);
-    if (dates[0] < earliest) return { success: false, error: 'The earliest date you can enter is ' + prettyDay(earliest) + '.' };
-    // A day that is already their weekly day off is left out
-    if (s.dayOffRule === 'fixed') dates = dates.filter(function(d) { return weekdayOf(d) !== s.fixedDayOff; });
-    if (!dates.length) return { success: false, error: 'That is already ' + s.name + '\'s day off.' };
-    var leave = readLeave(ss);
-    for (var j = 0; j < dates.length; j++) {
-      var d = dates[j];
-      if (leave.some(function(l) { return l.staffId === s.id && l.date === d && isActiveLeave(l); })) {
-        return { success: false, error: s.name + ' already has leave on ' + prettyDay(d) + '.' };
-      }
-    }
-    if (type === 'dayoff' && s.dayOffRule !== 'fixed') {
-      var perMonth = {};
-      dates.forEach(function(d) { perMonth[d.slice(0, 7)] = (perMonth[d.slice(0, 7)] || 0) + amount; });
-      for (var month in perMonth) {
-        var used = leave.filter(function(l) { return l.staffId === s.id && l.type === 'dayoff' && isActiveLeave(l) && l.date.slice(0, 7) === month; })
-          .reduce(function(t, l) { return t + leaveAmount(l); }, 0);
-        if (used + perMonth[month] > s.daysOffPerMonth) {
-          warnings.push(s.name + ' now has ' + (used + perMonth[month]) + ' days off in ' + prettyMonth(month) + ' (allowance ' + s.daysOffPerMonth + ')');
-        }
-      }
-    }
-    var planned = leave.slice(), gap = null;
-    for (var k = 0; k < dates.length; k++) {
-      gap = gap || coverageGap(dates[k], staff, planned, s.id);
-      planned.push({ staffId: s.id, date: dates[k], status: 'Approved' });
-    }
-    if (gap) warnings.push(gap);
-    var sh = leaveSheet(ss), now = new Date(), start = sh.getLastRow() + 1;
-    var id = 'L' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4).toUpperCase();
-    var rows = dates.map(function(d) { return [id, now, s.id, s.name, LEAVE_TYPES[type], d, reason, 'Approved', now, OWNER_ENTERED_NOTE, half ? LEAVE_HALVES[half] : '']; });
-    sh.getRange(start, 6, rows.length, 1).setNumberFormat('@');
-    sh.getRange(start, 1, rows.length, LEAVE_HEADERS.length).setValues(rows);
-    sh.getRange(start, 2, rows.length, 1).setNumberFormat(DATE_FMT);
-    sh.getRange(start, 9, rows.length, 1).setNumberFormat(DATE_FMT);
+    c = ownerLeaveCheck(staff, readLeave(ss), staffId, type, dates, half, addDaysKey(todayKey(), -OWNER_LEAVE_BACK_DAYS));
+    if (c.error) return { success: false, error: c.error };
+    var sh = leaveSheet(ss), now = new Date();
+    id = 'L' + Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyMMdd') + '-' + Utilities.getUuid().slice(0, 4).toUpperCase();
+    writeLeaveRows(sh, c.dates.map(function(d) { return [id, now, c.s.id, c.s.name, LEAVE_TYPES[type], d, reason, 'Approved', now, OWNER_ENTERED_NOTE, c.half ? LEAVE_HALVES[c.half] : '']; }));
     SpreadsheetApp.flush();
   } finally { lock.releaseLock(); }
   var out = ownerLeave(b);
   out.added = id;
-  out.addedDays = dates.length * amount;
-  if (warnings.length) out.warning = warnings.join('. ');
+  out.addedDays = c.dates.length * c.amount;
+  if (c.warnings.length) out.warning = c.warnings.join('. ');
+  return out;
+}
+
+// Owner changes saved leave: who, type, dates, half day or reason. The request keeps its ID, the
+// time it was asked, and its status (still waiting or approved); "Changed by owner" goes in the note.
+// Its old rows are taken out of the Leave tab and the new ones added at the bottom.
+var OWNER_CHANGED_NOTE = 'Changed by owner';
+var OWNER_REMOVED_NOTE = 'Removed by owner';
+function ownerEditLeave(b, requestId, staffId, type, dates, reason, half) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  reason = String(reason || '').trim().slice(0, 300);
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  var c;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), staff = readStaffRows(ss), leave = readLeave(ss);
+    var old = leave.filter(function(l) { return l.id === String(requestId); });
+    if (!old.length) return { success: false, error: 'This leave was not found. It may have been changed already: pull down to refresh.' };
+    if (!isActiveLeave(old[0])) return { success: false, error: 'This leave was ' + old[0].status.toLowerCase() + ', so it can\'t be changed.' };
+    var others = leave.filter(function(l) { return l.id !== String(requestId); });
+    // Past days: a month back, or as far back as this leave already went
+    var earliest = addDaysKey(todayKey(), -OWNER_LEAVE_BACK_DAYS), firstOld = old.map(function(l) { return l.date; }).sort()[0];
+    c = ownerLeaveCheck(staff, others, staffId, type, dates, half, firstOld < earliest ? firstOld : earliest);
+    if (c.error) return { success: false, error: c.error };
+    var sh = leaveSheet(ss), raw = sh.getRange(old[0].row, 1, 1, LEAVE_HEADERS.length).getValues()[0];
+    var status = old[0].status, decided = status === 'Approved' ? (raw[8] || new Date()) : '';
+    var note = old[0].note.indexOf(OWNER_CHANGED_NOTE) > -1 ? old[0].note : (old[0].note ? old[0].note + ' · ' : '') + OWNER_CHANGED_NOTE;
+    // Bottom rows first, so the row numbers above don't move
+    old.map(function(l) { return l.row; }).sort(function(x, y) { return y - x; }).forEach(function(r) { sh.deleteRow(r); });
+    writeLeaveRows(sh, c.dates.map(function(d) { return [old[0].id, raw[1], c.s.id, c.s.name, LEAVE_TYPES[type], d, reason, status, decided, note, c.half ? LEAVE_HALVES[c.half] : '']; }));
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  var out = ownerLeave(b);
+  out.changed = String(requestId);
+  if (c.warnings.length) out.warning = c.warnings.join('. ');
+  return out;
+}
+
+// Owner takes back leave entered by mistake: it stays in the sheet as Cancelled, "Removed by owner"
+function ownerRemoveLeave(b, requestId) {
+  if (!isOwner(b.auth)) return { success: false, error: 'Owner only.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var rows = readLeave(ss).filter(function(l) { return l.id === String(requestId); });
+    if (!rows.length) return { success: false, error: 'This leave was not found.' };
+    if (!isActiveLeave(rows[0])) return { success: false, error: 'This leave was already ' + rows[0].status.toLowerCase() + '.' };
+    var sh = ss.getSheetByName(LEAVE_SHEET), now = new Date();
+    rows.forEach(function(l) {
+      sh.getRange(l.row, 8, 1, 3).setValues([['Cancelled', now, (l.note ? l.note + ' · ' : '') + OWNER_REMOVED_NOTE]]);
+      sh.getRange(l.row, 9).setNumberFormat(DATE_FMT);
+    });
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  var out = ownerLeave(b);
+  out.removed = String(requestId);
   return out;
 }
 

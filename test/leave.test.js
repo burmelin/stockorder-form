@@ -16,6 +16,7 @@ function fakeSheet(name, rows, maxCols = 26) {
     getLastRow: () => grid.length,
     getMaxColumns: () => maxCols,
     insertColumnsAfter: (_, n) => { maxCols += n; },
+    deleteRow: (r) => { grid.splice(r - 1, 1); },
     setFrozenRows() {},
     getDataRange: () => sh.getRange(1, 1, grid.length, maxCols),
     getRange(row, col, nr = 1, nc = 1) {
@@ -41,6 +42,7 @@ const STAFF = [['ID', 'Name', 'Works at', 'Day off rule', 'Days off per month', 
   ['E2', 'Kumar', 'Bicasso 1, Bicasso 2', 'flexible', '2', ''],
   ['E3', 'Pyone', 'Bicasso 1, Bicasso 2', 'flexible', '2', '']];
 
+let uuidN = 0;
 function load(leaveRows, maxCols) {
   const sheets = { Staff: fakeSheet('Staff', STAFF), Leave: fakeSheet('Leave', leaveRows, maxCols) };
   const ss = { getSheetByName: (n) => sheets[n] || null, insertSheet: (n) => (sheets[n] = fakeSheet(n, [])) };
@@ -49,7 +51,7 @@ function load(leaveRows, maxCols) {
     SpreadsheetApp: { getActiveSpreadsheet: () => ss, flush() {} },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Session: { getScriptTimeZone: () => 'UTC', getEffectiveUser: () => ({ getEmail: () => '' }) },
-    Utilities: { formatDate: (d) => d.toISOString().slice(0, 10).replace(/-/g, '').slice(2), getUuid: () => 'abcd-1234' },
+    Utilities: { formatDate: (d) => d.toISOString().slice(0, 10).replace(/-/g, '').slice(2), getUuid: () => 'ab' + String(uuidN++).padStart(2, '0') + '-1234' },
     GmailApp: { sendEmail() {} },
     console,
   };
@@ -181,4 +183,68 @@ test('owner leave: same day twice refused; over allowance saved with a warning',
 test('owner leave: refused without the owner login', () => {
   const { ctx } = load([HEAD10]);
   assert.equal(ctx.ownerAddLeave({ auth: 'x' }, 'E1', 'dayoff', ['2026-11-20'], '', '').success, false);
+});
+
+// Owner changes or removes saved leave
+test('owner change: new person, type and days; keeps ID, approved, note says changed', () => {
+  const { ctx, sheets } = ownerCtx();
+  const id = ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-20', '2026-11-21'], 'family', '').added;
+  ctx.ownerAddLeave({}, 'E3', 'sick', ['2026-11-12'], '', '');          // another row after it
+  const r = ctx.ownerEditLeave({}, id, 'E2', 'sick', ['2026-11-22', '2026-11-23', '2026-11-24'], 'flu', '');
+  assert.equal(r.success, true, r.error);
+  const rows = sheets.Leave.grid.slice(1);
+  assert.equal(rows.length, 4);                                       // 2 old rows out, 3 new in, other kept
+  assert.equal(rows[0][2], 'E3');
+  const mine = rows.filter((x) => x[0] === id);
+  assert.deepEqual(mine.map((x) => x[5]), ['2026-11-22', '2026-11-23', '2026-11-24']);
+  assert.equal(mine[0][2], 'E2'); assert.equal(mine[0][3], 'Kumar');
+  assert.equal(mine[0][4], 'Sick leave'); assert.equal(mine[0][6], 'flu');
+  assert.equal(mine[0][7], 'Approved');
+  assert.equal(mine[0][9], 'Entered by owner · Changed by owner');
+  const req = r.requests.filter((q) => q.id === id)[0];
+  assert.equal(req.days, 3);
+});
+
+test('owner change: full day to half day and back; a waiting request stays waiting', () => {
+  const { ctx, sheets } = ownerCtx();
+  assert.equal(ctx.leaveRequest({}, 'dayoff', ['2026-11-20', '2026-11-21'], '', '').success, true);
+  const id = sheets.Leave.grid[1][0];
+  let r = ctx.ownerEditLeave({}, id, 'E1', 'dayoff', ['2026-11-21'], '', 'afternoon');
+  assert.equal(r.success, true, r.error);
+  let rows = sheets.Leave.grid.slice(1);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0][10], 'Second half');
+  assert.equal(rows[0][7], 'Pending');
+  assert.equal(rows[0][8], '');
+  r = ctx.ownerEditLeave({}, id, 'E1', 'dayoff', ['2026-11-21'], '', '');
+  assert.equal(sheets.Leave.grid[1][10], '');
+  assert.equal(r.requests[0].days, 1);
+});
+
+test('owner change: its own days do not count as a clash, someone else\'s leave does', () => {
+  const { ctx } = ownerCtx();
+  const id = ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-20', '2026-11-21'], '', '').added;
+  assert.equal(ctx.ownerEditLeave({}, id, 'E1', 'dayoff', ['2026-11-21', '2026-11-22'], '', '').success, true);
+  ctx.ownerAddLeave({}, 'E2', 'dayoff', ['2026-11-25'], '', '');
+  const r = ctx.ownerEditLeave({}, id, 'E2', 'dayoff', ['2026-11-25'], '', '');
+  assert.equal(r.success, false);
+  assert.match(r.error, /Kumar already has leave/);
+});
+
+test('owner remove: leave stays in the sheet as Cancelled and stops counting', () => {
+  const { ctx, sheets } = ownerCtx();
+  const id = ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-20', '2026-11-21'], '', '').added;
+  const r = ctx.ownerRemoveLeave({}, id);
+  assert.equal(r.success, true, r.error);
+  const rows = sheets.Leave.grid.slice(1);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((x) => x[7] === 'Cancelled' && /Removed by owner/.test(x[9])));
+  assert.equal(ctx.ownerEditLeave({}, id, 'E1', 'dayoff', ['2026-11-20'], '', '').success, false);
+  assert.equal(ctx.ownerAddLeave({}, 'E1', 'dayoff', ['2026-11-20'], '', '').success, true);   // day free again
+});
+
+test('owner change and remove: refused without the owner login', () => {
+  const { ctx } = load([HEAD10]);
+  assert.equal(ctx.ownerEditLeave({ auth: 'x' }, 'L1', 'E1', 'dayoff', ['2026-11-20'], '', '').success, false);
+  assert.equal(ctx.ownerRemoveLeave({ auth: 'x' }, 'L1').success, false);
 });
