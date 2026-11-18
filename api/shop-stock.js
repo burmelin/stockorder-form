@@ -5,7 +5,7 @@
 // Token: LOYVERSE_STAFF_TOKEN (its own token, so it can be switched off alone), else LOYVERSE_TOKEN.
 const { lvGetAll, localDate, addDays, TIMEZONE } = require('./_loyverse');
 const { loginOfToken, isOwnerRequest } = require('./_google');
-const { variantIndex, buildStock, salesLines, storeIds, tillShops, STORE_SHOP } = require('./_shopstock');
+const { variantIndex, buildStock, salesLines, salesMoney, storeIds, tillShops, STORE_SHOP } = require('./_shopstock');
 
 const KEEP_MS = 10 * 60 * 1000;
 const FRESH_MIN_MS = 60 * 1000;
@@ -37,10 +37,12 @@ async function readStore(key) {
   const tills = tillShops(devices);
   const shopOf = (r) => tills.get(r.pos_device_id) || STORE_SHOP[key];
   const stock = buildStock(idx, levels.filter((l) => l.store_id === id));
+  const mine = receipts.filter((r) => r.store_id === id && localDate(r.receipt_date || r.created_at) >= since);
   return {
     store: key, updatedAt: new Date().toISOString(), since,
     sized: stock.sized, totals: stock.totals,
-    sales: salesLines(receipts.filter((r) => r.store_id === id && localDate(r.receipt_date || r.created_at) >= since), idx, shopOf, TIMEZONE),
+    sales: salesLines(mine, idx, shopOf, TIMEZONE),
+    money: salesMoney(mine, shopOf, TIMEZONE),   // per day and shop (POS): cash / card / QR
   };
 }
 

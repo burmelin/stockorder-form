@@ -422,7 +422,16 @@ tbody tr:last-child td{border-bottom:none}
 .sold-row:last-child{border-radius:0 0 10px 10px}
 .sold-time{color:#86827B;font-size:.74rem;min-width:38px}
 .sold-what{flex:1}
-.sold-qty{font-weight:700;white-space:nowrap}
+.sold-qty{font-weight:700;white-space:nowrap;text-align:right}
+.sold-qty i,.sold-shop{font-style:normal;font-weight:600;font-size:.7rem;color:#6D6A65}
+.sold-money{background:#fff;border-radius:12px;box-shadow:0 1px 5px rgba(0,0,0,.07);margin-bottom:10px;overflow:hidden}
+.sold-money-row{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr 1.1fr;gap:4px;align-items:center;padding:8px 10px;border-bottom:1px solid #ECE8E1;font-size:.78rem;color:#2A2A31;text-align:right}
+.sold-money-row:last-child{border-bottom:none}
+.sold-money-row>span:first-child{text-align:left;font-weight:700;color:#111118;line-height:1.2}
+.sold-money-row>span:first-child i{display:block;font-style:normal;font-weight:400;font-size:.66rem;color:#86827B}
+.sold-money-row.head{background:#F7F5F1;font-size:.62rem;font-weight:700;color:#6D6A65;text-transform:uppercase;letter-spacing:.1em;padding:6px 10px}
+.sold-money-row.tot{background:#F7F5F1}
+.sold-money-row b{font-size:.86rem;color:#111118}
 /* ── LEAVE (staff) and OWNER screens ── */
 #screen-leave,#screen-owner{position:fixed;inset:0;display:none;flex-direction:column;background:var(--linen);z-index:60}
 #screen-leave.active,#screen-owner.active{display:flex}
@@ -1428,7 +1437,7 @@ function appLogout() {
   CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
-  LV = {}; ON_THE_WAY = {};
+  LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all'; SOLD_WHEN = 'today';
   cart = []; nextId = 1; lastOrder = null;
   document.getElementById('screen-app').classList.remove('active');
   document.getElementById('screen-app').classList.remove('pal-mode');
@@ -2135,44 +2144,91 @@ function totalsHtml(list, q) {
 }
 
 // ── SOLD (LAST 7 DAYS) ───────────────────────────────────────────
+// Burmelin is one stock, but its two shops each have a POS, so sales and money can be split by shop.
+var SOLD_SHOP = 'all';     // 'all' | 'Bicasso 1' | 'Bicasso 2' (Burmelin only)
+var SOLD_WHEN = 'today';   // 'today' | 'all' (every day the list holds)
+function bkkToday() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
+function soldBaht(n) { n = Math.round(Number(n) || 0); return (n < 0 ? '−' : '') + '฿' + Math.abs(n).toLocaleString('en-US'); }
+function soldKeep(l) {
+  if (SOLD_WHEN === 'today' && l.day !== bkkToday()) return false;
+  return SOLD_SHOP === 'all' || l.shop === SOLD_SHOP;
+}
+// Money taken, per shop and in total, for the day(s) picked: Cash / Card / QR
+function soldMoneyHtml(d) {
+  var key = myLvKey();
+  var shops = key === 'burmelin' ? ['Bicasso 1', 'Bicasso 2'] : ['Bicasso Nana'];
+  var sum = {};
+  shops.concat(['Total']).forEach(function(s) { sum[s] = { cash: 0, card: 0, qr: 0, total: 0, n: 0 }; });
+  (d.money || []).forEach(function(t) {
+    if (!soldKeep(t)) return;
+    var row = sum[t.shop] || sum[shops[0]];
+    [row, sum.Total].forEach(function(x) { x.cash += t.cash; x.card += t.card; x.qr += t.qr; x.total += t.total; x.n += t.receipts; });
+  });
+  var show = SOLD_SHOP === 'all' ? shops.concat(shops.length > 1 ? ['Total'] : []) : [SOLD_SHOP];
+  return '<div class="sold-money"><div class="sold-money-row head"><span></span><span>Cash</span><span>Card</span><span>QR</span><span>Total</span></div>'
+    + show.map(function(s) {
+      var x = sum[s];
+      return '<div class="sold-money-row' + (s === 'Total' ? ' tot' : '') + '"><span>' + (s === 'Bicasso Nana' ? 'Nana' : s) + '<i>' + x.n + ' receipt' + (x.n !== 1 ? 's' : '') + '</i></span>'
+        + '<span>' + soldBaht(x.cash) + '</span><span>' + soldBaht(x.card) + '</span><span>' + soldBaht(x.qr) + '</span><b>' + soldBaht(x.total) + '</b></div>';
+    }).join('') + '</div>';
+}
 function soldHtml(q) {
   var key = myLvKey(), d = LV[key];
   if (!d) return loaderHtml('sell', 'Reading sales from Loyverse…');
   q = String(q || '').trim().toUpperCase().replace(/\s+/g, '');
+  var when = SOLD_WHEN === 'today' ? 'today' : (d.since ? 'since ' + lvDay(d.since) : 'in the last 7 days');
   var lines = (d.sales || []).filter(function(l) {
-    return !q || (l.pid + l.col + l.sz + l.name).toUpperCase().replace(/\s+/g, '').indexOf(q) !== -1;
+    return soldKeep(l) && (!q || (l.pid + l.col + l.sz + l.name).toUpperCase().replace(/\s+/g, '').indexOf(q) !== -1);
   });
-  if (!lines.length) return '<div class="sp-empty">' + (q ? 'Nothing sold matching <strong>' + lvEsc(q) + '</strong>' : (d.since ? 'No sales since ' + lvDay(d.since) + '.' : 'No sales in the last 7 days.')) + '</div>';
+  var money = q ? '' : soldMoneyHtml(d);
+  if (!lines.length) return money + '<div class="sp-empty">' + (q ? 'Nothing sold matching <strong>' + lvEsc(q) + '</strong> ' + when : 'No sales ' + when + '.') + '</div>';
   // One card per product (tap to open): what sold, newest first; most sold products on top
   var byItem = {}, order = [], total = 0;
   lines.forEach(function(l) {
     var k = l.kind === 'sized' ? l.pid : l.name;
-    if (!byItem[k]) { byItem[k] = { name: k, pcs: 0, list: [] }; order.push(k); }
-    byItem[k].pcs += l.qty; byItem[k].list.push(l); total += l.qty;
+    if (!byItem[k]) { byItem[k] = { name: k, pcs: 0, baht: 0, list: [] }; order.push(k); }
+    byItem[k].pcs += l.qty; byItem[k].baht += (l.amount || 0); byItem[k].list.push(l); total += l.qty;
   });
   order.sort(function(a, b) { return byItem[b].pcs - byItem[a].pcs || a.localeCompare(b); });
   var open = !!q || order.length === 1;
-  return '<div class="sold-sum">' + (d.since ? 'Since ' + lvDay(d.since) + ': ' : '') + total + ' pcs sold · ' + order.length + ' product' + (order.length !== 1 ? 's' : '') + ' · tap one to see colours and sizes</div>'
+  var tag = key === 'burmelin' && SOLD_SHOP === 'all';
+  return money + '<div class="sold-sum">' + total + ' pcs sold ' + when + ' · ' + order.length + ' product' + (order.length !== 1 ? 's' : '') + ' · tap one to see colours and sizes</div>'
     + order.map(function(k) {
       var it = byItem[k];
       return '<details class="sg-card"' + (open ? ' open' : '') + '><summary><span class="sg-pid">' + lvEsc(k) + '</span>'
-        + '<span class="sg-meta">' + it.list.length + ' sale' + (it.list.length !== 1 ? 's' : '') + '</span>'
+        + '<span class="sg-meta">' + soldBaht(it.baht) + '</span>'
         + '<span class="sg-total">' + it.pcs + ' pcs</span></summary>'
         + it.list.map(function(l) {
           var what = l.kind === 'sized'
             ? 'Colour <b>' + lvEsc(l.col) + '</b> · Size <b>' + lvEsc(l.sz) + '</b>'
             : (l.variant ? lvEsc(l.variant) : 'No size');
-          return '<div class="sold-row"><span class="sold-time">' + lvDay(l.day).replace(/^\w+ /, '') + '<br>' + l.time + '</span><span class="sold-what">' + what + '</span>'
-            + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '</span>'
+          return '<div class="sold-row"><span class="sold-time">' + (SOLD_WHEN === 'today' ? '' : lvDay(l.day).replace(/^\w+ /, '') + '<br>') + l.time + '</span>'
+            + '<span class="sold-what">' + what + (tag ? '<br><i class="sold-shop">' + lvEsc(l.shop) + '</i>' : '') + '</span>'
+            + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '<br><i>' + soldBaht(l.amount) + '</i></span>'
             + '</div>';
         }).join('') + '</details>';
     }).join('');
 }
+function soldChips(list, cur, fn) {
+  return '<div class="sold-filter">' + list.map(function(o) {
+    return '<button class="' + (cur === o[0] ? 'on' : '') + '" onclick="' + fn + '(\'' + o[0] + '\')">' + o[1] + '</button>';
+  }).join('') + '</div>';
+}
 function renderSoldTab() {
-  var key = myLvKey();
+  var key = myLvKey(), d = LV[key];
+  var sinceTxt = d && d.since ? 'Since ' + lvDay(d.since).replace(/^\w+ /, '') : '7 days';
   document.getElementById('sp-body').innerHTML = lvHeadHtml()
+    + soldChips([['today', 'Today'], ['all', sinceTxt]], SOLD_WHEN, 'soldWhen')
+    + (key === 'burmelin' ? soldChips([['all', 'Both shops'], ['Bicasso 1', 'Bicasso 1'], ['Bicasso 2', 'Bicasso 2']], SOLD_SHOP, 'soldShop') : '')
     + '<input type="text" class="rs-search" id="sold-search" placeholder="Search ID, colour or size…" autocomplete="off" autocapitalize="characters" oninput="filterSold(this.value)">'
     + '<div id="sold-list">' + soldHtml('') + '</div>';
+}
+function soldWhen(w) { SOLD_WHEN = w; soldRedraw(); }
+function soldShop(s) { SOLD_SHOP = s; soldRedraw(); }
+function soldRedraw() {
+  var ss = document.getElementById('sold-search'), q = ss ? ss.value : '';
+  renderSoldTab();
+  var ns = document.getElementById('sold-search'); if (ns && q) { ns.value = q; filterSold(q); }
 }
 function filterSold(q) { var el = document.getElementById('sold-list'); if (el) el.innerHTML = soldHtml(q); }
 
