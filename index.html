@@ -586,8 +586,7 @@ tbody tr:last-child td{border-bottom:none}
     <label class="login-label">Your Store</label>
     <select id="sli-store" class="login-select">
       <option value="">— Choose your store —</option>
-      <option value="Bicasso 1">Bicasso 1</option>
-      <option value="Bicasso 2">Bicasso 2</option>
+      <option value="Bicasso 1 + 2">Bicasso 1 + 2</option>
       <option value="Bicasso Nana">Bicasso Nana</option>
       <option value="Palladium">Palladium (Wholesale)</option>
       <option value="Owner">Settings</option>
@@ -735,6 +734,13 @@ tbody tr:last-child td{border-bottom:none}
         <!-- Submit card -->
         <div class="card">
           <div id="submit-error" style="color:#A8261D;margin-bottom:10px;display:none;font-size:.88rem"></div>
+          <div id="order-for" hidden>
+            <label>This order goes to</label>
+            <div class="sold-filter">
+              <button type="button" data-shop="Bicasso 1" onclick="orderFor('Bicasso 1')">Bicasso 1</button>
+              <button type="button" data-shop="Bicasso 2" onclick="orderFor('Bicasso 2')">Bicasso 2</button>
+            </div>
+          </div>
           <div class="loading-bar" id="loading-bar"><span class="spinner"></span>Submitting your order…</div>
           <button class="btn-submit" id="btn-submit">Submit Order</button>
         </div>
@@ -1360,27 +1366,47 @@ function doStoreLogin() {
       })
       .getOrders(pass);
   } else {
-    google.script.run
-      .withSuccessHandler(function(result) {
-        btn.textContent = 'Enter Store'; btn.disabled = false;
-        if (result.success) {
-          startSession({ name: storeName }, pass, result);
-          if (result.stores) { applyStoreBundle(result); cacheSet('bundle_' + storeName, result); }
-          showApp();
-        } else {
-          errEl.textContent = '❌ ' + (result.showError ? result.error : 'Wrong passcode. Please try again.');
-        }
-      })
-      .withFailureHandler(function() {
-        btn.textContent = 'Enter Store'; btn.disabled = false;
-        errEl.textContent = '❌ Connection error. Please try again.';
-      })
-      .verifyRetailStore(storeName, pass, true);
+    // "Bicasso 1 + 2" is one login for both shops (one Loyverse stock): either shop's passcode
+    // opens it. Inside, the phone is still Bicasso 1 or Bicasso 2, by the passcode typed.
+    var tryShops = storeName === 'Bicasso 1 + 2' ? ['Bicasso 1', 'Bicasso 2'] : [storeName];
+    var tryNext = function(i) {
+      var shop = tryShops[i];
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            btn.textContent = 'Enter Store'; btn.disabled = false;
+            startSession({ name: shop }, pass, result);
+            if (result.stores) applyStoreBundle(result);
+            showApp();
+          } else if (i + 1 < tryShops.length && !result.showError) {
+            tryNext(i + 1);
+          } else {
+            btn.textContent = 'Enter Store'; btn.disabled = false;
+            errEl.textContent = '❌ ' + (result.showError ? result.error : 'Wrong passcode. Please try again.');
+          }
+        })
+        .withFailureHandler(function() {
+          btn.textContent = 'Enter Store'; btn.disabled = false;
+          errEl.textContent = '❌ Connection error. Please try again.';
+        })
+        .verifyRetailStore(shop, pass, true);
+    };
+    tryNext(0);
   }
 }
 
+// Bicasso 1 and Bicasso 2 share one login and one Loyverse stock since 18 Nov 2026
+function isSharedShop() { return !!SESSION_STORE && (SESSION_STORE.name === 'Bicasso 1' || SESSION_STORE.name === 'Bicasso 2'); }
+function shopLabel() { return isSharedShop() ? 'Bicasso 1 + 2' : (SESSION_STORE ? SESSION_STORE.name : ''); }
+var ORDER_FOR = '';   // shared login: which shop this order goes to (staff tap one)
+function orderFor(shop) {
+  ORDER_FOR = shop;
+  document.querySelectorAll('#order-for button').forEach(function(b) { b.classList.toggle('on', b.getAttribute('data-shop') === shop); });
+  document.getElementById('submit-error').style.display = 'none';
+}
+
 function showApp() {
-  document.getElementById('app-store-label').textContent = SESSION_STORE.name;
+  document.getElementById('app-store-label').textContent = shopLabel();
   document.getElementById('screen-login').style.display = 'none';
   document.getElementById('screen-app').classList.add('active');
   document.title = 'Burmelin Office';
@@ -1393,7 +1419,9 @@ function showApp() {
     showPanel('mystore');
     palRenderOrders(PAL_FILTER);
   } else {
-    document.getElementById('order-store-name').textContent = SESSION_STORE.name;
+    document.getElementById('order-store-name').textContent = shopLabel();
+    document.getElementById('order-for').hidden = !isSharedShop();
+    orderFor('');
     document.getElementById('cust-shop').innerHTML = '<option value="' + SESSION_STORE.name + '">' + SESSION_STORE.name + '</option>';
     showPanel('mystore');
     loadStoreStock();
@@ -2131,22 +2159,31 @@ function soldHtml(q) {
     if (SOLD_SHOP !== 'all' && l.shop !== SOLD_SHOP) return false;
     return !q || (l.pid + l.col + l.sz + l.name).toUpperCase().replace(/\s+/g, '').indexOf(q) !== -1;
   });
-  if (!lines.length) return '<div class="sp-empty">' + (q ? 'Nothing sold matching <strong>' + lvEsc(q) + '</strong>' : 'No sales in the last 7 days.') + '</div>';
-  var byDay = {}, days = [], total = 0;
-  lines.forEach(function(l) { if (!byDay[l.day]) { byDay[l.day] = []; days.push(l.day); } byDay[l.day].push(l); total += l.qty; });
+  if (!lines.length) return '<div class="sp-empty">' + (q ? 'Nothing sold matching <strong>' + lvEsc(q) + '</strong>' : (d.since ? 'No sales since ' + lvDay(d.since) + '.' : 'No sales in the last 7 days.')) + '</div>';
+  // One card per product (tap to open): what sold, newest first; most sold products on top
+  var byItem = {}, order = [], total = 0;
+  lines.forEach(function(l) {
+    var k = l.kind === 'sized' ? l.pid : l.name;
+    if (!byItem[k]) { byItem[k] = { name: k, pcs: 0, list: [] }; order.push(k); }
+    byItem[k].pcs += l.qty; byItem[k].list.push(l); total += l.qty;
+  });
+  order.sort(function(a, b) { return byItem[b].pcs - byItem[a].pcs || a.localeCompare(b); });
   var shopShort = { 'Bicasso 1': 'B1', 'Bicasso 2': 'B2', 'Bicasso Nana': 'Nana' };
-  return '<div class="sold-sum">' + total + ' pcs sold · ' + lines.length + ' line' + (lines.length !== 1 ? 's' : '') + '</div>'
-    + days.map(function(day) {
-      var list = byDay[day], pcs = list.reduce(function(n, l) { return n + l.qty; }, 0);
-      return '<div class="sold-day"><span>' + lvDay(day) + '</span><span>' + pcs + ' pcs</span></div>'
-        + list.map(function(l) {
+  var open = !!q || order.length === 1;
+  return '<div class="sold-sum">' + (d.since ? 'Since ' + lvDay(d.since) + ': ' : '') + total + ' pcs sold · ' + order.length + ' product' + (order.length !== 1 ? 's' : '') + ' · tap one to see colours and sizes</div>'
+    + order.map(function(k) {
+      var it = byItem[k];
+      return '<details class="sg-card"' + (open ? ' open' : '') + '><summary><span class="sg-pid">' + lvEsc(k) + '</span>'
+        + '<span class="sg-meta">' + it.list.length + ' sale' + (it.list.length !== 1 ? 's' : '') + '</span>'
+        + '<span class="sg-total">' + it.pcs + ' pcs</span></summary>'
+        + it.list.map(function(l) {
           var what = l.kind === 'sized'
-            ? '<b>' + lvEsc(l.pid) + '</b> · Colour <b>' + lvEsc(l.col) + '</b> · Size <b>' + lvEsc(l.sz) + '</b>'
-            : '<b>' + lvEsc(l.name) + '</b>' + (l.variant ? ' · ' + lvEsc(l.variant) : '');
-          return '<div class="sold-row"><span class="sold-time">' + l.time + '</span><span class="sold-what">' + what + '</span>'
+            ? 'Colour <b>' + lvEsc(l.col) + '</b> · Size <b>' + lvEsc(l.sz) + '</b>'
+            : (l.variant ? lvEsc(l.variant) : 'No size');
+          return '<div class="sold-row"><span class="sold-time">' + lvDay(l.day).replace(/^\w+ /, '') + '<br>' + l.time + '</span><span class="sold-what">' + what + '</span>'
             + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '</span>'
             + (key === 'burmelin' ? '<span class="sold-shop">' + (shopShort[l.shop] || '') + '</span>' : '') + '</div>';
-        }).join('');
+        }).join('') + '</details>';
     }).join('');
 }
 function renderSoldTab() {
@@ -2592,10 +2629,10 @@ function removeItem(id) {
 // ── SUBMIT ORDER ──────────────────────────────────────────────────
 var ORDER_TOKEN = null;
 document.getElementById('btn-submit').addEventListener('click', function() {
-  var shop = SESSION_STORE ? SESSION_STORE.name : document.getElementById('cust-shop').value.trim();
+  var shop = isSharedShop() ? ORDER_FOR : SESSION_STORE ? SESSION_STORE.name : document.getElementById('cust-shop').value.trim();
   var errEl = document.getElementById('submit-error');
   errEl.style.display='none';
-  if (!shop){ errEl.textContent='⚠ Please select a shop.'; errEl.style.display='block'; return; }
+  if (!shop){ errEl.textContent='⚠ ' + (isSharedShop() ? 'Tap Bicasso 1 or Bicasso 2: which shop gets this order?' : 'Please select a shop.'); errEl.style.display='block'; return; }
   if (cart.length===0){ errEl.textContent='⚠ Please add at least one item.'; errEl.style.display='block'; return; }
   var items=cart.map(function(i){ return {product:i.product,color:i.color,size:i.size,qty:i.qty,lookupType:i.lookupType,lp:i.lp,lc:i.lc,ls:i.ls}; });
   // Same cart → same token, so a retry after a connection error can't create a second order
@@ -2629,6 +2666,7 @@ document.getElementById('btn-submit').addEventListener('click', function() {
 function resetOrderForm() {
   cart=[]; nextId=1; lastOrder=null;
   if (SESSION_STORE) document.getElementById('cust-shop').value=SESSION_STORE.name;
+  orderFor('');
   if (prodSearchEl) prodSearchEl.value='';
   selProd.value=''; resetColor(); resetSize(); hideAvail();
   btnAdd.style.display='none'; renderCart();
@@ -3919,15 +3957,16 @@ function renderReorderTab() {
     var lines = byPid[pid];
     var orderable = lines.filter(function(l){ return l.orderQty > 0; });
     var totalPcs = orderable.reduce(function(s,l){ return s + l.orderQty; }, 0);
-    html += '<div class="reorder-section">'
-      + '<div style="display:flex;align-items:center;background:#111118;padding:8px 12px;border-radius:10px 10px 0 0;gap:8px">'
-      + '<span style="flex:1;font-weight:700;letter-spacing:.04em;color:#fff;font-size:.9rem">' + pid + '</span>'
-      + '<span style="font-size:.72rem;color:rgba(255,255,255,.6)">' + orderable.length + ' size' + (orderable.length!==1?'s':'') + ' · ' + totalPcs + ' pcs</span>'
+    // Tap the product to see its sizes; ＋ Add works without opening it
+    html += '<details class="sg-card rs-card"><summary>'
+      + '<span class="sg-pid">' + pid + '</span>'
+      + '<span class="sg-meta">' + orderable.length + ' size' + (orderable.length!==1?'s':'') + ' · ' + totalPcs + ' pcs</span>'
+      + '<span style="flex:1"></span>'
       + (orderable.length
-          ? '<button onclick="reorderByProduct(\'' + palEsc(pid) + '\')" style="background:#0054A5;border:none;color:#fff;padding:5px 12px;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer">＋ Add</button>'
+          ? '<button onclick="event.preventDefault();event.stopPropagation();reorderByProduct(\'' + palEsc(pid) + '\')" style="background:#0054A5;border:none;color:#fff;padding:6px 12px;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer">＋ Add</button>'
           : '')
-      + '</div>'
-      + '<div style="border:1px solid #E4DFD6;border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:#fff">';
+      + '</summary>'
+      + '<div style="border-top:1px solid #E4DFD6;background:#fff">';
     lines.forEach(function(l) {
       var have = (l.storeQty <= 0 ? 'Missing' : 'Have ' + l.storeQty) + (l.onWay ? ' · ' + l.onWay + ' on the way' : '');
       var badge, label;
@@ -3939,10 +3978,10 @@ function renderReorderTab() {
         + '<span class="rs-badge ' + badge + '">' + label + '</span>'
         + '</div>';
     });
-    html += '</div></div>';
+    html += '</div></details>';
   });
 
-  el.innerHTML = html + skippedHtml;
+  rerenderKeepOpen(el, html + skippedHtml);
 }
 
 // Every Palladium color/size for this product where the shop (B1 + B2 together, or Nana) has fewer

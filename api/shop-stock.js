@@ -10,6 +10,7 @@ const { variantIndex, buildStock, salesLines, storeIds, tillShops, STORE_SHOP } 
 const KEEP_MS = 10 * 60 * 1000;
 const FRESH_MIN_MS = 60 * 1000;
 const DAYS = 7;
+const SALES_FROM = process.env.SHOP_SALES_FROM || '2026-11-18';
 const kept = new Map();   // store key -> { at, data }
 
 const token = () => process.env.LOYVERSE_STAFF_TOKEN || process.env.LOYVERSE_TOKEN || '';
@@ -23,8 +24,11 @@ async function readStore(key) {
   ]);
   const id = storeIds(stores)[key];
   if (!id) throw new Error(`Loyverse has no store for "${key}"`);
-  const since = addDays(localDate(Date.now()), -(DAYS - 1));
-  const sinceIso = new Date(`${since}T00:00:00+07:00`).toISOString();
+  // Last 7 days, but never before the switch to Loyverse stock (18 Nov 2026): older receipts are for
+  // the old items without sizes, so the list fills up day by day from then
+  const weekAgo = addDays(localDate(Date.now()), -(DAYS - 1));
+  const since = weekAgo > SALES_FROM ? weekAgo : SALES_FROM;
+  const sinceIso = new Date(`${since}T00:00:00+07:00`).toISOString();   // midnight Bangkok
   const [levels, receipts] = await Promise.all([
     lvGetAll('/inventory', 'inventory_levels', { store_ids: id }, t),
     lvGetAll('/receipts', 'receipts', { store_id: id, created_at_min: sinceIso }, t),
@@ -36,7 +40,7 @@ async function readStore(key) {
   return {
     store: key, updatedAt: new Date().toISOString(), since,
     sized: stock.sized, totals: stock.totals,
-    sales: salesLines(receipts.filter((r) => r.store_id === id), idx, shopOf, TIMEZONE),
+    sales: salesLines(receipts.filter((r) => r.store_id === id && localDate(r.receipt_date || r.created_at) >= since), idx, shopOf, TIMEZONE),
   };
 }
 
