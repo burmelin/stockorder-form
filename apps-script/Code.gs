@@ -346,9 +346,8 @@ function cellDateText(v) {
 function submitOrder(orderData, b) {
   orderData = orderData || {};
   if (b && !isEmployee(b.auth) && RETAIL_STORES.indexOf(b.authStore) > -1) {
-    // Bicasso 1 and Bicasso 2 share one login: the order says which of the two shops gets it
-    var mayOrderFor = SHARED_STOCK[b.authStore] || [b.authStore];
-    var shop = mayOrderFor.indexOf(orderData.shopName) > -1 ? orderData.shopName : b.authStore;
+    // Bicasso 1 and Bicasso 2 are one shop, "Burmelin", since 18 Nov 2026: its orders go to Burmelin
+    var shop = SHARED_STOCK[b.authStore] ? SHARED_SHOP : b.authStore;
     orderData.shopName = shop;
     orderData.customerName = shop;
   }
@@ -577,7 +576,8 @@ function markDone(orderId, password) {
     var warnings = deductItemsFromWholesale(ss, order.items, lines, changes);
     var dest = order.orderType === 'store' && order.shopName ? order.shopName : (order.customerName || 'customer');
     changes.forEach(function(c) { c.action = 'Sent to ' + dest; });
-    if (order.orderType === 'store' && order.shopName) {
+    // Burmelin's stock is in Loyverse, not in a sheet: only Palladium's side is written here
+    if (order.orderType === 'store' && order.shopName && order.shopName !== SHARED_SHOP) {
       var got = [];
       warnings = warnings.concat(addItemsToStore(ss, order.shopName, lines, got));
       got.forEach(function(c) { c.action = 'Received from Palladium'; });
@@ -1061,8 +1061,11 @@ function getStoreBundle(storeName) {
   };
 }
 
-// Shops that share one Loyverse stock: Bicasso 1 and Bicasso 2 are the store "Burmelin"
-var SHARED_STOCK = { 'Bicasso 1': ['Bicasso 1', 'Bicasso 2'], 'Bicasso 2': ['Bicasso 1', 'Bicasso 2'] };
+// Bicasso 1 and Bicasso 2 are one shop since 18 Nov 2026: the Loyverse store "Burmelin" (two POS,
+// one stock). Their logins map to the group below; new orders are saved as shop "Burmelin" and
+// older orders may still say Bicasso 1 or Bicasso 2.
+var SHARED_SHOP = 'Burmelin';
+var SHARED_STOCK = { 'Bicasso 1': ['Burmelin', 'Bicasso 1', 'Bicasso 2'], 'Bicasso 2': ['Burmelin', 'Bicasso 1', 'Bicasso 2'] };
 
 // Pieces these shops ordered from Palladium that are not marked Done yet, as
 // { 'product|colour|size': qty }, so Restock doesn't order the same pieces twice.
@@ -1828,12 +1831,12 @@ function readStaffToken(token, staff) {
 }
 // Each shop login only serves the people who work there ("Works at" includes that shop).
 // Warehouse (Palladium) staff don't take leave: they cover Nana, so they're never listed.
-// Staff of the logged-in shop; the shared Bicasso 1 + 2 login covers the staff of both shops
+// Staff of the logged-in shop; the Burmelin login covers the staff of Bicasso 1 and Bicasso 2
 function worksAt(s, b) {
   if (s.places.indexOf('Palladium') > -1) return false;
   return (SHARED_STOCK[b.authStore] || [b.authStore]).some(function(shop) { return s.places.indexOf(shop) > -1; });
 }
-function loginLabel(b) { return SHARED_STOCK[b.authStore] ? 'Bicasso 1 + 2' : b.authStore; }
+function loginLabel(b) { return SHARED_STOCK[b.authStore] ? SHARED_SHOP : b.authStore; }
 
 // The staff member behind b.staffToken, or an error reply
 function leaveWho(b, ss, staff) {

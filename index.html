@@ -423,7 +423,6 @@ tbody tr:last-child td{border-bottom:none}
 .sold-time{color:#86827B;font-size:.74rem;min-width:38px}
 .sold-what{flex:1}
 .sold-qty{font-weight:700;white-space:nowrap}
-.sold-shop{font-size:.68rem;font-weight:700;color:#0054A5;background:#EDF2F8;border-radius:4px;padding:2px 6px}
 /* ── LEAVE (staff) and OWNER screens ── */
 #screen-leave,#screen-owner{position:fixed;inset:0;display:none;flex-direction:column;background:var(--linen);z-index:60}
 #screen-leave.active,#screen-owner.active{display:flex}
@@ -586,7 +585,7 @@ tbody tr:last-child td{border-bottom:none}
     <label class="login-label">Your Store</label>
     <select id="sli-store" class="login-select">
       <option value="">— Choose your store —</option>
-      <option value="Bicasso 1 + 2">Bicasso 1 + 2</option>
+      <option value="Burmelin">Burmelin</option>
       <option value="Bicasso Nana">Bicasso Nana</option>
       <option value="Palladium">Palladium (Wholesale)</option>
       <option value="Owner">Settings</option>
@@ -734,13 +733,6 @@ tbody tr:last-child td{border-bottom:none}
         <!-- Submit card -->
         <div class="card">
           <div id="submit-error" style="color:#A8261D;margin-bottom:10px;display:none;font-size:.88rem"></div>
-          <div id="order-for" hidden>
-            <label>This order goes to</label>
-            <div class="sold-filter">
-              <button type="button" data-shop="Bicasso 1" onclick="orderFor('Bicasso 1')">Bicasso 1</button>
-              <button type="button" data-shop="Bicasso 2" onclick="orderFor('Bicasso 2')">Bicasso 2</button>
-            </div>
-          </div>
           <div class="loading-bar" id="loading-bar"><span class="spinner"></span>Submitting your order…</div>
           <button class="btn-submit" id="btn-submit">Submit Order</button>
         </div>
@@ -1366,9 +1358,9 @@ function doStoreLogin() {
       })
       .getOrders(pass);
   } else {
-    // "Bicasso 1 + 2" is one login for both shops (one Loyverse stock): either shop's passcode
-    // opens it. Inside, the phone is still Bicasso 1 or Bicasso 2, by the passcode typed.
-    var tryShops = storeName === 'Bicasso 1 + 2' ? ['Bicasso 1', 'Bicasso 2'] : [storeName];
+    // "Burmelin" is one login for the two Terminal 21 shops (one Loyverse store, two POS): the
+    // Bicasso 1 or Bicasso 2 passcode opens it. Inside, the phone is still Bicasso 1 or 2 by passcode.
+    var tryShops = storeName === 'Burmelin' ? ['Bicasso 1', 'Bicasso 2'] : [storeName];
     var tryNext = function(i) {
       var shop = tryShops[i];
       google.script.run
@@ -1395,15 +1387,10 @@ function doStoreLogin() {
   }
 }
 
-// Bicasso 1 and Bicasso 2 share one login and one Loyverse stock since 18 Nov 2026
+// Since 18 Nov 2026 the two Terminal 21 shops are ONE stock in the app, "Burmelin": one login, one Loyverse store
+// with two POS, one stock number. Its orders go to Burmelin and the staff share the goods out.
 function isSharedShop() { return !!SESSION_STORE && (SESSION_STORE.name === 'Bicasso 1' || SESSION_STORE.name === 'Bicasso 2'); }
-function shopLabel() { return isSharedShop() ? 'Bicasso 1 + 2' : (SESSION_STORE ? SESSION_STORE.name : ''); }
-var ORDER_FOR = '';   // shared login: which shop this order goes to (staff tap one)
-function orderFor(shop) {
-  ORDER_FOR = shop;
-  document.querySelectorAll('#order-for button').forEach(function(b) { b.classList.toggle('on', b.getAttribute('data-shop') === shop); });
-  document.getElementById('submit-error').style.display = 'none';
-}
+function shopLabel() { return isSharedShop() ? 'Burmelin' : (SESSION_STORE ? SESSION_STORE.name : ''); }
 
 function showApp() {
   document.getElementById('app-store-label').textContent = shopLabel();
@@ -1420,9 +1407,7 @@ function showApp() {
     palRenderOrders(PAL_FILTER);
   } else {
     document.getElementById('order-store-name').textContent = shopLabel();
-    document.getElementById('order-for').hidden = !isSharedShop();
-    orderFor('');
-    document.getElementById('cust-shop').innerHTML = '<option value="' + SESSION_STORE.name + '">' + SESSION_STORE.name + '</option>';
+    document.getElementById('cust-shop').innerHTML = '<option value="' + shopLabel() + '">' + shopLabel() + '</option>';
     showPanel('mystore');
     loadStoreStock();
   }
@@ -1443,7 +1428,7 @@ function appLogout() {
   CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
-  LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all';
+  LV = {}; ON_THE_WAY = {};
   cart = []; nextId = 1; lastOrder = null;
   document.getElementById('screen-app').classList.remove('active');
   document.getElementById('screen-app').classList.remove('pal-mode');
@@ -2086,8 +2071,7 @@ function newSaleId() { return Date.now().toString(36) + '-' + Math.random().toSt
 // (kept up to 10 minutes on the server; Refresh reads Loyverse again).
 var LV = {};                 // 'burmelin' | 'nana' -> { sized, totals, sales, updatedAt, since }
 var ON_THE_WAY = {};         // 'pid|colour|size' -> pieces in this shop's orders not yet done
-var SOLD_SHOP = 'all';       // Sold tab filter: 'all' | 'Bicasso 1' | 'Bicasso 2'
-var LV_STORE_LABEL = { burmelin: 'B1 + B2', nana: 'Nana' };
+var LV_STORE_LABEL = { burmelin: 'Burmelin', nana: 'Nana' };
 // True once a store has any size/colour stock in Loyverse. Nana's new items exist there with 0
 // everywhere until its recount is entered, so all zeros means "no sizes yet".
 function lvHasSized(d) {
@@ -2095,7 +2079,7 @@ function lvHasSized(d) {
   return Object.keys(inv).some(function(p) { return Object.keys(inv[p]).some(function(c) { return Object.keys(inv[p][c]).some(function(z) { return inv[p][c][z]; }); }); });
 }
 function myLvKey() { return SESSION_STORE && SESSION_STORE.name === 'Bicasso Nana' ? 'nana' : 'burmelin'; }
-// Pieces per size the shop should hold: 3 per shop, so 6 for B1 + B2 together (owner, 18 Nov 2026)
+// Pieces per size the shop should hold: 6 for Burmelin (two POS, one stock), 3 for Nana (owner, 18 Nov 2026)
 function reorderTarget() { return myLvKey() === 'burmelin' ? 6 : 3; }
 
 function lvFetch(key, fresh) {
@@ -2135,7 +2119,7 @@ function lvRefresh(btn) {
 }
 function lvHeadHtml() {
   var key = myLvKey(), d = LV[key];
-  return '<div class="lv-head"><div><b>' + (key === 'burmelin' ? 'Bicasso 1 + Bicasso 2 together' : 'Bicasso Nana') + '</b>'
+  return '<div class="lv-head"><div><b>' + (key === 'burmelin' ? 'Burmelin' : 'Bicasso Nana') + '</b>'
     + '<span>From Loyverse · ' + (lvUpdatedText(d) || 'loading…') + '</span></div>'
     + '<button class="lv-refresh" onclick="lvRefresh(this)">Refresh</button></div>';
 }
@@ -2156,7 +2140,6 @@ function soldHtml(q) {
   if (!d) return loaderHtml('sell', 'Reading sales from Loyverse…');
   q = String(q || '').trim().toUpperCase().replace(/\s+/g, '');
   var lines = (d.sales || []).filter(function(l) {
-    if (SOLD_SHOP !== 'all' && l.shop !== SOLD_SHOP) return false;
     return !q || (l.pid + l.col + l.sz + l.name).toUpperCase().replace(/\s+/g, '').indexOf(q) !== -1;
   });
   if (!lines.length) return '<div class="sp-empty">' + (q ? 'Nothing sold matching <strong>' + lvEsc(q) + '</strong>' : (d.since ? 'No sales since ' + lvDay(d.since) + '.' : 'No sales in the last 7 days.')) + '</div>';
@@ -2168,7 +2151,6 @@ function soldHtml(q) {
     byItem[k].pcs += l.qty; byItem[k].list.push(l); total += l.qty;
   });
   order.sort(function(a, b) { return byItem[b].pcs - byItem[a].pcs || a.localeCompare(b); });
-  var shopShort = { 'Bicasso 1': 'B1', 'Bicasso 2': 'B2', 'Bicasso Nana': 'Nana' };
   var open = !!q || order.length === 1;
   return '<div class="sold-sum">' + (d.since ? 'Since ' + lvDay(d.since) + ': ' : '') + total + ' pcs sold · ' + order.length + ' product' + (order.length !== 1 ? 's' : '') + ' · tap one to see colours and sizes</div>'
     + order.map(function(k) {
@@ -2182,22 +2164,16 @@ function soldHtml(q) {
             : (l.variant ? lvEsc(l.variant) : 'No size');
           return '<div class="sold-row"><span class="sold-time">' + lvDay(l.day).replace(/^\w+ /, '') + '<br>' + l.time + '</span><span class="sold-what">' + what + '</span>'
             + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '</span>'
-            + (key === 'burmelin' ? '<span class="sold-shop">' + (shopShort[l.shop] || '') + '</span>' : '') + '</div>';
+            + '</div>';
         }).join('') + '</details>';
     }).join('');
 }
 function renderSoldTab() {
   var key = myLvKey();
-  var chips = key === 'burmelin'
-    ? '<div class="sold-filter">' + [['all', 'Both shops'], ['Bicasso 1', 'B1'], ['Bicasso 2', 'B2']].map(function(o) {
-        return '<button class="' + (SOLD_SHOP === o[0] ? 'on' : '') + '" onclick="soldPick(\'' + o[0] + '\')">' + o[1] + '</button>';
-      }).join('') + '</div>'
-    : '';
-  document.getElementById('sp-body').innerHTML = lvHeadHtml() + chips
+  document.getElementById('sp-body').innerHTML = lvHeadHtml()
     + '<input type="text" class="rs-search" id="sold-search" placeholder="Search ID, colour or size…" autocomplete="off" autocapitalize="characters" oninput="filterSold(this.value)">'
     + '<div id="sold-list">' + soldHtml('') + '</div>';
 }
-function soldPick(s) { SOLD_SHOP = s; renderSoldTab(); }
 function filterSold(q) { var el = document.getElementById('sold-list'); if (el) el.innerHTML = soldHtml(q); }
 
 // ── OTHER STORES ──────────────────────────────────────────────────
@@ -2205,7 +2181,7 @@ function filterSold(q) { var el = document.getElementById('sold-list'); if (el) 
 var CS_ROWS = null; // [{ pid, cn, size, stores:{storeName:qty} }]
 
 // Columns of the All Stores search (shop logins): the two Loyverse stores and Palladium's sheet
-var CS_COLS = [{ key: 'burmelin', label: 'B1+B2' }, { key: 'nana', label: 'Nana' }, { key: 'pal', label: 'Pal' }];
+var CS_COLS = [{ key: 'burmelin', label: 'Burmelin' }, { key: 'nana', label: 'Nana' }, { key: 'pal', label: 'Pal' }];
 function csInv(key) { return key === 'pal' ? palRefInv() : (lvHasSized(LV[key]) ? LV[key].sized : null); }
 function buildCsRows() {
   CS_ROWS = [];
@@ -2264,7 +2240,7 @@ function drawOtherStores() {
     + '<div style="display:flex;gap:8px;margin-top:8px">'
     + CS_COLS.map(function(c){ var me = c.key === mine; return '<div style="flex:1;text-align:center;background:' + (me ? '#0054A5' : '#EFEBE4') + ';border-radius:6px;padding:5px 2px;font-size:.66rem;font-weight:700;letter-spacing:.12em;color:' + (me ? '#fff' : '#6D6A65') + ';text-transform:uppercase">' + (me ? 'You · ' : '') + c.label + '</div>'; }).join('')
     + '</div>'
-    + '<div style="font-size:.7rem;color:#86827B;margin-top:6px">B1+B2 and Nana from Loyverse · Pal from the Palladium sheet</div>'
+    + '<div style="font-size:.7rem;color:#86827B;margin-top:6px">Burmelin and Nana from Loyverse · Pal from the Palladium sheet</div>'
     + '</div>'
     + '<div id="cs-result"></div>';
   csSearchFlat('');
@@ -2629,10 +2605,10 @@ function removeItem(id) {
 // ── SUBMIT ORDER ──────────────────────────────────────────────────
 var ORDER_TOKEN = null;
 document.getElementById('btn-submit').addEventListener('click', function() {
-  var shop = isSharedShop() ? ORDER_FOR : SESSION_STORE ? SESSION_STORE.name : document.getElementById('cust-shop').value.trim();
+  var shop = SESSION_STORE ? shopLabel() : document.getElementById('cust-shop').value.trim();
   var errEl = document.getElementById('submit-error');
   errEl.style.display='none';
-  if (!shop){ errEl.textContent='⚠ ' + (isSharedShop() ? 'Tap Bicasso 1 or Bicasso 2: which shop gets this order?' : 'Please select a shop.'); errEl.style.display='block'; return; }
+  if (!shop){ errEl.textContent='⚠ Please select a shop.'; errEl.style.display='block'; return; }
   if (cart.length===0){ errEl.textContent='⚠ Please add at least one item.'; errEl.style.display='block'; return; }
   var items=cart.map(function(i){ return {product:i.product,color:i.color,size:i.size,qty:i.qty,lookupType:i.lookupType,lp:i.lp,lc:i.lc,ls:i.ls}; });
   // Same cart → same token, so a retry after a connection error can't create a second order
@@ -2665,8 +2641,7 @@ document.getElementById('btn-submit').addEventListener('click', function() {
 
 function resetOrderForm() {
   cart=[]; nextId=1; lastOrder=null;
-  if (SESSION_STORE) document.getElementById('cust-shop').value=SESSION_STORE.name;
-  orderFor('');
+  if (SESSION_STORE) document.getElementById('cust-shop').value=shopLabel();
   if (prodSearchEl) prodSearchEl.value='';
   selProd.value=''; resetColor(); resetSize(); hideAvail();
   btnAdd.style.display='none'; renderCart();
@@ -3322,7 +3297,7 @@ function palShowOrderList(list, filter) {
     var name = (o.orderType === 'store' && o.shopName) ? o.shopName : (o.customerName || 'Unknown');
     var k = norm(name);
     if (!groups[k]) {
-      var store = ALL_STORES.filter(function(s) { return norm(s) === k; })[0];
+      var store = ALL_STORES.concat(['Burmelin']).filter(function(s) { return norm(s) === k; })[0];
       groups[k] = { name: store || name, isStore: !!store, orders: [], pending: 0 };
       keys.push(k);
     }
@@ -3433,7 +3408,9 @@ function palMarkDone(orderId) {
   var order=ALL_ORDERS.find(function(o){ return o.orderId===orderId; });
   var isStore=order&&order.orderType==='store';
   var msg=isStore
-    ?'Send '+orderId+' to '+((order&&order.shopName)||'the store')+'?\nItems will be deducted from Palladium and added to '+((order&&order.shopName)||'the store')+'\'s stock. Cannot be undone.'
+    ?(order.shopName==='Burmelin'
+      ?'Send '+orderId+' to Burmelin?\nItems will be deducted from Palladium. Burmelin\'s stock is in Loyverse: add the pieces there when they arrive. Cannot be undone.'
+      :'Send '+orderId+' to '+((order&&order.shopName)||'the store')+'?\nItems will be deducted from Palladium and added to '+((order&&order.shopName)||'the store')+'\'s stock. Cannot be undone.')
     :'Mark '+orderId+' as DONE?\nThis deducts stock from the sheet and cannot be undone.';
   if(!confirm(msg)) return;
   var btn=document.getElementById('pdone-'+orderId), msg=document.getElementById('pmsg-'+orderId);
@@ -3924,7 +3901,7 @@ function renderReorderTab() {
   }
 
   if (!lvHasSized(d)) {
-    el.innerHTML = '<div class="lv-note">' + (myLvKey() === 'nana' ? 'Nana\'s items have no sizes or colours in Loyverse yet' : 'Loyverse shows no size/colour stock for B1 + B2') + ', so Restock can\'t work out which sizes are missing. Please order with Simple or Grid for now.</div>';
+    el.innerHTML = '<div class="lv-note">' + (myLvKey() === 'nana' ? 'Nana\'s items have no sizes or colours in Loyverse yet' : 'Loyverse shows no size/colour stock for Burmelin') + ', so Restock can\'t work out which sizes are missing. Please order with Simple or Grid for now.</div>';
     return;
   }
   // A product also kept in Loyverse as one total (no sizes) can't be checked size by size
@@ -3944,13 +3921,13 @@ function renderReorderTab() {
     el.innerHTML = '<div style="text-align:center;padding:40px 20px">'
       + '<div style="font-size:2rem;margin-bottom:10px">✅</div>'
       + '<div style="font-weight:700;color:#1D6E46;margin-bottom:6px">All good!</div>'
-      + '<div style="color:#6D6A65;font-size:.88rem">Every size Palladium carries is at ' + reorderTarget() + '+ pieces' + (myLvKey() === 'burmelin' ? ' in B1 + B2 together' : ' in your shop') + ' (counting orders on the way).</div>'
+      + '<div style="color:#6D6A65;font-size:.88rem">Every size Palladium carries is at ' + reorderTarget() + '+ pieces' + ' in your shop' + ' (counting orders on the way).</div>'
       + '</div>' + skippedHtml;
     return;
   }
 
   var html = '<div style="font-size:.8rem;color:#6D6A65;margin-bottom:12px;padding:8px 10px;background:#F7F5F1;border-radius:8px">'
-    + '📋 What ' + (myLvKey() === 'burmelin' ? '<strong>B1 + B2 together</strong> are' : 'your shop is') + ' missing: every size Palladium makes, topped up to <strong>' + reorderTarget() + ' pcs</strong>. Stock comes from Loyverse (' + lvEsc(lvUpdatedText(LV[myLvKey()]) || 'not loaded') + '); pieces already ordered but not yet sent count as on the way. Tap <strong>Add</strong> on a product to put it in your order below.'
+    + '📋 What ' + 'your shop is' + ' missing: every size Palladium makes, topped up to <strong>' + reorderTarget() + ' pcs</strong>. Stock comes from Loyverse (' + lvEsc(lvUpdatedText(LV[myLvKey()]) || 'not loaded') + '); pieces already ordered but not yet sent count as on the way. Tap <strong>Add</strong> on a product to put it in your order below.'
     + '</div>';
 
   pOrder.forEach(function(pid) {
@@ -3984,7 +3961,7 @@ function renderReorderTab() {
   rerenderKeepOpen(el, html + skippedHtml);
 }
 
-// Every Palladium color/size for this product where the shop (B1 + B2 together, or Nana) has fewer
+// Every Palladium color/size for this product where the shop (Burmelin or Nana) has fewer
 // than the target, counting pieces already ordered from Palladium and not yet marked done
 function computeReorderLines(pid) {
   var MINIMUM = reorderTarget();
