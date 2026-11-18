@@ -124,11 +124,15 @@ test('salesMoney: takings per day and shop (POS), split cash / card / QR, refund
   ]);
 });
 
-test('salesLines gives each line its amount (refunds negative)', () => {
+test('salesLines gives each line its amount (refunds negative) and how the receipt was paid', () => {
   const idx = variantIndex(ITEMS);
   const lines = salesLines([
-    { receipt_type: 'SALE', receipt_date: '2026-11-18T05:00:00Z', line_items: [{ variant_id: 'v1', quantity: 2, total_money: 790 }] },
-    { receipt_type: 'REFUND', receipt_date: '2026-11-18T06:00:00Z', line_items: [{ variant_id: 'v1', quantity: 1, total_money: 395 }] },
+    { receipt_type: 'SALE', receipt_date: '2026-11-18T05:00:00Z', line_items: [{ variant_id: 'v1', quantity: 2, total_money: 790 }],
+      payments: [{ type: 'NONCASH', name: 'Card', money_amount: 500 }, { type: 'OTHER', name: 'SCAN', money_amount: 290 }] },
+    { receipt_type: 'REFUND', receipt_date: '2026-11-18T06:00:00Z', line_items: [{ variant_id: 'v1', quantity: 1, total_money: 395 }],
+      payments: [{ type: 'CASH', name: 'Cash', money_amount: 395 }] },
+    { receipt_type: 'SALE', receipt_date: '2026-11-18T04:00:00Z', line_items: [{ variant_id: 'v1', quantity: 1, total_money: 395 }],
+      payments: [{ type: 'OTHER', name: 'SCAN', money_amount: 395 }] },
   ], idx, () => 'Bicasso 1', 'Asia/Bangkok');
-  assert.deepEqual(lines.map((l) => [l.qty, l.amount]), [[-1, -395], [2, 790]]);
+  assert.deepEqual(lines.map((l) => [l.qty, l.amount, l.pay]), [[-1, -395, 'Cash'], [2, 790, 'Mixed'], [1, 395, 'QR']]);
 });

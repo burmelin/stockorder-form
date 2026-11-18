@@ -1437,7 +1437,7 @@ function appLogout() {
   CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
-  LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all'; SOLD_WHEN = 'today';
+  LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all'; SOLD_WHEN = 'today'; SOLD_VIEW = 'product';
   cart = []; nextId = 1; lastOrder = null;
   document.getElementById('screen-app').classList.remove('active');
   document.getElementById('screen-app').classList.remove('pal-mode');
@@ -2147,6 +2147,7 @@ function totalsHtml(list, q) {
 // Burmelin is one stock, but its two shops each have a POS, so sales and money can be split by shop.
 var SOLD_SHOP = 'all';     // 'all' | 'Bicasso 1' | 'Bicasso 2' (Burmelin only)
 var SOLD_WHEN = 'today';   // 'today' | 'all' (every day the list holds)
+var SOLD_VIEW = 'product'; // 'product' (a card per product) | 'list' (every sale, day by day)
 function bkkToday() { return new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10); }
 function soldBaht(n) { n = Math.round(Number(n) || 0); return (n < 0 ? '−' : '') + '฿' + Math.abs(n).toLocaleString('en-US'); }
 function soldKeep(l) {
@@ -2192,7 +2193,28 @@ function soldHtml(q) {
   order.sort(function(a, b) { return byItem[b].pcs - byItem[a].pcs || a.localeCompare(b); });
   var open = !!q || order.length === 1;
   var tag = key === 'burmelin' && SOLD_SHOP === 'all';
-  return money + '<div class="sold-sum">' + total + ' pcs sold ' + when + ' · ' + order.length + ' product' + (order.length !== 1 ? 's' : '') + ' · tap one to see colours and sizes</div>'
+  var views = soldChips([['product', 'By product'], ['list', 'Every sale']], SOLD_VIEW, 'soldView');
+  var sub = function(l) { return [soldBaht(l.amount), l.pay, tag ? l.shop : ''].filter(Boolean).join(' · '); };
+  if (SOLD_VIEW === 'list') {
+    var days = {}, dayOrder = [];
+    lines.forEach(function(l) {
+      if (!days[l.day]) { days[l.day] = { pcs: 0, baht: 0, list: [] }; dayOrder.push(l.day); }
+      days[l.day].pcs += l.qty; days[l.day].baht += (l.amount || 0); days[l.day].list.push(l);
+    });
+    return money + views + '<div class="sold-sum">' + total + ' pcs sold ' + when + ' · ' + lines.length + ' line' + (lines.length !== 1 ? 's' : '') + '</div>'
+      + dayOrder.map(function(day) {
+        var g = days[day];
+        return '<div class="sold-day"><span>' + lvDay(day) + '</span><span>' + g.pcs + ' pcs · ' + soldBaht(g.baht) + '</span></div>'
+          + g.list.map(function(l) {
+            var what = '<b>' + lvEsc(l.kind === 'sized' ? l.pid : l.name) + '</b>'
+              + (l.kind === 'sized' ? ' · Colour <b>' + lvEsc(l.col) + '</b> · Size <b>' + lvEsc(l.sz) + '</b>' : (l.variant ? ' · ' + lvEsc(l.variant) : ''));
+            return '<div class="sold-row"><span class="sold-time">' + l.time + '</span>'
+              + '<span class="sold-what">' + what + '<br><i class="sold-shop">' + lvEsc(sub(l)) + '</i></span>'
+              + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '</span></div>';
+          }).join('');
+      }).join('');
+  }
+  return money + views + '<div class="sold-sum">' + total + ' pcs sold ' + when + ' · ' + order.length + ' product' + (order.length !== 1 ? 's' : '') + ' · tap one to see colours and sizes</div>'
     + order.map(function(k) {
       var it = byItem[k];
       return '<details class="sg-card"' + (open ? ' open' : '') + '><summary><span class="sg-pid">' + lvEsc(k) + '</span>'
@@ -2203,8 +2225,8 @@ function soldHtml(q) {
             ? 'Colour <b>' + lvEsc(l.col) + '</b> · Size <b>' + lvEsc(l.sz) + '</b>'
             : (l.variant ? lvEsc(l.variant) : 'No size');
           return '<div class="sold-row"><span class="sold-time">' + (SOLD_WHEN === 'today' ? '' : lvDay(l.day).replace(/^\w+ /, '') + '<br>') + l.time + '</span>'
-            + '<span class="sold-what">' + what + (tag ? '<br><i class="sold-shop">' + lvEsc(l.shop) + '</i>' : '') + '</span>'
-            + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '<br><i>' + soldBaht(l.amount) + '</i></span>'
+            + '<span class="sold-what">' + what + '<br><i class="sold-shop">' + lvEsc(sub(l)) + '</i></span>'
+            + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '</span>'
             + '</div>';
         }).join('') + '</details>';
     }).join('');
@@ -2225,6 +2247,7 @@ function renderSoldTab() {
 }
 function soldWhen(w) { SOLD_WHEN = w; soldRedraw(); }
 function soldShop(s) { SOLD_SHOP = s; soldRedraw(); }
+function soldView(v) { SOLD_VIEW = v; soldRedraw(); }
 function soldRedraw() {
   var ss = document.getElementById('sold-search'), q = ss ? ss.value : '';
   renderSoldTab();

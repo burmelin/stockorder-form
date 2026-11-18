@@ -82,6 +82,15 @@ function buildStock(idx, levels) {
   return { sized, totals: list };
 }
 
+const num = (v) => Number(v) || 0;
+const round2 = (n) => Math.round(n * 100) / 100;
+// How a receipt was paid: payment type CASH is cash, a "QR" / PromptPay / "SCAN" type is QR, else card
+const payKind = (p) => (p.type === 'CASH' ? 'Cash' : isQr(p.name || p.type) ? 'QR' : 'Card');
+function payLabel(payments) {
+  const kinds = [...new Set((payments || []).filter((p) => num(p.money_amount)).map(payKind))];
+  return kinds.length === 1 ? kinds[0] : kinds.length ? 'Mixed' : '';
+}
+
 // Receipts -> one line per item sold (refunds negative), newest first.
 // shopOf(receipt) names the shop (Bicasso 1 / Bicasso 2 / Bicasso Nana).
 function salesLines(receipts, idx, shopOf, tz) {
@@ -91,6 +100,7 @@ function salesLines(receipts, idx, shopOf, tz) {
     if (r.cancelled_at) continue;
     const sign = r.receipt_type === 'REFUND' ? -1 : 1;
     const at = r.receipt_date || r.created_at;
+    const pay = payLabel(r.payments);
     for (const li of r.line_items || []) {
       const p = idx.get(li.variant_id) || parseVariant({ item_name: li.item_name }, null, map);
       const qty = sign * (Number(li.quantity) || 0);
@@ -100,14 +110,13 @@ function salesLines(receipts, idx, shopOf, tz) {
         pid: p.pid, col: p.col || '', sz: p.sz || '', kind: p.kind, name: p.name || clean(li.item_name),
         variant: clean(li.variant_name), qty, receipt: clean(r.receipt_number),
         amount: round2(sign * num(li.total_money)),   // after discounts, in baht
+        pay,                                         // 'Cash' | 'Card' | 'QR' | 'Mixed' (the receipt's)
       });
     }
   }
   return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }
 
-const num = (v) => Number(v) || 0;
-const round2 = (n) => Math.round(n * 100) / 100;
 
 // Receipts -> money taken per day and shop, split Cash / Card / QR (same rules as the Finance
 // import: payment type CASH is cash, a "QR" / PromptPay / "SCAN" type is QR, anything else card).
@@ -121,10 +130,8 @@ function salesMoney(receipts, shopOf, tz) {
     const sign = r.receipt_type === 'REFUND' ? -1 : 1;
     let cash = 0, card = 0, qr = 0;
     for (const p of r.payments || []) {
-      const amt = num(p.money_amount);
-      if (p.type === 'CASH') cash += amt;
-      else if (isQr(p.name || p.type)) qr += amt;
-      else card += amt;
+      const amt = num(p.money_amount), k = payKind(p);
+      if (k === 'Cash') cash += amt; else if (k === 'QR') qr += amt; else card += amt;
     }
     const excess = cash + card + qr - (num(r.total_money) + num(r.tip));
     if (excess > 0.005 && cash > 0) cash -= Math.min(excess, cash);
