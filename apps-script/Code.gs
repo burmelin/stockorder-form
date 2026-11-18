@@ -346,8 +346,10 @@ function cellDateText(v) {
 function submitOrder(orderData, b) {
   orderData = orderData || {};
   if (b && !isEmployee(b.auth) && RETAIL_STORES.indexOf(b.authStore) > -1) {
-    orderData.shopName = b.authStore;
-    orderData.customerName = b.authStore;
+    // Bicasso 1 and Bicasso 2 are one shop, "Burmelin", since 18 Nov 2026: its orders go to Burmelin
+    var shop = SHARED_STOCK[b.authStore] ? SHARED_SHOP : b.authStore;
+    orderData.shopName = shop;
+    orderData.customerName = shop;
   }
   orderData.customerEmail = '';
   var items = orderData.items || [];
@@ -574,7 +576,8 @@ function markDone(orderId, password) {
     var warnings = deductItemsFromWholesale(ss, order.items, lines, changes);
     var dest = order.orderType === 'store' && order.shopName ? order.shopName : (order.customerName || 'customer');
     changes.forEach(function(c) { c.action = 'Sent to ' + dest; });
-    if (order.orderType === 'store' && order.shopName) {
+    // Burmelin's stock is in Loyverse, not in a sheet: only Palladium's side is written here
+    if (order.orderType === 'store' && order.shopName && order.shopName !== SHARED_SHOP) {
       var got = [];
       warnings = warnings.concat(addItemsToStore(ss, order.shopName, lines, got));
       got.forEach(function(c) { c.action = 'Received from Palladium'; });
@@ -1058,8 +1061,11 @@ function getStoreBundle(storeName) {
   };
 }
 
-// Shops that share one Loyverse stock: Bicasso 1 and Bicasso 2 are the store "Burmelin"
-var SHARED_STOCK = { 'Bicasso 1': ['Bicasso 1', 'Bicasso 2'], 'Bicasso 2': ['Bicasso 1', 'Bicasso 2'] };
+// Bicasso 1 and Bicasso 2 are one shop since 18 Nov 2026: the Loyverse store "Burmelin" (two POS,
+// one stock). Their logins map to the group below; new orders are saved as shop "Burmelin" and
+// older orders may still say Bicasso 1 or Bicasso 2.
+var SHARED_SHOP = 'Burmelin';
+var SHARED_STOCK = { 'Bicasso 1': ['Burmelin', 'Bicasso 1', 'Bicasso 2'], 'Bicasso 2': ['Burmelin', 'Bicasso 1', 'Bicasso 2'] };
 
 // Pieces these shops ordered from Palladium that are not marked Done yet, as
 // { 'product|colour|size': qty }, so Restock doesn't order the same pieces twice.
@@ -1825,14 +1831,19 @@ function readStaffToken(token, staff) {
 }
 // Each shop login only serves the people who work there ("Works at" includes that shop).
 // Warehouse (Palladium) staff don't take leave: they cover Nana, so they're never listed.
-function worksAt(s, b) { return s.places.indexOf('Palladium') < 0 && s.places.indexOf(b.authStore) > -1; }
+// Staff of the logged-in shop; the Burmelin login covers the staff of Bicasso 1 and Bicasso 2
+function worksAt(s, b) {
+  if (s.places.indexOf('Palladium') > -1) return false;
+  return (SHARED_STOCK[b.authStore] || [b.authStore]).some(function(shop) { return s.places.indexOf(shop) > -1; });
+}
+function loginLabel(b) { return SHARED_STOCK[b.authStore] ? SHARED_SHOP : b.authStore; }
 
 // The staff member behind b.staffToken, or an error reply
 function leaveWho(b, ss, staff) {
   if (!isLoggedIn(b)) return { error: { success: false, error: 'Please log out and log in again.', needLogin: true } };
   var who = readStaffToken(b.staffToken, staff || readStaffRows(ss));
   if (!who) return { error: { success: false, error: 'Please choose your name and enter your PIN again.', needStaff: true } };
-  if (!worksAt(who.staff, b)) return { error: { success: false, error: 'This phone is logged in to ' + b.authStore + '. Choose your name from its staff list.', needStaff: true } };
+  if (!worksAt(who.staff, b)) return { error: { success: false, error: 'This phone is logged in to ' + loginLabel(b) + '. Choose your name from its staff list.', needStaff: true } };
   return who;
 }
 
@@ -1840,7 +1851,7 @@ function leaveWho(b, ss, staff) {
 function leaveStaffList(b) {
   if (!isLoggedIn(b)) return { success: false, error: 'Please log out and log in again.', needLogin: true };
   var staff = readStaffRows(SpreadsheetApp.getActiveSpreadsheet()).filter(function(s) { return worksAt(s, b); });
-  return { success: true, shop: b.authStore, staff: staff.map(function(s) { return { id: s.id, name: s.name, hasPin: !!(s.hash || s.newPin) }; }) };
+  return { success: true, shop: loginLabel(b), staff: staff.map(function(s) { return { id: s.id, name: s.name, hasPin: !!(s.hash || s.newPin) }; }) };
 }
 
 function leaveSignIn(b, staffId, pin) {
@@ -1856,7 +1867,7 @@ function leaveSignIn(b, staffId, pin) {
     var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(STAFF_SHEET);
     s = readStaffRows(ss, sh).filter(function(x) { return x.id === staffId; })[0];
     if (!s) return { success: false, error: 'Name not found. Ask the owner to check the Staff tab.' };
-    if (!worksAt(s, b)) return { success: false, error: s.name + ' is not on the ' + b.authStore + ' staff list. Ask the owner to check "Works at" in the Staff tab.' };
+    if (!worksAt(s, b)) return { success: false, error: s.name + ' is not on the ' + loginLabel(b) + ' staff list. Ask the owner to check "Works at" in the Staff tab.' };
     var ok = false;
     if (s.newPin && pin === s.newPin) {                    // first use of a PIN typed in the sheet
       if (pin.length < PIN_MIN) return { success: false, error: 'The PIN in the sheet needs at least ' + PIN_MIN + ' characters. Ask the owner.' };

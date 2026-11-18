@@ -2,7 +2,7 @@
 // product / colour / size, the stock grid, and the 7-day sales list.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseVariant, variantIndex, buildStock, salesLines, storeIds, tillShops } = require('../api/_shopstock');
+const { parseVariant, variantIndex, buildStock, salesLines, salesMoney, storeIds, tillShops } = require('../api/_shopstock');
 
 const sizedItem = {
   id: 'i1', item_name: '4002 Cotton Shirt', option1_name: 'Colour', option2_name: 'Size',
@@ -103,4 +103,36 @@ test('salesLines: one line per item sold, refunds negative, cancelled skipped, n
 test('storeIds finds the two shop stores by name', () => {
   const ids = storeIds([{ id: 'a', name: 'Burmelin' }, { id: 'b', name: 'BICASSO 2 Terminal 21' }, { id: 'c', name: 'bicasso 3 nana' }]);
   assert.deepEqual(ids, { burmelin: 'a', nana: 'c' });
+});
+
+test('salesMoney: takings per day and shop (POS), split cash / card / QR, refunds off, change off the cash', () => {
+  const tills = tillShops([{ id: 'd1', name: 'POS 1' }, { id: 'd2', name: 'B2 POS' }]);
+  const shopOf = (r) => tills.get(r.pos_device_id) || 'Bicasso 1';
+  const at = '2026-11-18T06:00:00Z';
+  const receipts = [
+    { receipt_type: 'SALE', receipt_date: at, pos_device_id: 'd1', total_money: 1000, payments: [{ type: 'CASH', name: 'Cash', money_amount: 1100 }] },   // 100 change
+    { receipt_type: 'SALE', receipt_date: at, pos_device_id: 'd1', total_money: 900, payments: [{ type: 'NONCASH', name: 'Card', money_amount: 600 }, { type: 'OTHER', name: 'SCAN', money_amount: 300 }] },
+    { receipt_type: 'SALE', receipt_date: at, pos_device_id: 'd2', total_money: 500, payments: [{ type: 'OTHER', name: 'QR PromptPay', money_amount: 500 }] },
+    { receipt_type: 'REFUND', receipt_date: at, pos_device_id: 'd2', total_money: 200, payments: [{ type: 'CASH', name: 'Cash', money_amount: 200 }] },
+    { receipt_type: 'SALE', receipt_date: at, pos_device_id: 'd2', cancelled_at: at, total_money: 999, payments: [{ type: 'CASH', money_amount: 999 }] },
+    { receipt_type: 'SALE', receipt_date: '2026-11-17T20:00:00Z', pos_device_id: 'd1', total_money: 50, payments: [{ type: 'CASH', money_amount: 50 }] },   // 03:00 on the 18th in Bangkok
+  ];
+  const got = salesMoney(receipts, shopOf, 'Asia/Bangkok');
+  assert.deepEqual(got.map((t) => [t.day, t.shop, t.cash, t.card, t.qr, t.total, t.receipts, t.refunds]), [
+    ['2026-11-18', 'Bicasso 1', 1050, 600, 300, 1950, 3, 0],
+    ['2026-11-18', 'Bicasso 2', -200, 0, 500, 300, 1, 1],
+  ]);
+});
+
+test('salesLines gives each line its amount (refunds negative) and how the receipt was paid', () => {
+  const idx = variantIndex(ITEMS);
+  const lines = salesLines([
+    { receipt_type: 'SALE', receipt_date: '2026-11-18T05:00:00Z', line_items: [{ variant_id: 'v1', quantity: 2, total_money: 790 }],
+      payments: [{ type: 'NONCASH', name: 'Card', money_amount: 500 }, { type: 'OTHER', name: 'SCAN', money_amount: 290 }] },
+    { receipt_type: 'REFUND', receipt_date: '2026-11-18T06:00:00Z', line_items: [{ variant_id: 'v1', quantity: 1, total_money: 395 }],
+      payments: [{ type: 'CASH', name: 'Cash', money_amount: 395 }] },
+    { receipt_type: 'SALE', receipt_date: '2026-11-18T04:00:00Z', line_items: [{ variant_id: 'v1', quantity: 1, total_money: 395 }],
+      payments: [{ type: 'OTHER', name: 'SCAN', money_amount: 395 }] },
+  ], idx, () => 'Bicasso 1', 'Asia/Bangkok');
+  assert.deepEqual(lines.map((l) => [l.qty, l.amount, l.pay]), [[-1, -395, 'Cash'], [2, 790, 'Mixed'], [1, 395, 'QR']]);
 });

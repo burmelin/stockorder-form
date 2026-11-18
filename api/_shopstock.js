@@ -10,7 +10,7 @@
 //   "... (Nana old stock)"                             -> a "total only" line, marked old
 // The item NAME and its options decide, never the SKU: split items' SKUs run the parts together
 // (FL1167129 could be colour 1 size 29 or colour 12 size 9).
-const { localDate, localTime, mapDevices } = require('./_loyverse');
+const { localDate, localTime, mapDevices, isQr } = require('./_loyverse');
 
 // Old product numbers -> the number Palladium uses (owner, 16-18 Nov 2026).
 // LOYVERSE_CODE_MAP (JSON, {"OLD":"NEW"}) adds to or replaces these.
@@ -82,6 +82,15 @@ function buildStock(idx, levels) {
   return { sized, totals: list };
 }
 
+const num = (v) => Number(v) || 0;
+const round2 = (n) => Math.round(n * 100) / 100;
+// How a receipt was paid: payment type CASH is cash, a "QR" / PromptPay / "SCAN" type is QR, else card
+const payKind = (p) => (p.type === 'CASH' ? 'Cash' : isQr(p.name || p.type) ? 'QR' : 'Card');
+function payLabel(payments) {
+  const kinds = [...new Set((payments || []).filter((p) => num(p.money_amount)).map(payKind))];
+  return kinds.length === 1 ? kinds[0] : kinds.length ? 'Mixed' : '';
+}
+
 // Receipts -> one line per item sold (refunds negative), newest first.
 // shopOf(receipt) names the shop (Bicasso 1 / Bicasso 2 / Bicasso Nana).
 function salesLines(receipts, idx, shopOf, tz) {
@@ -91,6 +100,7 @@ function salesLines(receipts, idx, shopOf, tz) {
     if (r.cancelled_at) continue;
     const sign = r.receipt_type === 'REFUND' ? -1 : 1;
     const at = r.receipt_date || r.created_at;
+    const pay = payLabel(r.payments);
     for (const li of r.line_items || []) {
       const p = idx.get(li.variant_id) || parseVariant({ item_name: li.item_name }, null, map);
       const qty = sign * (Number(li.quantity) || 0);
@@ -99,10 +109,44 @@ function salesLines(receipts, idx, shopOf, tz) {
         day: localDate(at, tz), time: localTime(at, tz), at, shop: shopOf(r) || '',
         pid: p.pid, col: p.col || '', sz: p.sz || '', kind: p.kind, name: p.name || clean(li.item_name),
         variant: clean(li.variant_name), qty, receipt: clean(r.receipt_number),
+        amount: round2(sign * num(li.total_money)),   // after discounts, in baht
+        pay,                                         // 'Cash' | 'Card' | 'QR' | 'Mixed' (the receipt's)
       });
     }
   }
   return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+
+// Receipts -> money taken per day and shop, split Cash / Card / QR (same rules as the Finance
+// import: payment type CASH is cash, a "QR" / PromptPay / "SCAN" type is QR, anything else card).
+// Refunds take off, cancelled receipts are left out. If the payments add up to more than the
+// receipt (cash handed over before change), the extra comes off the cash.
+// Returns [{ day, shop, cash, card, qr, total, receipts, refunds }], oldest day first.
+function salesMoney(receipts, shopOf, tz) {
+  const out = new Map();
+  for (const r of receipts || []) {
+    if (r.cancelled_at) continue;
+    const sign = r.receipt_type === 'REFUND' ? -1 : 1;
+    let cash = 0, card = 0, qr = 0;
+    for (const p of r.payments || []) {
+      const amt = num(p.money_amount), k = payKind(p);
+      if (k === 'Cash') cash += amt; else if (k === 'QR') qr += amt; else card += amt;
+    }
+    const excess = cash + card + qr - (num(r.total_money) + num(r.tip));
+    if (excess > 0.005 && cash > 0) cash -= Math.min(excess, cash);
+    const day = localDate(r.receipt_date || r.created_at, tz);
+    const shop = shopOf(r) || '';
+    const k = day + '|' + shop;
+    const t = out.get(k) || { day, shop, cash: 0, card: 0, qr: 0, total: 0, receipts: 0, refunds: 0 };
+    t.cash += sign * cash; t.card += sign * card; t.qr += sign * qr;
+    t.total += sign * (cash + card + qr);
+    if (sign < 0) t.refunds++; else t.receipts++;
+    out.set(k, t);
+  }
+  return [...out.values()]
+    .map((t) => ({ ...t, cash: round2(t.cash), card: round2(t.card), qr: round2(t.qr), total: round2(t.total) }))
+    .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.shop.localeCompare(b.shop)));
 }
 
 // The two shop stores and which staff-app shop each till belongs to.
@@ -125,4 +169,4 @@ function tillShops(devices) {
   return mapDevices(devices, ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana']).map;
 }
 
-module.exports = { CODE_MAP, codeMap, parseVariant, variantIndex, buildStock, salesLines, STORES, STORE_SHOP, storeIds, tillShops };
+module.exports = { CODE_MAP, codeMap, parseVariant, variantIndex, buildStock, salesLines, salesMoney, STORES, STORE_SHOP, storeIds, tillShops };
