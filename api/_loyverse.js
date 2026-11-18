@@ -19,11 +19,12 @@ function jsonMap(envName) {
   return out;
 }
 
-async function lvGet(path, params) {
+// token: optional; the staff app passes its own (LOYVERSE_STAFF_TOKEN), Finance uses LOYVERSE_TOKEN.
+async function lvGet(path, params, token) {
   const url = new URL(API + path);
   for (const [k, v] of Object.entries(params || {})) if (v !== undefined) url.searchParams.set(k, v);
   for (let attempt = 0; ; attempt++) {
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${process.env.LOYVERSE_TOKEN}` } });
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token || process.env.LOYVERSE_TOKEN}` } });
     if (resp.status === 429 && attempt < 3) {
       const wait = (parseInt(resp.headers.get('retry-after'), 10) || 2 ** attempt) * 1000;
       await new Promise((r) => setTimeout(r, Math.min(wait, 10000)));
@@ -36,11 +37,11 @@ async function lvGet(path, params) {
 }
 
 // Follows Loyverse's cursor pagination and returns every item under `key`.
-async function lvGetAll(path, key, params) {
+async function lvGetAll(path, key, params, token) {
   const items = [];
   let cursor;
   for (let page = 0; page < 200; page++) {
-    const data = await lvGet(path, { ...params, limit: 250, cursor });
+    const data = await lvGet(path, { ...params, limit: 250, cursor }, token);
     items.push(...(data[key] || []));
     cursor = data.cursor;
     if (!cursor) return items;
@@ -508,4 +509,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, mapDevices, shopResolver, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, localDate, localTime, addDays, mapStores, mapDevices, shopResolver, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };

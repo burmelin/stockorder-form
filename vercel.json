@@ -37,6 +37,9 @@
   "functions": {
     "api/loyverse-sync.js": {
       "maxDuration": 60
+    },
+    "api/shop-stock.js": {
+      "maxDuration": 30
     }
   }
 }

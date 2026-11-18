@@ -321,4 +321,4 @@ async function lastSync(sheets) {
 // Shown when a save would go past the bottom of Master Entry.
 const sheetFullError = (lastRow) => `Master Entry is full (row ${lastRow}). Add more rows at the bottom of the sheet, copying the last row's formulas.`;
 
-module.exports = { OFFICE, DRAWER, checkDrawer, rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
+module.exports = { loginOfToken, isOwnerRequest, OFFICE, DRAWER, checkDrawer, rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };

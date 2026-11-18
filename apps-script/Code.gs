@@ -183,6 +183,7 @@ function readToken(token) {
   return { l: s.l, t: s.t };
 }
 // The login a successful login action was for
+var LOYVERSE_NOW = { sellRetailStock: 1, sellRetailStockBatch: 1, transferStock: 1, addRetailStockItem: 1, addRetailStockItems: 1 };
 function loginOfAction(action, body) {
   return action === 'getOrders' ? 'Palladium' : action === 'verifyOwner' ? 'Owner' : (body && body.storeName);
 }
@@ -203,6 +204,11 @@ function handleApi(action, params, body) {
   }
   if ((READ_ACTIONS[action] || action === 'submitOrder') && !isLoggedIn(body)) {
     return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
+  }
+  // Since 18 Nov 2026 shops sell, move and count stock in Loyverse; a phone still showing the old
+  // Sell / Transfer / Count screens must not change the old shop sheets
+  if (LOYVERSE_NOW[action] && body && RETAIL_STORES.indexOf(body.authStore) > -1) {
+    return jsonOut({ success: false, error: 'This is done in Loyverse now. Close the app and open it again to get the new version.' });
   }
   var out;
   switch (action) {
@@ -1045,10 +1051,41 @@ function getStoreBundle(storeName) {
   var inv = getInventory();
   return {
     success: true,
-    stores: st.stores,
+    stores: st.stores,   // old shop stock sheets; since 18 Nov 2026 the app reads shop stock from Loyverse
     inventory: inv.success ? inv.inventory : null,
-    groups: inv.success ? inv.groups : []
+    groups: inv.success ? inv.groups : [],
+    onTheWay: ordersOnTheWay(SHARED_STOCK[storeName] || [storeName])
   };
+}
+
+// Shops that share one Loyverse stock: Bicasso 1 and Bicasso 2 are the store "Burmelin"
+var SHARED_STOCK = { 'Bicasso 1': ['Bicasso 1', 'Bicasso 2'], 'Bicasso 2': ['Bicasso 1', 'Bicasso 2'] };
+
+// Pieces these shops ordered from Palladium that are not marked Done yet, as
+// { 'product|colour|size': qty }, so Restock doesn't order the same pieces twice.
+function ordersOnTheWay(shops) {
+  var out = {};
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ORDERS_TAB_NAME);
+    if (!sheet || sheet.getLastRow() < 2) return out;
+    var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, Math.max(13, sheet.getLastColumn())).getValues();
+    data.forEach(function(row) {
+      if (!row[0] || String(row[8] || 'Pending') === 'Completed') return;
+      if (String(row[11] || '') !== 'store' || shops.indexOf(String(row[12] || '')) === -1) return;
+      var items = [];
+      try { items = JSON.parse(row[6] || '[]'); } catch (e) { return; }
+      items.forEach(function(it) {
+        var pid = String(it.lp || it.product || '').trim();
+        var col = String(it.lc || String(it.color || '').replace(/^Color\s*/i, '')).trim();
+        var sz  = String(it.ls || it.size || '').trim();
+        var q   = parseInt(it.qty) || 0;
+        if (!pid || !q) return;
+        var k = pid + '|' + col + '|' + sz;
+        out[k] = (out[k] || 0) + q;
+      });
+    });
+  } catch (err) { /* Restock still works, just without "on the way" */ }
+  return out;
 }
 
 // ─── GET ALL RETAIL STOCK (public read, no password needed) ───

@@ -402,6 +402,28 @@ tbody tr:last-child td{border-bottom:none}
 .reorder-hd-low{background:#F5EAD3;color:#7A5A1F}
 .reorder-row{display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid #ECE8E1;font-size:.85rem;gap:8px}
 .reorder-row:last-child{border-bottom:none}
+/* ── SHOP STOCK FROM LOYVERSE / SOLD TAB ── */
+.lv-head{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border-radius:12px;padding:10px 12px;margin-bottom:10px;box-shadow:0 1px 5px rgba(0,0,0,.07)}
+.lv-head b{display:block;font-size:.88rem;color:#111118}
+.lv-head span{display:block;font-size:.72rem;color:#6D6A65;margin-top:2px}
+.lv-refresh{background:#EDF2F8;color:#0054A5;border:1px solid #B9CDE4;border-radius:8px;padding:7px 12px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap}
+.lv-note{background:#F7F5F1;border-radius:10px;padding:10px 12px;font-size:.82rem;color:#4A4844;margin-bottom:10px;line-height:1.45}
+.lv-totals{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 5px rgba(0,0,0,.07);margin-bottom:12px}
+.lv-total-row{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid #ECE8E1;font-size:.84rem;color:#2A2A31}
+.lv-total-row:last-child{border-bottom:none}
+.lv-total-row i{font-style:normal;font-size:.68rem;color:#7A5A1F;background:#F5EAD3;border-radius:4px;padding:1px 5px;margin-left:4px}
+.lv-total-row b{white-space:nowrap}
+.sold-filter{display:flex;gap:6px;margin-bottom:8px}
+.sold-filter button{flex:1;background:#EFEBE4;border:none;border-radius:8px;padding:8px 4px;font-size:.8rem;font-weight:700;color:#4A4844;cursor:pointer}
+.sold-filter button.on{background:#0054A5;color:#fff}
+.sold-sum{font-size:.78rem;color:#6D6A65;margin:2px 2px 8px}
+.sold-day{display:flex;justify-content:space-between;background:#111118;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;font-size:.82rem;font-weight:700;margin-top:10px}
+.sold-row{display:flex;align-items:center;gap:8px;background:#fff;border-bottom:1px solid #ECE8E1;padding:8px 12px;font-size:.82rem;color:#2A2A31}
+.sold-row:last-child{border-radius:0 0 10px 10px}
+.sold-time{color:#86827B;font-size:.74rem;min-width:38px}
+.sold-what{flex:1}
+.sold-qty{font-weight:700;white-space:nowrap}
+.sold-shop{font-size:.68rem;font-weight:700;color:#0054A5;background:#EDF2F8;border-radius:4px;padding:2px 6px}
 /* ── LEAVE (staff) and OWNER screens ── */
 #screen-leave,#screen-owner{position:fixed;inset:0;display:none;flex-direction:column;background:var(--linen);z-index:60}
 #screen-leave.active,#screen-owner.active{display:flex}
@@ -602,9 +624,7 @@ tbody tr:last-child td{border-bottom:none}
       <div class="panel-inner">
         <div class="ms-tabs">
           <button class="mstab active" id="sp-tab-mystock" onclick="switchStoreTab('mystock')">Stock</button>
-          <button class="mstab" id="sp-tab-sell" onclick="switchStoreTab('sell')">Sell</button>
-          <button class="mstab" id="sp-tab-transfer" onclick="switchStoreTab('transfer')">Transfer</button>
-          <button class="mstab" id="sp-tab-addstock" onclick="switchStoreTab('addstock')">Count</button>
+          <button class="mstab" id="sp-tab-sold" onclick="switchStoreTab('sold')">Sold (7 days)</button>
         </div>
         <div id="pal-order-filter-tabs">
           <button class="pal-filter-tab active" data-pf="all" onclick="palFilterOrders('all')">All <span id="pal-cnt-all">0</span></button>
@@ -626,7 +646,7 @@ tbody tr:last-child td{border-bottom:none}
     <!-- Panel 3: Order from Palladium / Retail Stock (Palladium mode) -->
     <div id="panel-order" class="panel">
       <div id="pal-retail-wrap"><div class="panel-inner" id="pal-retail-content"></div></div>
-      <div class="order-banner">Order from <strong id="order-store-name"></strong> to Palladium — items added to your stock when marked Done</div>
+      <div class="order-banner">Order from <strong id="order-store-name"></strong> to Palladium</div>
 
       <!-- Success screen (inside order panel) -->
       <div id="order-success">
@@ -634,7 +654,7 @@ tbody tr:last-child td{border-bottom:none}
         <h2>Order Sent!</h2>
         <div class="order-id-badge" id="order-id-display"></div>
         <p>Your order has been placed with Palladium.</p>
-        <p style="font-size:.85rem;color:#6D6A65;margin-top:4px">Items will be added to your stock when Palladium marks it done.</p>
+        <p style="font-size:.85rem;color:#6D6A65;margin-top:4px">Palladium will pack it and mark it Done.</p>
         <button class="btn-pdf" onclick="saveOrderPdf()">📄 Save Order as PDF</button>
         <button class="btn-new" onclick="resetOrderForm()">Place Another Order</button>
       </div>
@@ -1395,6 +1415,7 @@ function appLogout() {
   CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Bicasso 1';
+  LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all';
   cart = []; nextId = 1; lastOrder = null;
   document.getElementById('screen-app').classList.remove('active');
   document.getElementById('screen-app').classList.remove('pal-mode');
@@ -1444,8 +1465,8 @@ function refreshCurrent() {
     else if (CURRENT_PANEL === 'report') { ALL_RETAIL_STOCK=null; REPORT_DATA={}; palShowReport(); }
     else if (CURRENT_PANEL === 'cash')   { palShowCash(); }
   } else {
-    if (CURRENT_PANEL === 'mystore') { ALL_RETAIL_STOCK=null; CS_ROWS=null; INVENTORY_LOADED=false; loadStoreStock(); }
-    else if (CURRENT_PANEL === 'stores') { ALL_RETAIL_STOCK=null; CS_ROWS=null; renderOtherStores(); }
+    if (CURRENT_PANEL === 'mystore') { CS_ROWS=null; INVENTORY_LOADED=false; loadStoreStock(true); }
+    else if (CURRENT_PANEL === 'stores') { CS_ROWS=null; renderOtherStores(true); }
     else if (CURRENT_PANEL === 'order')  { INVENTORY_LOADED=false; loadInventory(); }
   }
 }
@@ -1481,9 +1502,9 @@ function cacheClear() {
   try { Object.keys(localStorage).forEach(function(k) { if (k.indexOf('bm_cache_') === 0) localStorage.removeItem(k); }); } catch (e) {}
 }
 
+// Palladium's sizes/colours and this shop's orders on the way (the shop's own stock comes from Loyverse)
 function applyStoreBundle(r) {
-  ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {};
-  Object.keys(r.stores || {}).forEach(function(k) { ALL_RETAIL_STOCK[k] = r.stores[k]; });
+  if (r.onTheWay) ON_THE_WAY = r.onTheWay;
   if (r.inventory) { INVENTORY = r.inventory; GROUPS = r.groups || []; INVENTORY_LOADED = true; }
 }
 
@@ -1491,40 +1512,37 @@ function applyStoreBundle(r) {
 function refreshStoreView() {
   if (CURRENT_PANEL === 'mystore' && CURRENT_TAB === 'mystock') {
     var el = document.getElementById('ms-list'), s = document.getElementById('ms-search');
-    if (el) rerenderKeepOpen(el, myStockHtml(s ? s.value : '')); else renderMyStock();
+    var head = document.querySelector('#sp-body .lv-head');
+    if (el && head) { head.outerHTML = lvHeadHtml(); rerenderKeepOpen(el, myStockHtml(s ? s.value : '')); } else renderMyStock();
+  }
+  if (CURRENT_PANEL === 'mystore' && CURRENT_TAB === 'sold') {
+    var ss = document.getElementById('sold-search'), q = ss ? ss.value : '';
+    renderSoldTab();
+    var ns = document.getElementById('sold-search'); if (ns && q) { ns.value = q; filterSold(q); }
   }
   if (CURRENT_PANEL === 'order' && ORDER_MODE === 'restock') renderReorderTab();
 }
 
-// Store stock + Palladium sizes in one request
-function loadStoreStock() {
+// The shop's stock and sales from Loyverse, plus Palladium's sizes and orders on the way (Apps Script).
+// Shows the saved copy at once, then the fresh one. fresh = the Refresh button.
+function loadStoreStock(fresh) {
   if (!SESSION_STORE) return;
-  var myStore = SESSION_STORE.name;
-  if (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[myStore]) { switchStoreTab(CURRENT_TAB || 'mystock'); return; }
-  var cached = cacheGet('bundle_' + myStore);
-  if (cached) { applyStoreBundle(cached); switchStoreTab(CURRENT_TAB || 'mystock'); }
-  else document.getElementById('sp-body').innerHTML = loaderHtml('stock', 'Loading your stock…');
+  var key = myLvKey();
+  if (fresh || !LV[key]) {
+    lvLoad(key, fresh, function() { refreshStoreView(); }, function(e, hadCopy) {
+      if (LV[key]) refreshStoreView();
+      else {
+        var msg = '<div class="sp-empty">⚠ Could not read stock from Loyverse. ' + lvEsc(e.message) + '</div>';
+        if (CURRENT_PANEL === 'mystore') document.getElementById('sp-body').innerHTML = msg;
+        var rb = document.getElementById('restock-body'); if (rb) rb.innerHTML = msg;
+      }
+      showToast(hadCopy ? 'Could not update — showing saved stock' : 'Connection error — tap Retry', function(){ loadStoreStock(true); });
+    });
+  }
+  if (CURRENT_PANEL === 'mystore') switchStoreTab(CURRENT_TAB || 'mystock');   // saved copy, or "Reading…"
   google.script.run
-    .withSuccessHandler(function(r) {
-      if (r && !r.success && /Unknown action/.test(r.error || '')) {
-        // Server not redeployed yet: fall back to the old stock-only request
-        google.script.run.withSuccessHandler(function(o) {
-          if (o && o.success) { applyStoreBundle(o); CS_ROWS = null; if (cached) refreshStoreView(); else switchStoreTab(CURRENT_TAB || 'mystock'); }
-        }).getStoreStock(myStore);
-        return;
-      }
-      if (r && r.success) {
-        applyStoreBundle(r); cacheSet('bundle_' + myStore, r); CS_ROWS = null;
-        if (cached) refreshStoreView(); else switchStoreTab(CURRENT_TAB || 'mystock');
-      } else if (!cached) {
-        document.getElementById('sp-body').innerHTML = '<div class="sp-empty">⚠ Could not load stock. Please try again.</div>';
-      }
-    })
-    .withFailureHandler(function() {
-      if (!cached) document.getElementById('sp-body').innerHTML = '<div class="sp-empty">⚠ Could not load stock.</div>';
-      showToast(cached ? 'Could not update — showing saved stock' : 'Connection error — tap Retry', function(){ ALL_RETAIL_STOCK=null; loadStoreStock(); });
-    })
-    .getStoreBundle(myStore);
+    .withSuccessHandler(function(r) { if (r && r.success) { applyStoreBundle(r); refreshStoreView(); } })
+    .getStoreBundle(SESSION_STORE.name);
 }
 
 // All 4 stores (incl. Palladium) + Palladium categories in one request.
@@ -1556,14 +1574,12 @@ function loadAllRetail(onData, onFail) {
 // ── STORE TABS ────────────────────────────────────────────────────
 function switchStoreTab(tab) {
   CURRENT_TAB = tab;
-  ['mystock','sell','transfer','addstock'].forEach(function(t) {
+  ['mystock','sold'].forEach(function(t) {
     var el = document.getElementById('sp-tab-' + t);
     if (el) el.classList.toggle('active', t === tab);
   });
-  if (tab === 'mystock') renderMyStock();
-  else if (tab === 'sell') renderSellTab();
-  else if (tab === 'transfer') renderTransferTab();
-  else if (tab === 'addstock') renderAddStockTab();
+  if (tab === 'sold') renderSoldTab();
+  else renderMyStock();
   updateBackBtn();
 }
 
@@ -1983,16 +1999,20 @@ function palRefInv() {
   return (STOCK_DATA && STOCK_DATA.inventory) || (INVENTORY_LOADED && INVENTORY) || (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK.Palladium) || null;
 }
 
-var PAL_REF_LOADING = false;
+var PAL_REF_LOADING = false, PAL_REF_WAITING = [];
+// onReady runs once Palladium's sizes are in (or the request failed: then palRefInv() is still null)
 function ensurePalRef(onReady) {
-  if (palRefInv() || PAL_REF_LOADING) return;
+  if (palRefInv()) return;
+  PAL_REF_WAITING.push(onReady);
+  if (PAL_REF_LOADING) return;
   PAL_REF_LOADING = true;
+  function done() { var w = PAL_REF_WAITING; PAL_REF_WAITING = []; PAL_REF_LOADING = false; w.forEach(function(f) { f(); }); }
   google.script.run
     .withSuccessHandler(function(r) {
-      PAL_REF_LOADING = false;
-      if (r && r.success) { INVENTORY = r.inventory; GROUPS = r.groups; INVENTORY_LOADED = true; onReady(); }
+      if (r && r.success) { INVENTORY = r.inventory; GROUPS = r.groups; INVENTORY_LOADED = true; }
+      done();
     })
-    .withFailureHandler(function() { PAL_REF_LOADING = false; })
+    .withFailureHandler(done)
     .getInventory();
 }
 
@@ -2005,13 +2025,19 @@ function rerenderKeepOpen(el, html) {
 }
 
 function myStockHtml(q) {
-  return stockGroupsHtml(ALL_RETAIL_STOCK && SESSION_STORE && ALL_RETAIL_STOCK[SESSION_STORE.name], q, { lowMax: 1, refInv: palRefInv(), historyStore: SESSION_STORE && SESSION_STORE.name });
+  var d = LV[myLvKey()];
+  if (!d) return loaderHtml('stock', 'Reading stock from Loyverse…');
+  var hasSized = lvHasSized(d);
+  var html = hasSized ? stockGroupsHtml(d.sized, q, { lowMax: 1, refInv: palRefInv(), sections: GROUPS && GROUPS.length ? GROUPS : null }) : '';
+  html += totalsHtml(d.totals, q);
+  if (!hasSized && myLvKey() === 'nana') html = '<div class="lv-note">Nana\'s items have no sizes or colours in Loyverse yet, so only totals show. Sizes come after the recount.</div>' + html;
+  return html || '<div class="sp-empty">No stock found.</div>';
 }
 
 function renderMyStock() {
   if (!SESSION_STORE) return;
-  document.getElementById('sp-body').innerHTML =
-    '<input type="text" class="rs-search" id="ms-search" placeholder="Search ID or full code (e.g. T8028848)…" autocomplete="off" autocapitalize="characters" oninput="filterMyStock(this.value)">'
+  document.getElementById('sp-body').innerHTML = lvHeadHtml()
+    + '<input type="text" class="rs-search" id="ms-search" placeholder="Search ID, colour or size (e.g. T9027)…" autocomplete="off" autocapitalize="characters" oninput="filterMyStock(this.value)">'
     + '<div id="ms-list">' + myStockHtml('') + '</div>';
   ensurePalRef(function() {
     var el = document.getElementById('ms-list'), s = document.getElementById('ms-search');
@@ -2023,493 +2049,185 @@ function filterMyStock(q) {
   document.getElementById('ms-list').innerHTML = myStockHtml(q);
 }
 
-// ── SELL TAB ──────────────────────────────────────────────────────
-// One sale = up to 5 lines. After an unconfirmed sale, tapping Sell again with the
-// same lines reuses the saleId, and the server ignores a saleId it already processed.
-var SELL_MAX = 5;
-var SELL_LINES = [{ code: '', qty: 1 }];
-var PENDING_SALE = null;
+// Id for one Palladium sale: a retry with the same id changes nothing on the server
 function newSaleId() { return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
 
-function sellCodeInfo(code) {
-  var inv = ALL_RETAIL_STOCK && SESSION_STORE && ALL_RETAIL_STOCK[SESSION_STORE.name];
-  if (!inv || !code) return null;
-  var found = null;
-  Object.keys(inv).some(function(pid) {
-    return Object.keys(inv[pid]).some(function(colorKey) {
-      var cn = colorKey.replace(/^Color\s*/i, '');
-      return Object.keys(inv[pid][colorKey]).some(function(size) {
-        if ((pid + cn + size).toUpperCase() !== code) return false;
-        found = { pid: pid, cn: cn, size: size, stock: parseInt(inv[pid][colorKey][size]) || 0 };
-        return true;
-      });
+// ── SHOP STOCK FROM LOYVERSE ─────────────────────────────────────
+// Since 18 Nov 2026 the shops' stock lives only in Loyverse. Bicasso 1 and Bicasso 2 share the
+// store "Burmelin" (one stock number for both); Nana is its own store. /api/shop-stock reads it
+// (kept up to 10 minutes on the server; Refresh reads Loyverse again).
+var LV = {};                 // 'burmelin' | 'nana' -> { sized, totals, sales, updatedAt, since }
+var ON_THE_WAY = {};         // 'pid|colour|size' -> pieces in this shop's orders not yet done
+var SOLD_SHOP = 'all';       // Sold tab filter: 'all' | 'Bicasso 1' | 'Bicasso 2'
+var LV_STORE_LABEL = { burmelin: 'B1 + B2', nana: 'Nana' };
+// True once a store has any size/colour stock in Loyverse. Nana's new items exist there with 0
+// everywhere until its recount is entered, so all zeros means "no sizes yet".
+function lvHasSized(d) {
+  var inv = (d && d.sized) || {};
+  return Object.keys(inv).some(function(p) { return Object.keys(inv[p]).some(function(c) { return Object.keys(inv[p][c]).some(function(z) { return inv[p][c][z]; }); }); });
+}
+function myLvKey() { return SESSION_STORE && SESSION_STORE.name === 'Bicasso Nana' ? 'nana' : 'burmelin'; }
+// Pieces per size the shop should hold: 3 per shop, so 6 for B1 + B2 together (owner, 18 Nov 2026)
+function reorderTarget() { return myLvKey() === 'burmelin' ? 6 : 3; }
+
+function lvFetch(key, fresh) {
+  return fetch('/api/shop-stock?store=' + key + (fresh ? '&fresh=1' : ''), {
+    headers: { 'x-staff-token': (SESSION_STORE && SESSION_STORE.token) || '' }
+  }).then(function(r) {
+    return r.json().catch(function() { return {}; }).then(function(d) {
+      if (r.status === 401 && d.needLogin) { showToast('Your login has expired — please log in again'); appLogout(); throw new Error('login'); }
+      if (!r.ok) throw new Error(d.error || 'Could not read Loyverse');
+      return d;
     });
   });
-  return found;
 }
-
-function renderSellTab() {
-  document.getElementById('sp-body').innerHTML =
-    '<div style="background:#fff;border-radius:12px;padding:12px;box-shadow:0 1px 5px rgba(0,0,0,.07)">'
-    + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">'
-    + '<span style="font-weight:700;color:#111118">New Sale</span>'
-    + '<span style="font-size:.74rem;color:#6D6A65">Product ID from label · Qty</span></div>'
-    + '<div id="sell-lines"></div>'
-    + '<button id="sell-add" onclick="sellAddLine()" style="width:100%;padding:10px;margin-top:4px;background:#fff;border:2px dashed #D6D0C5;border-radius:10px;color:#0054A5;font-weight:700;font-size:.9rem;cursor:pointer"></button>'
-    + '</div>'
-    + '<button id="sell-btn" onclick="doSell()" style="width:100%;padding:14px;margin-top:12px;background:#0054A5;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer"></button>'
-    + '<div id="sell-result" style="margin-top:12px;font-size:.9rem;min-height:20px"></div>'
-    + '<div style="margin-top:14px">'
-    + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">'
-    + '<span style="font-weight:700;color:#111118;font-size:.95rem">🧾 Today\'s Sales</span>'
-    + '<span id="sell-hist-total" style="font-size:.78rem;color:#6D6A65"></span></div>'
-    + '<div id="sell-history">' + loaderHtml('sell', 'Loading today\'s sales…', true) + '</div>'
-    + '</div>';
-  renderSellLines();
-  var first = document.getElementById('sl-code-0'); if (first) first.focus();
-  loadSalesHistory();
-}
-
-function renderSellLines() {
-  var box = document.getElementById('sell-lines'); if (!box) return;
-  box.innerHTML = SELL_LINES.map(function(l, i) {
-    return '<div style="margin-bottom:8px">'
-      + '<div style="display:flex;gap:6px;align-items:center">'
-      + '<span style="width:20px;height:20px;border-radius:50%;background:#111118;color:#fff;font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + (i + 1) + '</span>'
-      + '<input id="sl-code-' + i + '" type="text" value="' + l.code + '" placeholder="e.g. T8028852" autocomplete="off" autocapitalize="characters"'
-      + ' oninput="this.value=this.value.toUpperCase();sellLineInput(' + i + ',\'code\',this.value)"'
-      + ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'sl-qty-' + i + '\').select();}"'
-      + ' style="flex:1;min-width:0;padding:11px 10px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:1rem;letter-spacing:.04em;text-transform:uppercase">'
-      + '<input id="sl-qty-' + i + '" type="number" min="1" value="' + l.qty + '" inputmode="numeric"'
-      + ' oninput="sellLineInput(' + i + ',\'qty\',this.value)"'
-      + ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();sellEnterNext(' + i + ');}"'
-      + ' style="width:58px;padding:11px 6px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:1rem;text-align:center">'
-      + (SELL_LINES.length > 1
-          ? '<button onclick="sellRemoveLine(' + i + ')" aria-label="Remove item" style="width:32px;height:32px;border:none;background:#EFEBE4;border-radius:8px;color:#6D6A65;font-size:1rem;cursor:pointer;flex-shrink:0">✕</button>'
-          : '')
-      + '</div>'
-      + '<div id="sl-info-' + i + '" style="font-size:.74rem;margin:3px 0 0 26px;min-height:14px"></div>'
-      + '</div>';
-  }).join('');
-  SELL_LINES.forEach(function(l, i) { sellUpdateInfo(i); });
-  sellUpdateButtons();
-}
-
-function sellLineInput(i, field, val) {
-  if (!SELL_LINES[i]) return;
-  SELL_LINES[i][field] = field === 'qty' ? (parseInt(val) || 0) : String(val).trim();
-  sellUpdateInfo(i);
-  sellUpdateButtons();
-}
-
-function sellUpdateInfo(i) {
-  var el = document.getElementById('sl-info-' + i), l = SELL_LINES[i];
-  if (!el || !l) return;
-  if (!l.code) { el.innerHTML = ''; return; }
-  var info = sellCodeInfo(l.code);
-  if (!info) { el.innerHTML = l.code.length >= 6 ? '<span style="color:#8A6A2E">Not found in your stock</span>' : ''; return; }
-  var enough = info.stock >= (l.qty || 0);
-  el.innerHTML = '<span style="color:#4A4844">' + info.pid + ' · Color ' + info.cn + ' · Size ' + info.size + '</span>'
-    + ' <span style="color:' + (enough ? '#1D6E46' : '#A8261D') + ';font-weight:700">· ' + info.stock + ' in stock</span>';
-}
-
-function sellUpdateButtons() {
-  var add = document.getElementById('sell-add'), btn = document.getElementById('sell-btn');
-  if (add) {
-    var full = SELL_LINES.length >= SELL_MAX;
-    add.disabled = full; add.style.opacity = full ? '.45' : '1';
-    add.textContent = full ? 'Maximum ' + SELL_MAX + ' items per sale' : '+ Add item (' + SELL_LINES.length + '/' + SELL_MAX + ')';
+function applyLv(key, d) {
+  LV[key] = d;
+  if (key === myLvKey() && SESSION_STORE) {
+    ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {};
+    ALL_RETAIL_STOCK[SESSION_STORE.name] = d.sized || {};
   }
-  if (btn && !btn.disabled) {
-    var lines = SELL_LINES.filter(function(l) { return l.code; });
-    var pcs = lines.reduce(function(s, l) { return s + (l.qty || 0); }, 0);
-    btn.textContent = lines.length ? 'Sell ' + lines.length + ' item' + (lines.length !== 1 ? 's' : '') + ' · ' + pcs + ' pc' + (pcs !== 1 ? 's' : '') : 'Sell';
-  }
+  CS_ROWS = null;
+}
+function lvLoad(key, fresh, onData, onFail) {
+  var cached = !fresh && (LV[key] || cacheGet('lv_' + key));
+  if (cached) { applyLv(key, cached); onData(true); }
+  lvFetch(key, fresh).then(function(d) { applyLv(key, d); cacheSet('lv_' + key, d); onData(false); })
+    .catch(function(e) { if (e.message !== 'login' && onFail) onFail(e, !!cached); });
+}
+function lvUpdatedText(d) {
+  if (!d || !d.updatedAt) return '';
+  var t = new Date(d.updatedAt), now = new Date();
+  var same = t.toDateString() === now.toDateString();
+  return 'Updated ' + (same ? '' : fmtDay(t) + ' ') + thaiTime(t) + (d.stale ? ' (Loyverse not answering)' : '');
+}
+function lvRefresh(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Reading…'; }
+  loadStoreStock(true);
+}
+function lvHeadHtml() {
+  var key = myLvKey(), d = LV[key];
+  return '<div class="lv-head"><div><b>' + (key === 'burmelin' ? 'Bicasso 1 + Bicasso 2 together' : 'Bicasso Nana') + '</b>'
+    + '<span>From Loyverse · ' + (lvUpdatedText(d) || 'loading…') + '</span></div>'
+    + '<button class="lv-refresh" onclick="lvRefresh(this)">Refresh</button></div>';
 }
 
-function sellAddLine() {
-  if (SELL_LINES.length >= SELL_MAX) return;
-  SELL_LINES.push({ code: '', qty: 1 });
-  renderSellLines();
-  document.getElementById('sl-code-' + (SELL_LINES.length - 1)).focus();
+function totalsHtml(list, q) {
+  q = String(q || '').trim().toUpperCase().replace(/\s+/g, '');
+  var rows = (list || []).filter(function(l) { return !q || (l.pid + l.name).toUpperCase().replace(/\s+/g, '').indexOf(q) !== -1; });
+  if (!rows.length) return '';
+  return '<div class="sg-section">Total only (no sizes in Loyverse) <span>' + rows.length + '</span></div>'
+    + '<div class="lv-totals">' + rows.map(function(l) {
+      return '<div class="lv-total-row"><span>' + lvEsc(l.name) + (l.kind === 'old' ? ' <i>old stock</i>' : '') + '</span><b>' + l.qty + ' pcs</b></div>';
+    }).join('') + '</div>';
 }
 
-function sellRemoveLine(i) {
-  SELL_LINES.splice(i, 1);
-  if (!SELL_LINES.length) SELL_LINES.push({ code: '', qty: 1 });
-  renderSellLines();
-}
-
-function sellEnterNext(i) {
-  if (i + 1 < SELL_LINES.length) { document.getElementById('sl-code-' + (i + 1)).focus(); return; }
-  if (SELL_LINES.length < SELL_MAX && SELL_LINES[i].code) { sellAddLine(); return; }
-  doSell();
-}
-
-function loadSalesHistory() {
-  if (!SESSION_STORE) return;
-  google.script.run
-    .withSuccessHandler(function(r) {
-      var el = document.getElementById('sell-history'); if (!el) return;
-      if (!r || !r.success) { el.innerHTML = '<div class="sp-empty">⚠ Could not load today\'s sales.</div>'; return; }
-      renderSalesHistory(r.sales || []);
-    })
-    .withFailureHandler(function() {
-      var el = document.getElementById('sell-history'); if (!el) return;
-      el.innerHTML = '<div class="sp-empty" style="cursor:pointer" onclick="loadSalesHistory()">⚠ Could not load today\'s sales — tap to retry</div>';
-    })
-    .getSalesToday(SESSION_STORE.name);
-}
-
-function renderSalesHistory(sales) {
-  var el = document.getElementById('sell-history'), totEl = document.getElementById('sell-hist-total');
-  if (!el) return;
-  // Rows arrive newest first; group lines of the same sale together
-  var groups = [], byId = {};
-  sales.forEach(function(s, i) {
-    var key = s.saleId || ('row' + i);
-    if (!byId[key]) { byId[key] = { time: s.time, lines: [] }; groups.push(byId[key]); }
-    byId[key].lines.unshift(s);
+// ── SOLD (LAST 7 DAYS) ───────────────────────────────────────────
+function soldHtml(q) {
+  var key = myLvKey(), d = LV[key];
+  if (!d) return loaderHtml('sell', 'Reading sales from Loyverse…');
+  q = String(q || '').trim().toUpperCase().replace(/\s+/g, '');
+  var lines = (d.sales || []).filter(function(l) {
+    if (SOLD_SHOP !== 'all' && l.shop !== SOLD_SHOP) return false;
+    return !q || (l.pid + l.col + l.sz + l.name).toUpperCase().replace(/\s+/g, '').indexOf(q) !== -1;
   });
-  var pcs = sales.reduce(function(s, x) { return s + x.qty; }, 0);
-  if (totEl) totEl.textContent = groups.length ? groups.length + ' sale' + (groups.length !== 1 ? 's' : '') + ' · ' + pcs + ' pcs' : '';
-  if (!groups.length) {
-    el.innerHTML = '<div style="text-align:center;color:#9C978F;padding:16px;font-size:.85rem;background:#fff;border-radius:10px">No sales yet today</div>';
-    return;
-  }
-  el.innerHTML = groups.map(function(g) {
-    var gPcs = g.lines.reduce(function(s, x) { return s + x.qty; }, 0);
-    return '<div style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:8px">'
-      + '<div style="display:flex;justify-content:space-between;padding:7px 12px;background:#FAF8F5;border-bottom:1px solid #ECE8E1;font-size:.76rem;color:#5F5C57">'
-      + '<span>🕒 ' + g.time + '</span><span><strong style="color:#111118">' + g.lines.length + ' item' + (g.lines.length !== 1 ? 's' : '') + ' · ' + gPcs + ' pcs</strong></span></div>'
-      + g.lines.map(function(s) {
-        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #F0ECE6">'
-          + '<div style="flex:1;min-width:0">'
-          + '<div style="font-weight:700;color:#111118;letter-spacing:.04em;font-size:.88rem">' + s.productId
-          + ' <span style="color:#AEA9A1;font-weight:400;font-size:.74rem">' + s.code + '</span></div>'
-          + '<div style="font-size:.75rem;color:#5F5C57">Color ' + s.color + ' · Size ' + s.size + '</div>'
-          + '</div>'
-          + '<div style="text-align:right">'
-          + '<div style="font-weight:700;color:#B83227;font-size:.92rem">−' + s.qty + '</div>'
-          + '<div style="font-size:.7rem;color:#86827B">' + s.stockAfter + ' left</div>'
-          + '</div></div>';
-      }).join('')
-      + '</div>';
-  }).join('');
+  if (!lines.length) return '<div class="sp-empty">' + (q ? 'Nothing sold matching <strong>' + lvEsc(q) + '</strong>' : 'No sales in the last 7 days.') + '</div>';
+  var byDay = {}, days = [], total = 0;
+  lines.forEach(function(l) { if (!byDay[l.day]) { byDay[l.day] = []; days.push(l.day); } byDay[l.day].push(l); total += l.qty; });
+  var shopShort = { 'Bicasso 1': 'B1', 'Bicasso 2': 'B2', 'Bicasso Nana': 'Nana' };
+  return '<div class="sold-sum">' + total + ' pcs sold · ' + lines.length + ' line' + (lines.length !== 1 ? 's' : '') + '</div>'
+    + days.map(function(day) {
+      var list = byDay[day], pcs = list.reduce(function(n, l) { return n + l.qty; }, 0);
+      return '<div class="sold-day"><span>' + lvDay(day) + '</span><span>' + pcs + ' pcs</span></div>'
+        + list.map(function(l) {
+          var what = l.kind === 'sized'
+            ? '<b>' + lvEsc(l.pid) + '</b> · Colour <b>' + lvEsc(l.col) + '</b> · Size <b>' + lvEsc(l.sz) + '</b>'
+            : '<b>' + lvEsc(l.name) + '</b>' + (l.variant ? ' · ' + lvEsc(l.variant) : '');
+          return '<div class="sold-row"><span class="sold-time">' + l.time + '</span><span class="sold-what">' + what + '</span>'
+            + '<span class="sold-qty">' + (l.qty < 0 ? 'Refund ' + l.qty : '×' + l.qty) + '</span>'
+            + (key === 'burmelin' ? '<span class="sold-shop">' + (shopShort[l.shop] || '') + '</span>' : '') + '</div>';
+        }).join('');
+    }).join('');
 }
-
-function doSell() {
-  var resEl = document.getElementById('sell-result');
-  var btn   = document.getElementById('sell-btn');
-  if (btn.disabled) return;
-  var lines = SELL_LINES.filter(function(l) { return l.code; })
-    .map(function(l) { return { rowId: l.code.toUpperCase(), qty: parseInt(l.qty) || 0 }; });
-  if (!lines.length) { resEl.innerHTML = '<span style="color:#A8261D">⚠ Enter at least one product ID.</span>'; return; }
-  var bad = lines.filter(function(l) { return l.qty <= 0; })[0];
-  if (bad) { resEl.innerHTML = '<span style="color:#A8261D">⚠ ' + bad.rowId + ': quantity must be at least 1.</span>'; return; }
-
-  var key = JSON.stringify(lines);
-  if (!PENDING_SALE || PENDING_SALE.key !== key) PENDING_SALE = { saleId: newSaleId(), key: key, lines: lines };
-  var sale = PENDING_SALE;
-  btn.disabled = true; btn.textContent = '⏳ Processing…'; btn.style.opacity = '.7';
-  resEl.innerHTML = '<div style="text-align:center;color:#6D6A65">Processing…</div>';
-  function resetBtn() {
-    var b = document.getElementById('sell-btn');
-    if (b) { b.disabled = false; b.style.opacity = '1'; sellUpdateButtons(); }
-  }
-  google.script.run
-    .withSuccessHandler(function(r) {
-      var el = document.getElementById('sell-result');
-      if (r && r.success) {
-        PENDING_SALE = null;
-        var inv = ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name];
-        (r.lines || []).forEach(function(line) {
-          var info = sellCodeInfo(line.code);
-          if (info && line.newQty !== '') inv[info.pid]['Color ' + info.cn][info.size] = parseInt(line.newQty) || 0;
-        });
-        var pcs = (r.lines || []).reduce(function(s, x) { return s + x.qty; }, 0);
-        SELL_LINES = [{ code: '', qty: 1 }];
-        renderSellLines();
-        resetBtn();
-        if (el) el.innerHTML = '<div style="background:' + (r.alreadyDone ? '#EEF4EF' : '#EEF4EF') + ';border:1px solid #C9DFD0;border-radius:10px;padding:10px 12px">'
-          + '<div style="color:#1D6E46;font-weight:700;margin-bottom:4px">'
-          + (r.alreadyDone ? '✓ This sale was already recorded — not deducted again' : '✓ Sold ' + r.lines.length + ' item' + (r.lines.length !== 1 ? 's' : '') + ' · ' + pcs + ' pcs')
-          + '</div>'
-          + (r.lines || []).map(function(x) {
-            return '<div style="display:flex;justify-content:space-between;font-size:.8rem;color:#4A4844;letter-spacing:.04em"><span>' + x.code + ' −' + x.qty + '</span><span>' + x.newQty + ' left</span></div>';
-          }).join('')
-          + '</div>';
-        var first = document.getElementById('sl-code-0'); if (first) first.focus();
-      } else {
-        PENDING_SALE = null;
-        resetBtn();
-        if (el) el.innerHTML = '<div style="color:#A8261D;text-align:center">❌ ' + ((r && r.error) || 'Error') + '<br><span style="color:#6D6A65;font-size:.8rem">Nothing was deducted.</span></div>';
-      }
-      if (r && r.sales) renderSalesHistory(r.sales); else loadSalesHistory();
-    })
-    .withFailureHandler(function() {
-      resetBtn();
-      var el = document.getElementById('sell-result'); if (!el) return;
-      el.innerHTML = '<div style="text-align:center"><span style="color:#8A6A2E;font-weight:700">⚠ Connection problem — sale not confirmed.</span>'
-        + '<br><span style="color:#4A4844;font-size:.83rem">Check Today\'s Sales below. If it\'s not there, tap Sell again — it will never be deducted twice.</span></div>';
-      loadSalesHistory();
-    })
-    .sellRetailStockBatch(SESSION_STORE.name, SESSION_STORE.pass, sale.lines, sale.saleId);
+function renderSoldTab() {
+  var key = myLvKey();
+  var chips = key === 'burmelin'
+    ? '<div class="sold-filter">' + [['all', 'Both shops'], ['Bicasso 1', 'B1'], ['Bicasso 2', 'B2']].map(function(o) {
+        return '<button class="' + (SOLD_SHOP === o[0] ? 'on' : '') + '" onclick="soldPick(\'' + o[0] + '\')">' + o[1] + '</button>';
+      }).join('') + '</div>'
+    : '';
+  document.getElementById('sp-body').innerHTML = lvHeadHtml() + chips
+    + '<input type="text" class="rs-search" id="sold-search" placeholder="Search ID, colour or size…" autocomplete="off" autocapitalize="characters" oninput="filterSold(this.value)">'
+    + '<div id="sold-list">' + soldHtml('') + '</div>';
 }
-
-// ── TRANSFER TAB ──────────────────────────────────────────────────
-function renderTransferTab() {
-  var myStore = SESSION_STORE ? SESSION_STORE.name : '';
-  var RETAIL_STORES = ['Bicasso 1','Bicasso 2','Bicasso Nana'];
-  var toOpts = RETAIL_STORES.filter(function(s){ return s !== myStore; })
-    .map(function(s){ return '<option value="' + s + '">' + s + '</option>'; }).join('');
-  document.getElementById('sp-body').innerHTML = '<div class="card">'
-    + '<label>From store</label>'
-    + '<div style="width:100%;padding:11px 14px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:.95rem;margin-bottom:12px;background:#FAF8F5;color:#111118;font-weight:700">' + myStore + '</div>'
-    + '<label>To store</label>'
-    + '<select id="tr-to" style="width:100%;padding:11px 12px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:.95rem;margin-bottom:12px">' + toOpts + '</select>'
-    + '<label>Product ID</label>'
-    + '<input id="tr-id" type="text" placeholder="e.g. T90274352" autocomplete="off" autocapitalize="characters" oninput="this.value=this.value.toUpperCase();trUpdateInfo()"'
-    + ' style="width:100%;padding:12px 14px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:1rem;letter-spacing:.04em;margin-bottom:4px;text-transform:uppercase">'
-    + '<div id="tr-info" style="font-size:.78rem;min-height:18px;margin-bottom:10px"></div>'
-    + '<label>Quantity</label>'
-    + '<input id="tr-qty" type="number" min="1" value="1" style="width:100%;padding:12px 14px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:1rem;margin-bottom:16px">'
-    + '<button id="tr-btn" onclick="doTransfer()" style="width:100%;padding:14px;background:#0054A5;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer">Transfer Stock</button>'
-    + '<div id="tr-result" style="margin-top:14px;text-align:center;font-size:.92rem;min-height:24px"></div></div>';
-}
-
-function trUpdateInfo() {
-  var el = document.getElementById('tr-info'); if (!el) return;
-  var code = (document.getElementById('tr-id').value || '').replace(/\s+/g, '').toUpperCase();
-  if (!code) { el.innerHTML = ''; return; }
-  var info = sellCodeInfo(code);
-  if (!info) { el.innerHTML = code.length >= 6 ? '<span style="color:#8A6A2E">Not found in your stock</span>' : ''; return; }
-  el.innerHTML = '<span style="color:#4A4844">' + info.pid + ' · Color ' + info.cn + ' · Size ' + info.size + '</span>'
-    + ' <span style="color:' + (info.stock > 0 ? '#1D6E46' : '#A8261D') + ';font-weight:700">· you have ' + info.stock + '</span>';
-}
-
-// Kept after an unconfirmed transfer: tapping Transfer again for the same item reuses the
-// transferId, and the server ignores a transferId it has already processed.
-var PENDING_TRANSFER = null;
-
-function doTransfer() {
-  var fromStore = SESSION_STORE ? SESSION_STORE.name : '';
-  var toStore   = document.getElementById('tr-to').value;
-  var rowId     = (document.getElementById('tr-id').value || '').replace(/\s+/g, '').toUpperCase();
-  var qty       = parseInt(document.getElementById('tr-qty').value) || 0;
-  var resEl     = document.getElementById('tr-result');
-  var btn       = document.getElementById('tr-btn');
-  if (btn.disabled) return;
-  if (fromStore === toStore) { resEl.innerHTML = '<span style="color:#A8261D">⚠ Source and destination must differ.</span>'; return; }
-  if (!rowId) { resEl.innerHTML = '<span style="color:#A8261D">⚠ Enter a product ID.</span>'; return; }
-  if (qty <= 0) { resEl.innerHTML = '<span style="color:#A8261D">⚠ Quantity must be at least 1.</span>'; return; }
-  var key = [toStore, rowId, qty].join('|');
-  if (!PENDING_TRANSFER || PENDING_TRANSFER.key !== key) PENDING_TRANSFER = { id: newSaleId(), key: key };
-  var tid = PENDING_TRANSFER.id;
-  btn.disabled = true; btn.style.opacity = '.7'; btn.textContent = '⏳ Transferring…';
-  resEl.innerHTML = '<span style="color:#6D6A65">Transferring…</span>';
-  function resetBtn() { var b = document.getElementById('tr-btn'); if (b) { b.disabled = false; b.style.opacity = '1'; b.textContent = 'Transfer Stock'; } }
-  google.script.run
-    .withSuccessHandler(function(r) {
-      resetBtn();
-      var el = document.getElementById('tr-result'); if (!el) return;
-      if (r.success) {
-        PENDING_TRANSFER = null;
-        // Keep the on-screen stock in step, including a row the receiving store didn't have yet
-        if (ALL_RETAIL_STOCK && r.productId) {
-          var ck = 'Color ' + r.color;
-          [[fromStore, r.fromNewQty], [toStore, r.toNewQty]].forEach(function(pair) {
-            var inv = ALL_RETAIL_STOCK[pair[0]]; if (!inv) return;
-            if (!inv[r.productId]) inv[r.productId] = {};
-            if (!inv[r.productId][ck]) inv[r.productId][ck] = {};
-            inv[r.productId][ck][r.size] = pair[1];
-          });
-          CS_ROWS = null;
-        }
-        el.innerHTML = '<span style="color:#1D6E46;font-weight:700">✓ ' + (r.alreadyDone ? 'Already transferred — not moved again' : 'Transferred ' + qty + ' from ' + fromStore + ' to ' + toStore) + '</span>'
-          + '<br><span style="color:#4A4844;font-size:.85rem">' + fromStore + ': ' + r.fromNewQty + ' left &nbsp;|&nbsp; ' + toStore + ': ' + r.toNewQty + ' now</span>';
-        document.getElementById('tr-id').value = '';
-        document.getElementById('tr-qty').value = '1';
-      } else {
-        PENDING_TRANSFER = null;
-        el.innerHTML = '<span style="color:#A8261D">❌ ' + (r.error || 'Error') + '</span><br><span style="color:#6D6A65;font-size:.8rem">Nothing was moved.</span>';
-      }
-    })
-    .withFailureHandler(function() {
-      resetBtn();
-      var el = document.getElementById('tr-result'); if (!el) return;
-      el.innerHTML = '<span style="color:#8A6A2E;font-weight:700">⚠ Connection problem — transfer not confirmed.</span>'
-        + '<br><span style="color:#4A4844;font-size:.83rem">Tap Transfer again — it will never move the stock twice.</span>';
-    })
-    .transferStock(fromStore, toStore, SESSION_STORE.pass, rowId, qty, tid);
-}
-
-// ── ADD STOCK TAB ─────────────────────────────────────────────────
-var AS_ROWS = []; // pending size/qty rows before save
-
-function renderAddStockTab() {
-  AS_ROWS = [];
-  document.getElementById('sp-body').innerHTML =
-    '<div style="font-size:.82rem;color:#7A5A1F;margin-bottom:14px;padding:10px 12px;background:#FBF6EC;border:1px solid #EAD9B5;border-radius:8px"><strong>First-time count only.</strong> Each size is set to the number you type. Refills from Palladium are added automatically when Palladium sends your order — don\'t enter them here.</div>'
-    + '<div class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'
-    + '<div><label>Product ID</label>'
-    + '<input id="as-pid" type="text" placeholder="T9027" autocapitalize="characters" oninput="this.value=this.value.toUpperCase()"'
-    + ' style="width:100%;padding:11px 12px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:.95rem;letter-spacing:.04em;text-transform:uppercase"></div>'
-    + '<div><label>Color #</label>'
-    + '<input id="as-color" type="text" placeholder="43"'
-    + ' style="width:100%;padding:11px 12px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:.95rem;letter-spacing:.04em"></div>'
-    + '</div>'
-    + '<label>Sizes</label>'
-    + '<div id="as-rows"></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:14px;align-items:end">'
-    + '<div><label>Size</label>'
-    + '<input id="as-size" type="text" placeholder="M" style="width:100%;padding:11px 12px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:.95rem;letter-spacing:.04em"></div>'
-    + '<div><label>Qty</label>'
-    + '<input id="as-qty" type="number" min="0" value="1" style="width:100%;padding:11px 12px;border:1.5px solid #E4DFD6;border-radius:9px;font-size:.95rem"></div>'
-    + '<button onclick="asAddRow()" style="padding:11px 14px;background:#E3ECF6;color:#003D7A;border:none;border-radius:9px;font-size:1.2rem;font-weight:700;cursor:pointer;height:44px;margin-bottom:1px">＋</button>'
-    + '</div>'
-    + '<button onclick="doAddStock()" style="width:100%;padding:14px;background:#0054A5;color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer">Save All</button>'
-    + '<div id="as-result" style="margin-top:12px;font-size:.88rem;min-height:20px"></div></div>';
-  document.getElementById('as-pid').focus();
-}
-
-function asAddRow() {
-  var size = (document.getElementById('as-size').value || '').trim();
-  var qty  = parseInt(document.getElementById('as-qty').value);
-  if (!size) { document.getElementById('as-size').focus(); return; }
-  if (isNaN(qty) || qty < 0) qty = 0;
-  AS_ROWS.push({ size: size, qty: qty });
-  asRenderRows();
-  document.getElementById('as-size').value = '';
-  document.getElementById('as-qty').value = '1';
-  document.getElementById('as-size').focus();
-}
-
-function asRemoveRow(i) {
-  AS_ROWS.splice(i, 1);
-  asRenderRows();
-}
-
-function asRenderRows() {
-  var el = document.getElementById('as-rows');
-  if (!AS_ROWS.length) { el.innerHTML = ''; return; }
-  el.innerHTML = '<div style="background:#FAF8F5;border-radius:10px;overflow:hidden;margin-bottom:10px;border:1px solid #E4DFD6">'
-    + AS_ROWS.map(function(r, i) {
-      return '<div style="display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #ECE8E1;gap:10px">'
-        + '<span style="flex:1;letter-spacing:.04em;font-weight:700;color:#111118">Size ' + r.size + '</span>'
-        + '<span style="background:#E3ECF6;color:#003D7A;padding:2px 10px;border-radius:10px;font-size:.82rem;font-weight:700">' + r.qty + ' pcs</span>'
-        + '<button onclick="asRemoveRow(' + i + ')" style="background:none;border:none;color:#C2453A;cursor:pointer;font-size:.95rem;padding:2px 5px">✕</button>'
-        + '</div>';
-    }).join('')
-    + '</div>';
-}
-
-function doAddStock() {
-  var pid   = (document.getElementById('as-pid').value || '').replace(/\s+/g, '').toUpperCase();
-  var color = (document.getElementById('as-color').value || '').trim();
-  var resEl = document.getElementById('as-result');
-  if (!pid)        { resEl.innerHTML = '<span style="color:#A8261D">⚠ Enter a product ID.</span>'; return; }
-  if (!color)      { resEl.innerHTML = '<span style="color:#A8261D">⚠ Enter a color number.</span>'; return; }
-  // A typo here would create a brand-new product in the store's sheet
-  var ref = palRefInv();
-  if (ref && !ref[pid] && !confirm('"' + pid + '" is not one of Palladium\'s products.\nCheck the label. Save anyway?')) return;
-  // Also pick up any size/qty typed but not yet added
-  var pendingSize = (document.getElementById('as-size').value || '').trim();
-  var pendingQty  = parseInt(document.getElementById('as-qty').value);
-  if (pendingSize) { AS_ROWS.push({ size: pendingSize, qty: isNaN(pendingQty) ? 0 : pendingQty }); asRenderRows(); document.getElementById('as-size').value=''; }
-  if (!AS_ROWS.length) { resEl.innerHTML = '<span style="color:#A8261D">⚠ Add at least one size.</span>'; return; }
-
-  var rows = AS_ROWS.slice();
-  // Add Stock replaces the count, so warn before overwriting sizes that already have stock
-  var myInv = ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name];
-  var existing = myInv && myInv[pid] && myInv[pid]['Color ' + color];
-  var counted = rows.filter(function(r) { return existing && (parseInt(existing[r.size]) || 0) > 0; });
-  if (counted.length && !confirm('These sizes already have stock:\n'
-      + counted.map(function(r) { return 'Size ' + r.size + ': ' + existing[r.size] + ' → ' + r.qty; }).join('\n')
-      + '\n\nThis replaces the count (refills are added automatically by Palladium). Replace?')) {
-    resEl.innerHTML = '<span style="color:#6D6A65">Not saved.</span>';
-    return;
-  }
-  resEl.innerHTML = '<span style="color:#6D6A65">Saving ' + rows.length + ' size' + (rows.length>1?'s':'') + '…</span>';
-  var items = rows.map(function(r){ return { productId: pid, category: '', colorNum: color, size: r.size, qty: r.qty }; });
-  google.script.run
-    .withSuccessHandler(function(res) {
-      if (res.success) {
-        var colorKey = 'Color ' + color;
-        if (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name]) {
-          var inv = ALL_RETAIL_STOCK[SESSION_STORE.name];
-          if (!inv[pid]) inv[pid] = {};
-          if (!inv[pid][colorKey]) inv[pid][colorKey] = {};
-          rows.forEach(function(r){ inv[pid][colorKey][r.size] = r.qty; });
-        }
-        resEl.innerHTML = '<span style="color:#1D6E46;font-weight:700">✅ Saved ' + rows.length + ' size' + (rows.length>1?'s':'') + ' for ' + pid + ' / Color ' + color + '</span>';
-        AS_ROWS = [];
-        document.getElementById('as-rows').innerHTML = '';
-        document.getElementById('as-pid').value = '';
-        document.getElementById('as-color').value = '';
-        document.getElementById('as-pid').focus();
-      } else {
-        resEl.innerHTML = '<span style="color:#A8261D">❌ ' + (res.error||'Error') + '</span>';
-      }
-    })
-    .withFailureHandler(function() {
-      resEl.innerHTML = '<span style="color:#A8261D">❌ Connection error — please try again.</span>';
-      showToast('Connection error — tap Retry', function(){ AS_ROWS = rows; doAddStock(); });
-    })
-    .addRetailStockItems(SESSION_STORE.name, SESSION_STORE.pass, items);
-}
+function soldPick(s) { SOLD_SHOP = s; renderSoldTab(); }
+function filterSold(q) { var el = document.getElementById('sold-list'); if (el) el.innerHTML = soldHtml(q); }
 
 // ── OTHER STORES ──────────────────────────────────────────────────
 // Build a flat index of all rows across all stores for fast searching
 var CS_ROWS = null; // [{ pid, cn, size, stores:{storeName:qty} }]
 
+// Columns of the All Stores search (shop logins): the two Loyverse stores and Palladium's sheet
+var CS_COLS = [{ key: 'burmelin', label: 'B1+B2' }, { key: 'nana', label: 'Nana' }, { key: 'pal', label: 'Pal' }];
+function csInv(key) { return key === 'pal' ? palRefInv() : (lvHasSized(LV[key]) ? LV[key].sized : null); }
 function buildCsRows() {
   CS_ROWS = [];
   var index = {}; // key = pid+'|'+cn+'|'+size
-  ALL_STORES.forEach(function(s) {
-    var inv = ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s];
-    if (!inv) return;
-    Object.keys(inv).forEach(function(pid) {
+  function put(col, pid, cn, size, qty) {
+    var key = pid + '|' + cn + '|' + size;
+    if (!index[key]) { index[key] = { pid:pid, cn:cn, size:size, stores:{} }; CS_ROWS.push(index[key]); }
+    index[key].stores[col] = (index[key].stores[col] || 0) + (parseInt(qty) || 0);
+  }
+  CS_COLS.forEach(function(c) {
+    var inv = csInv(c.key);
+    Object.keys(inv || {}).forEach(function(pid) {
       Object.keys(inv[pid]).forEach(function(colorKey) {
         var cn = colorKey.replace(/^Color\s*/i, '');
-        Object.keys(inv[pid][colorKey]).forEach(function(size) {
-          var key = pid + '|' + cn + '|' + size;
-          if (!index[key]) { index[key] = { pid:pid, cn:cn, size:size, stores:{} }; CS_ROWS.push(index[key]); }
-          index[key].stores[s] = parseInt(inv[pid][colorKey][size]) || 0;
-        });
+        Object.keys(inv[pid][colorKey]).forEach(function(size) { put(c.key, pid, cn, size, inv[pid][colorKey][size]); });
       });
     });
+    // Loyverse items without sizes: one "Total" line
+    ((c.key !== 'pal' && LV[c.key] && LV[c.key].totals) || []).forEach(function(l) { put(c.key, String(l.pid).toUpperCase(), 'Total', '–', l.qty); });
   });
 }
 
-function renderOtherStores() {
+function renderOtherStores(fresh) {
   var el = document.getElementById('stores-content');
   if (!el) return;
-  var allLoaded = ALL_STORES.every(function(s){ return ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s]; });
-  if (!allLoaded) {
-    el.innerHTML = loaderHtml('search', 'Searching all stores…');
-    loadAllRetail(function() {
-      CS_ROWS = null;
-      if (CURRENT_PANEL !== 'stores') return;
-      var inp = document.getElementById('cs-inp');
-      if (inp) { buildCsRows(); csSearchFlat(inp.value); }
-      else if (ALL_STORES.every(function(s){ return ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s]; })) renderOtherStores();
-    }, function() {
-      el.innerHTML = '<div class="sp-empty">⚠ Could not load store data.</div>';
-      showToast('Connection error — tap Retry', function(){ ALL_RETAIL_STOCK=null; CS_ROWS=null; renderOtherStores(); });
-    });
-    return;
+  var pending = 0, failed = '';
+  function step() {
+    if (--pending > 0) return;
+    CS_ROWS = null;
+    if (CURRENT_PANEL !== 'stores') return;
+    if (!LV.burmelin && !LV.nana) { el.innerHTML = '<div class="sp-empty">⚠ Could not read Loyverse. ' + lvEsc(failed) + '</div>'; return; }
+    var inp = document.getElementById('cs-inp');
+    if (inp) { buildCsRows(); csSearchFlat(inp.value); } else drawOtherStores();
   }
+  ['burmelin', 'nana'].forEach(function(k) {
+    if (LV[k] && !fresh) return;
+    pending++;
+    var first = true;
+    lvLoad(k, fresh, function() { if (first) { first = false; step(); } else if (CURRENT_PANEL === 'stores') { CS_ROWS = null; var i = document.getElementById('cs-inp'); if (i) { buildCsRows(); csSearchFlat(i.value); } } },
+      function(e) { failed = e.message; if (first) { first = false; step(); } });
+  });
+  if (!palRefInv()) { pending++; ensurePalRef(step); }
+  if (!pending) drawOtherStores();
+  else if (!document.getElementById('cs-inp')) el.innerHTML = loaderHtml('search', 'Reading all stores…');
+}
+function drawOtherStores() {
+  var el = document.getElementById('stores-content');
+  if (!el) return;
   if (!CS_ROWS) buildCsRows();
-  var STORE_LABELS = ['B1','B2','BN','Pal'];
+  var mine = myLvKey();
   el.innerHTML =
     '<div class="card" style="padding:14px 14px 12px;margin-bottom:12px">'
     + '<label>Search stock across all stores</label>'
     + '<input type="text" id="cs-inp" class="cs-search" placeholder="ID, color, size or full code…" autocomplete="off" autocapitalize="characters"'
     + ' oninput="csSearchFlat(this.value)">'
     + '<div style="display:flex;gap:8px;margin-top:8px">'
-    + STORE_LABELS.map(function(l,i){ var me = SESSION_STORE && SESSION_STORE.name === ALL_STORES[i]; return '<div style="flex:1;text-align:center;background:' + (me ? '#0054A5' : '#EFEBE4') + ';border-radius:6px;padding:5px 2px;font-size:.66rem;font-weight:700;letter-spacing:.12em;color:' + (me ? '#fff' : '#6D6A65') + ';text-transform:uppercase">' + (me ? 'You' : l) + '</div>'; }).join('')
+    + CS_COLS.map(function(c){ var me = c.key === mine; return '<div style="flex:1;text-align:center;background:' + (me ? '#0054A5' : '#EFEBE4') + ';border-radius:6px;padding:5px 2px;font-size:.66rem;font-weight:700;letter-spacing:.12em;color:' + (me ? '#fff' : '#6D6A65') + ';text-transform:uppercase">' + (me ? 'You · ' : '') + c.label + '</div>'; }).join('')
     + '</div>'
+    + '<div style="font-size:.7rem;color:#86827B;margin-top:6px">B1+B2 and Nana from Loyverse · Pal from the Palladium sheet</div>'
     + '</div>'
     + '<div id="cs-result"></div>';
   csSearchFlat('');
@@ -2544,8 +2262,9 @@ function csSearchFlat(q) {
     byPid[r.pid].push(r);
   });
 
-  var STORE_KEYS = ALL_STORES; // ['Bicasso 1','Bicasso 2','Bicasso Nana','Palladium']
-  var STORE_SHORT = ['B1','B2','BN','Pal'];
+  var STORE_KEYS = CS_COLS.map(function(c) { return c.key; });
+  var STORE_SHORT = CS_COLS.map(function(c) { return c.label; });
+  var mineKey = myLvKey();
 
   var html = '';
   pidOrder.forEach(function(pid) {
@@ -2559,7 +2278,7 @@ function csSearchFlat(q) {
     html += '<thead><tr style="background:#FAF8F5">'
       + '<th style="padding:7px 10px;text-align:left;font-size:.7rem;text-transform:uppercase;color:#6D6A65;font-weight:700">Color</th>'
       + '<th style="padding:7px 8px;text-align:center;font-size:.7rem;text-transform:uppercase;color:#6D6A65;font-weight:700">Size</th>'
-      + STORE_SHORT.map(function(s, k){ var me = SESSION_STORE && SESSION_STORE.name === STORE_KEYS[k]; return '<th style="padding:7px 6px;text-align:center;font-size:.7rem;text-transform:uppercase;font-weight:700;'+(me?'color:#0054A5;background:#EDF2F8':'color:#6D6A65')+'">'+(me?'You':s)+'</th>'; }).join('')
+      + STORE_SHORT.map(function(s, k){ var me = mineKey === STORE_KEYS[k]; return '<th style="padding:7px 6px;text-align:center;font-size:.7rem;text-transform:uppercase;font-weight:700;'+(me?'color:#0054A5;background:#EDF2F8':'color:#6D6A65')+'">'+(me?'You':s)+'</th>'; }).join('')
       + '</tr></thead><tbody>';
     rows.forEach(function(r, i) {
       var border = i < rows.length-1 ? 'border-bottom:1px solid #ECE8E1' : '';
@@ -2568,7 +2287,7 @@ function csSearchFlat(q) {
         + '<td style="padding:8px 8px;text-align:center;color:#2A2A31;letter-spacing:.04em">' + r.size + '</td>'
         + STORE_KEYS.map(function(s) {
             var qty = (r.stores[s] !== undefined) ? r.stores[s] : '–';
-            var isSelf = SESSION_STORE && SESSION_STORE.name === s;
+            var isSelf = mineKey === s;
             var bg = '', color = '#9C978F';
             if (typeof qty === 'number') {
               if (qty === 0) { bg=''; color='#D6D0C5'; }
@@ -4137,13 +3856,12 @@ function palPrintProduct(pid) {
 // ── RETAIL REORDER TAB ────────────────────────────────────────────
 function renderReorderTab() {
   if (!SESSION_STORE) return;
-  var inv = ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name];
+  var d = LV[myLvKey()], inv = d && d.sized;
   var el = document.getElementById('restock-body');
   if (!el) return;
   if (!inv) {
-    el.innerHTML = loaderHtml('stock', 'Loading your stock…');
-    ALL_RETAIL_STOCK = null;
-    loadStoreStock();
+    el.innerHTML = loaderHtml('stock', 'Reading your stock from Loyverse…');
+    loadStoreStock(true);
     return;
   }
 
@@ -4167,23 +3885,34 @@ function renderReorderTab() {
     return;
   }
 
+  if (!lvHasSized(d)) {
+    el.innerHTML = '<div class="lv-note">' + (myLvKey() === 'nana' ? 'Nana\'s items have no sizes or colours in Loyverse yet' : 'Loyverse shows no size/colour stock for B1 + B2') + ', so Restock can\'t work out which sizes are missing. Please order with Simple or Grid for now.</div>';
+    return;
+  }
+  // A product also kept in Loyverse as one total (no sizes) can't be checked size by size
+  var asTotal = {}, skipped = [];
+  (d.totals || []).forEach(function(t) { if (t.kind === 'total' && t.qty > 0) asTotal[t.pid] = (asTotal[t.pid] || 0) + t.qty; });
   var pOrder = [], byPid = {};
   Object.keys(inv).forEach(function(pid) {
+    if (asTotal[pid]) { if (INVENTORY && INVENTORY[pid]) skipped.push(pid + ' (' + asTotal[pid] + ' pcs)'); return; }
     var lines = computeReorderLines(pid);
     if (lines.length) { pOrder.push(pid); byPid[pid] = lines; }
   });
+  var skippedHtml = skipped.length
+    ? '<div class="lv-note">Not checked here, because Loyverse keeps them as one total without sizes: <strong>' + skipped.map(lvEsc).join(', ') + '</strong>. Check those on the shelf.</div>'
+    : '';
 
   if (!pOrder.length) {
     el.innerHTML = '<div style="text-align:center;padding:40px 20px">'
       + '<div style="font-size:2rem;margin-bottom:10px">✅</div>'
       + '<div style="font-weight:700;color:#1D6E46;margin-bottom:6px">All good!</div>'
-      + '<div style="color:#6D6A65;font-size:.88rem">Every size Palladium carries is at 2+ pieces in your store.</div>'
-      + '</div>';
+      + '<div style="color:#6D6A65;font-size:.88rem">Every size Palladium carries is at ' + reorderTarget() + '+ pieces' + (myLvKey() === 'burmelin' ? ' in B1 + B2 together' : ' in your shop') + ' (counting orders on the way).</div>'
+      + '</div>' + skippedHtml;
     return;
   }
 
   var html = '<div style="font-size:.8rem;color:#6D6A65;margin-bottom:12px;padding:8px 10px;background:#F7F5F1;border-radius:8px">'
-    + '📋 What your store is missing: every size Palladium makes, topped up to <strong>2 pcs</strong>. Tap <strong>Add</strong> on a product to put it in your order below.'
+    + '📋 What ' + (myLvKey() === 'burmelin' ? '<strong>B1 + B2 together</strong> are' : 'your shop is') + ' missing: every size Palladium makes, topped up to <strong>' + reorderTarget() + ' pcs</strong>. Stock comes from Loyverse (' + lvEsc(lvUpdatedText(LV[myLvKey()]) || 'not loaded') + '); pieces already ordered but not yet sent count as on the way. Tap <strong>Add</strong> on a product to put it in your order below.'
     + '</div>';
 
   pOrder.forEach(function(pid) {
@@ -4200,7 +3929,7 @@ function renderReorderTab() {
       + '</div>'
       + '<div style="border:1px solid #E4DFD6;border-top:none;border-radius:0 0 10px 10px;overflow:hidden;background:#fff">';
     lines.forEach(function(l) {
-      var have = l.storeQty === 0 ? 'Missing' : 'Have ' + l.storeQty;
+      var have = (l.storeQty <= 0 ? 'Missing' : 'Have ' + l.storeQty) + (l.onWay ? ' · ' + l.onWay + ' on the way' : '');
       var badge, label;
       if (l.orderQty === 0) { badge = 'rs-out'; label = 'Palladium out'; }
       else { badge = 'rs-low'; label = 'Order ' + l.orderQty + (l.orderQty < l.needQty ? ' (Palladium has ' + l.palStock + ')' : ''); }
@@ -4213,13 +3942,14 @@ function renderReorderTab() {
     html += '</div></div>';
   });
 
-  el.innerHTML = html;
+  el.innerHTML = html + skippedHtml;
 }
 
-// Every Palladium color/size for this product where the store has < 2 pcs
+// Every Palladium color/size for this product where the shop (B1 + B2 together, or Nana) has fewer
+// than the target, counting pieces already ordered from Palladium and not yet marked done
 function computeReorderLines(pid) {
-  var MINIMUM = 2;
-  var storeInv = (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[SESSION_STORE.name]) || {};
+  var MINIMUM = reorderTarget();
+  var storeInv = (LV[myLvKey()] && LV[myLvKey()].sized) || {};
   var storeP = storeInv[pid] || {};
   var palP = (INVENTORY && INVENTORY[pid]) || {};
   var lines = [];
@@ -4227,12 +3957,13 @@ function computeReorderLines(pid) {
     var cn = colorKey.replace(/^Color\s*/i,'');
     Object.keys(palP[colorKey]).forEach(function(size) {
       var palStock = parseInt(palP[colorKey][size]) || 0;
-      var storeQty = parseInt((storeP[colorKey] || {})[size]) || 0;
-      var needQty = Math.max(0, MINIMUM - storeQty);
+      var storeQty = parseInt((storeP[colorKey] || {})[size]) || 0;   // can be below 0 after a wrong tap in Loyverse
+      var onWay = parseInt(ON_THE_WAY[pid + '|' + cn + '|' + size]) || 0;
+      var needQty = Math.max(0, MINIMUM - Math.max(0, storeQty) - onWay);
       if (needQty === 0) return;
       // Hide sizes the store never carried when Palladium can't supply them either
-      if (palStock <= 0 && storeQty === 0) return;
-      lines.push({ colorKey:colorKey, cn:cn, size:size, storeQty:storeQty, palStock:palStock, needQty:needQty, orderQty:Math.min(needQty, Math.max(0, palStock)) });
+      if (palStock <= 0 && storeQty <= 0 && !onWay) return;
+      lines.push({ colorKey:colorKey, cn:cn, size:size, storeQty:storeQty, onWay:onWay, palStock:palStock, needQty:needQty, orderQty:Math.min(needQty, Math.max(0, palStock)) });
     });
   });
   return lines;

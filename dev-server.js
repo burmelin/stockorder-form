@@ -28,6 +28,7 @@ app.all('/api/card-receipts', require('./api/card-receipts'));
 app.all('/api/bank-deposits', require('./api/bank-deposits'));
 app.all('/api/timecards', require('./api/timecards'));
 app.all('/api/drawer', require('./api/drawer'));
+app.all('/api/shop-stock', require('./api/shop-stock'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
