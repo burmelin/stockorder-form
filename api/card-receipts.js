@@ -4,7 +4,7 @@
 // one Retail Sale row per shop per day, so the single receipts behind its Bank In come from here.
 // Owner login only. At most 31 days per request.
 const { MOCK, checkPin } = require('./_google');
-const { lvGetAll, localDate, addDays, mapStores, cardReceipts } = require('./_loyverse');
+const { lvGetAll, localDate, addDays, mapStores, mapDevices, shopResolver, cardReceipts } = require('./_loyverse');
 
 const SHOPS = ['Bicasso 1', 'Bicasso 2', 'Nana'];
 
@@ -42,12 +42,14 @@ module.exports = async function handler(req, res) {
   try {
     // Same widened window as the import (timezone offsets, tills that synced late).
     const window = { created_at_min: `${addDays(from, -1)}T00:00:00.000Z`, created_at_max: `${addDays(to, 3)}T00:00:00.000Z` };
-    const [stores, receipts] = await Promise.all([
+    const [stores, devices, receipts] = await Promise.all([
       lvGetAll('/stores', 'stores'),
+      lvGetAll('/pos_devices', 'pos_devices'),
       lvGetAll('/receipts', 'receipts', window),
     ]);
-    const { map } = mapStores(stores, SHOPS);
-    return res.status(200).json({ ok: true, from, to, receipts: cardReceipts(receipts, map, dates) });
+    // Bicasso 1 and 2 share one store; the till says which shop (as in the import)
+    const shopOf = shopResolver(mapStores(stores, SHOPS).map, mapDevices(devices, SHOPS).map);
+    return res.status(200).json({ ok: true, from, to, receipts: cardReceipts(receipts, shopOf, dates) });
   } catch (err) {
     return res.status(502).json({ error: err.message });
   }

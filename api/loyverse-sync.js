@@ -16,7 +16,7 @@
 // by hand in the sheet is kept as it is (see planSync / planMovements). Vercel Cron calls it daily
 // (see vercel.json) with "Authorization: Bearer $CRON_SECRET".
 const { verifyWritten, logSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, readMasterEntry, sheetFullError, customerShopMap } = require('./_google');
-const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, planSync, planMovements, planFees } = require('./_loyverse');
+const { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, mapDevices, shopResolver, neighbourAccounts, dailyTotals, planSync, planMovements, planFees } = require('./_loyverse');
 const { DEPOSITS_TAB, depositsFromRows, learnedRate } = require('./_cardfees');
 
 const MOCK_SHOPS = ['Palladium', 'Bicasso 1', 'Bicasso 2', 'Nana', 'Burmelin'];
@@ -76,16 +76,24 @@ module.exports = async function handler(req, res) {
     // Shifts carry the drawer's pay-ins/pay-outs; same widened window (a shift opened the
     // evening before can hold pay-outs made after midnight).
     const window = { created_at_min: `${addDays(from, -1)}T00:00:00.000Z`, created_at_max: `${addDays(to, 3)}T00:00:00.000Z` };
-    const [stores, receipts, shifts] = await Promise.all([
+    const [stores, devices, receipts, shifts] = await Promise.all([
       lvGetAll('/stores', 'stores'),
+      lvGetAll('/pos_devices', 'pos_devices'),
       lvGetAll('/receipts', 'receipts', window),
       lvGetAll('/shifts', 'shifts', window),
     ]);
 
+    // Bicasso 1 and 2 share one Loyverse store: the till ("POS device") says which shop
+    // a receipt or shift belongs to (see mapDevices).
     const { map: storeShop, unmatched } = mapStores(stores, sheetShops);
-    const { totals, warnings, cardRefunds } = dailyTotals(receipts, storeShop, dates, accounts);
-    const moves = planMovements(shifts, storeShop, dates, accounts, cardRefunds, existing);
+    const { map: deviceShop, missing } = mapDevices(devices, sheetShops);
+    const shopOf = shopResolver(storeShop, deviceShop);
+    const { totals, warnings, cardRefunds } = dailyTotals(receipts, shopOf, dates, accounts);
+    const moves = planMovements(shifts, shopOf, dates, accounts, cardRefunds, existing);
     warnings.push(...moves.warnings);
+    for (const name of missing) warnings.push(`No till called "${name}" in Loyverse — its sales would count for the store's own shop. Check the till's name in Back Office → POS devices`);
+    const storeName = new Map(stores.map((st) => [st.id, st.name]));
+    const tills = devices.map((d) => ({ name: d.name, store: storeName.get(d.store_id) || '', shop: shopOf(d) || '' }));
     const plan = [...planSync(totals, existing, addDays(today, -1)), ...moves.actions, ...planFees(totals, existing, feeRate)];
 
     // Receipts from stores we couldn't map, so the user knows money is being left out.
@@ -99,7 +107,7 @@ module.exports = async function handler(req, res) {
     const toUpdate = plan.filter((p) => p.action === 'update');
     const result = {
       ok: true, dryRun, mock: MOCK, timezone: TIMEZONE, from, to, feeRate,
-      results: plan, unmatchedStores: unmatchedCounts, warnings,
+      results: plan, unmatchedStores: unmatchedCounts, tills, warnings,
       added: dryRun ? 0 : toAdd.length, updated: dryRun ? 0 : toUpdate.length,
     };
     const datesText = from === to ? from : `${from} to ${to}`;
