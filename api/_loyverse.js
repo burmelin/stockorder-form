@@ -88,6 +88,40 @@ function mapStores(stores, sheetShops) {
   return { map, unmatched };
 }
 
+// POS device -> shop, for a Loyverse store that two shops share. Since 18 Nov 2026 Bicasso 1
+// and Bicasso 2 are one store ("Burmelin") with a till each: the device named "B2 POS" is
+// Bicasso 2, and the store's other devices stay with the store's shop (Bicasso 1).
+// LOYVERSE_DEVICE_MAP (JSON, device name or id -> shop) replaces this default.
+const DEVICE_SHOPS = { 'b2 pos': 'Bicasso 2' };
+
+// devices: from GET /pos_devices. Returns { map: device id -> shop, missing: [names] } —
+// missing are default device names Loyverse doesn't have (their sales would land in the
+// store's shop, so the import warns).
+function mapDevices(devices, sheetShops) {
+  const custom = jsonMap('LOYVERSE_DEVICE_MAP');
+  const wanted = Object.keys(custom).length ? custom : DEVICE_SHOPS;
+  const byLower = new Map(sheetShops.map((s) => [s.toLowerCase(), s]));
+  const map = new Map();
+  const found = new Set();
+  for (const d of devices || []) {
+    for (const key of [String(d.id || '').toLowerCase(), String(d.name || '').trim().toLowerCase()]) {
+      if (!key || !(key in wanted)) continue;
+      found.add(key);
+      const shop = byLower.get(String(wanted[key] || '').trim().toLowerCase());
+      if (shop) map.set(d.id, shop);
+      break;
+    }
+  }
+  return { map, missing: Object.keys(wanted).filter((k) => !found.has(k)) };
+}
+
+// One lookup for receipts and shifts: the till's shop if the till has one (mapDevices),
+// otherwise the store's shop (mapStores). Functions below also take a plain store map.
+function shopResolver(storeShop, deviceShop = new Map()) {
+  return (x) => (x && x.pos_device_id && deviceShop.get(x.pos_device_id)) || storeShop.get(x && x.store_id);
+}
+const resolverOf = (s) => (typeof s === 'function' ? s : shopResolver(s));
+
 // Shop -> its neighbour-card credit account: a credit customer kept at a shop other than
 // Palladium (Lists column F). Card payments at that shop go through the neighbour's machine,
 // so they are owed by the neighbour, not banked.
@@ -117,6 +151,7 @@ function paymentKind(p, overrides) {
 // Refunds subtract; cancelled receipts are ignored.
 function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
   const overrides = jsonMap('LOYVERSE_PAYMENT_MAP');
+  const shopOf = resolverOf(storeShop);
   const totals = new Map();
   const cardRefunds = new Map(); // "date|shop" -> amounts of non-cash refunds
   const warnings = [];
@@ -127,7 +162,7 @@ function dailyTotals(receipts, storeShop, dates, accounts = {}, tz = TIMEZONE) {
     if (r.cancelled_at) continue;
     const date = localDate(r.receipt_date || r.created_at, tz);
     if (!dates.has(date)) continue;
-    const shop = storeShop.get(r.store_id);
+    const shop = shopOf(r);
     if (!shop) continue;
 
     let cash = 0, bank = 0, card = 0, qr = 0, skipped = 0;
@@ -181,13 +216,14 @@ function isQr(name) { return /\bqr\b|prompt\s*pay|^\s*scan\s*$/i.test(String(nam
 
 function cardReceipts(receipts, storeShop, dates, tz = TIMEZONE) {
   const overrides = jsonMap('LOYVERSE_PAYMENT_MAP');
+  const shopOf = resolverOf(storeShop);
   const out = [];
   for (const r of receipts) {
     if (r.cancelled_at) continue;
     const at = r.receipt_date || r.created_at;
     const date = localDate(at, tz);
     if (!dates.has(date)) continue;
-    const shop = storeShop.get(r.store_id);
+    const shop = shopOf(r);
     if (!shop) continue;
     const qrOnly = shop in QR_TO_BANK_FROM;
     if (qrOnly && !qrToBank(shop, date)) continue;
@@ -327,8 +363,9 @@ function planMovements(shifts, storeShop, dates, accounts, cardRefunds, existing
   const planned = [];
   const warnings = [];
   const refundsLeft = new Map([...cardRefunds].map(([k, v]) => [k, [...v]]));
+  const shopOf = resolverOf(storeShop);
   for (const s of shifts) {
-    const shop = storeShop.get(s.store_id);
+    const shop = shopOf(s);
     if (!shop) continue;
     for (const m of s.cash_movements || []) {
       const at = m.created_at || s.opened_at;
@@ -471,4 +508,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, localDate, addDays, mapStores, mapDevices, shopResolver, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };
