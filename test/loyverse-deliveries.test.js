@@ -191,3 +191,11 @@ test('generateMasterSheet adds the shop stock the app sends (Loyverse), not the 
   assert.ok(!cells(w2.Master).includes(14) && cells(w2.Master).includes(10), 'without shop stock: Palladium only');
   assert.ok(untouched(w));
 });
+
+// Vercel's Hobby plan builds at most 12 functions: one more and the whole deploy fails (PR #53).
+test('api/ has at most 12 Vercel functions', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const fns = fs.readdirSync(path.join(__dirname, '..', 'api')).filter((f) => f.endsWith('.js') && !f.startsWith('_'));
+  assert.ok(fns.length <= 12, `${fns.length} functions: ${fns.join(', ')}`);
+});

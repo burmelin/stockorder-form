@@ -3461,7 +3461,7 @@ function palBuildOrderCard(order) {
 
 // ── BURMELIN DELIVERIES INTO LOYVERSE ──────────────────────────────
 // After Done, a Burmelin order's pieces are added to the Burmelin store in Loyverse by the app
-// (/api/loyverse-receive). The order's "loyverse" says how it went: To add / Adding … / Added … / Failed: …
+// (POST /api/shop-stock). The order's "loyverse" says how it went: To add / Adding … / Added … / Failed: …
 // Nana orders say "Add by hand" until Nana's Loyverse stock is counted.
 function palLvLine(order) {
   var st = String(order.loyverse || '');
@@ -3486,7 +3486,7 @@ function palAddToLoyverse(orderId, auto) {
     var el = document.getElementById('plvl-' + orderId), html = palLvLine(order);
     if (el) el.outerHTML = html || '';
   };
-  fetch('/api/loyverse-receive', {
+  fetch('/api/shop-stock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-staff-token': (SESSION_STORE && SESSION_STORE.token) || '' },
     body: JSON.stringify({ orderId: orderId })

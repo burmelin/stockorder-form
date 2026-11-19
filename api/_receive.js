@@ -1,4 +1,5 @@
-// POST /api/loyverse-receive { orderId } — adds a Burmelin delivery from Palladium to the Burmelin
+// POST /api/shop-stock { orderId } (shop-stock.js passes POSTs here; kept in its own file, but not as
+// its own Vercel function, because the Hobby plan allows only 12) — — adds a Burmelin delivery from Palladium to the Burmelin
 // store's stock in Loyverse, right after Palladium taps Done (the app calls this by itself; the
 // order card also has a "Try again" button if it failed).
 //
@@ -53,8 +54,7 @@ async function addToLoyverse(lines) {
   return { pcs, missing: plan.missing, written };
 }
 
-module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+module.exports = async function receive(req, res) {
   const staffToken = String(req.headers['x-staff-token'] || '').trim();
   const login = await loginOfToken(staffToken);
   if (!login) return res.status(401).json({ error: 'Please log out and log in again.', needLogin: true });

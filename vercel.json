@@ -39,9 +39,6 @@
       "maxDuration": 60
     },
     "api/shop-stock.js": {
-      "maxDuration": 30
-    },
-    "api/loyverse-receive.js": {
       "maxDuration": 60
     }
   }

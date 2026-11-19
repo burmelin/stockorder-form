@@ -603,7 +603,7 @@ function markDone(orderId, password) {
 // ─── BURMELIN DELIVERIES INTO LOYVERSE ────────────────────────
 // Since 18 Nov 2026 the shops' stock is kept in Loyverse. When Palladium taps Done on a Burmelin
 // order (or an older Bicasso 1 / Bicasso 2 order), the Orders tab's Loyverse column (N) says
-// "To add"; the Vercel server (/api/loyverse-receive) then claims the order here, adds the
+// "To add"; the Vercel server (POST /api/shop-stock) then claims the order here, adds the
 // pieces to the Burmelin store in Loyverse, and reports back:
 //   To add -> Adding <time> -> Added <time> · N pcs      (or Failed: <reason>, which can be retried)
 // A claimed order can't be claimed again while it is being added or once it is added, so a
