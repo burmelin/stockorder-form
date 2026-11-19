@@ -205,10 +205,10 @@ function handleApi(action, params, body) {
   if ((READ_ACTIONS[action] || action === 'submitOrder') && !isLoggedIn(body)) {
     return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
   }
-  // Since 18 Nov 2026 shops sell, move and count stock in Loyverse; a phone still showing the old
-  // Sell / Transfer / Count screens must not change the old shop sheets
-  if (LOYVERSE_NOW[action] && body && RETAIL_STORES.indexOf(body.authStore) > -1) {
-    return jsonOut({ success: false, error: 'This is done in Loyverse now. Close the app and open it again to get the new version.' });
+  // Since 18 Nov 2026 shop stock is kept only in Loyverse: nothing (shop or Palladium phone, old
+  // or new app) may change the old Bicasso 1 / Bicasso 2 / Nana Stock tabs any more
+  if (LOYVERSE_NOW[action]) {
+    return jsonOut({ success: false, error: 'Shop stock is kept in Loyverse now. Close the app and open it again to get the new version.' });
   }
   var out;
   switch (action) {
@@ -220,17 +220,15 @@ function handleApi(action, params, body) {
     case 'deleteOrder':     out = deleteOrder(body.orderId, body.password); break;
     case 'editOrderItems':  out = editOrderItems(body.orderId, body.newItems, body.password); break;
     case 'markDone':             out = markDone(body.orderId, body.password); break;
+    // The Vercel server, adding a Burmelin delivery to Loyverse with the Palladium login's token
+    case 'loyverseClaim':        out = loyverseClaim(body, body.orderId); break;
+    case 'loyverseResult':       out = loyverseResult(body, body.orderId, body.result); break;
     case 'getAllRetailStock':     out = getAllRetailStock(); break;
     case 'getStoreStock':        out = getRetailStock(body && body.storeName); break;
-    case 'sellRetailStock':      out = sellRetailStock(body.storeName, body.password, body.rowId, body.qty, body.saleId); break;
-    case 'sellRetailStockBatch': out = sellRetailStockBatch(body.storeName, body.password, body.items, body.saleId); break;
     case 'getSalesToday':        out = getSalesToday(body && body.storeName); break;
-    case 'transferStock':        out = transferStock(body.fromStore, body.toStore, body.password, body.rowId, body.qty, body.transferId); break;
     case 'verifyRetailStore':    out = verifyRetailStore(body.storeName, body.password, body.withData); break;
     case 'getStoreBundle':       out = getStoreBundle(body && body.storeName); break;
-    case 'addRetailStockItem':   out = addRetailStockItem(body.storeName, body.password, body.productId, body.category, body.colorNum, body.size, body.qty); break;
-    case 'addRetailStockItems':  out = addRetailStockItems(body.storeName, body.password, body.items); break;
-    case 'generateMasterSheet':  out = generateMasterSheet(body.password, body.targets); break;
+    case 'generateMasterSheet':  out = generateMasterSheet(body.password, body.targets, body.retail); break;
     case 'getStockHistory':      out = getStockHistory(body, body.store, body.productId); break;
     case 'getSalesReport':       out = getSalesReport(body, body.days); break;
     case 'verifyOwner':          out = verifyOwner(body.password); break;
@@ -454,7 +452,8 @@ function getOrders(password) {
         invoiceSent  : cellDateText(row[9]),
         completed    : cellDateText(row[10]),
         orderType    : row[11] || 'customer',
-        shopName     : row[12] || ''
+        shopName     : row[12] || '',
+        loyverse     : String(row[13] || '')   // Burmelin deliveries: To add / Adding / Added / Failed
       });
     }
 
@@ -571,23 +570,20 @@ function markDone(orderId, password) {
         label: it.product + ' | ' + it.color + ' | ' + it.size
       };
     });
-    // Every order leaves Palladium's stock; a store order also lands in that store's stock
+    // Every order leaves Palladium's stock. Since 18 Nov 2026 the shops' stock is in Loyverse, so
+    // nothing is written to the old shop tabs: a Burmelin delivery is added to Loyverse by the app
+    // right after this (see loyverseClaim), a Nana delivery is added in Loyverse by hand for now.
     var changes = [];
     var warnings = deductItemsFromWholesale(ss, order.items, lines, changes);
     var dest = order.orderType === 'store' && order.shopName ? order.shopName : (order.customerName || 'customer');
     changes.forEach(function(c) { c.action = 'Sent to ' + dest; });
-    // Burmelin's stock is in Loyverse, not in a sheet: only Palladium's side is written here
-    if (order.orderType === 'store' && order.shopName && order.shopName !== SHARED_SHOP) {
-      var got = [];
-      warnings = warnings.concat(addItemsToStore(ss, order.shopName, lines, got));
-      got.forEach(function(c) { c.action = 'Received from Palladium'; });
-      changes = changes.concat(got);
-    }
     logHistory(ss, changes, '', orderId, 'Palladium');
 
     // Mark as Completed — also record the invoice timestamp if not already set
     var doneAt  = new Date();
     var updates = { status: 'Completed', completed: doneAt };
+    var lvNext = loyverseNext(order);
+    if (lvNext) updates.loyverse = lvNext;
     if (!order.invoiceSent) updates.invoiceSent = doneAt;
     updateOrderRow(orderId, updates);
 
@@ -595,13 +591,90 @@ function markDone(orderId, password) {
     try { saveSentOrder(ss, order, doneAt); } catch(e) {}
 
     SpreadsheetApp.flush();
-    return { success: true, warnings: warnings };
+    return { success: true, warnings: warnings, loyverse: lvNext || '' };
 
   } catch (err) {
     return { success: false, error: err.toString() };
   } finally {
     lock.releaseLock();
   }
+}
+
+// ─── BURMELIN DELIVERIES INTO LOYVERSE ────────────────────────
+// Since 18 Nov 2026 the shops' stock is kept in Loyverse. When Palladium taps Done on a Burmelin
+// order (or an older Bicasso 1 / Bicasso 2 order), the Orders tab's Loyverse column (N) says
+// "To add"; the Vercel server (/api/loyverse-receive) then claims the order here, adds the
+// pieces to the Burmelin store in Loyverse, and reports back:
+//   To add -> Adding <time> -> Added <time> · N pcs      (or Failed: <reason>, which can be retried)
+// A claimed order can't be claimed again while it is being added or once it is added, so a
+// double tap or a retry never adds the same delivery twice. Nana deliveries say "Add by hand"
+// until Nana's Loyverse stock has been counted.
+function loyverseNext(order) {
+  if (!order || order.orderType !== 'store') return '';
+  var shop = String(order.shopName || '');
+  if (shop === SHARED_SHOP || SHARED_STOCK[shop]) return 'To add';
+  if (shop === 'Bicasso Nana') return 'Add by hand';
+  return '';
+}
+function loyverseLines(order) {
+  var byKey = {}, out = [];
+  (order.items || []).forEach(function(it) {
+    var pid = String(it.lp || it.product || '').trim();
+    var col = String(it.lc || String(it.color || '').replace(/^Color\s*/i, '')).trim();
+    var sz  = String(it.ls || it.size || '').trim();
+    var qty = parseInt(it.qty) || 0;
+    if (!pid || qty <= 0) return;
+    var k = pid + '|' + col + '|' + sz;
+    if (!byKey[k]) { byKey[k] = { pid: pid, col: col, sz: sz, qty: 0, label: pid + ' · Colour ' + col + ' · Size ' + sz }; out.push(byKey[k]); }
+    byKey[k].qty += qty;
+  });
+  return out;
+}
+function loyverseStamp() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm'); }
+
+function loyverseClaim(b, orderId) {
+  if (!b || !isEmployee(b.auth)) return { success: false, error: 'Only Palladium can add deliveries to Loyverse.' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var order = findOrder(orderId);
+    if (!order) return { success: false, error: 'Order not found: ' + orderId };
+    if (order.status !== 'Completed') return { success: false, error: 'Mark the order Done first.' };
+    if (loyverseNext(order) !== 'To add') return { success: false, error: 'Only Burmelin deliveries are added to Loyverse.' };
+    var now = order.loyverse;
+    if (/^Added/.test(now)) return { success: false, already: true, error: 'Already added to Loyverse (' + now + ').' };
+    if (/^Adding/.test(now)) return { success: false, busy: true, error: 'Already being added (' + now + '). If it stays like this, check Burmelin in Loyverse.' };
+    if (now && now !== 'To add' && !/^Failed/.test(now)) return { success: false, error: 'Not set to be added to Loyverse.' };
+    var lines = loyverseLines(order);
+    if (!lines.length) return { success: false, error: 'The order has no pieces.' };
+    updateOrderRow(orderId, { loyverse: 'Adding ' + loyverseStamp() });
+    SpreadsheetApp.flush();
+    return { success: true, orderId: String(order.orderId), shop: SHARED_SHOP, lines: lines };
+  } finally { lock.releaseLock(); }
+}
+
+// result: { ok: true, pcs: 12, missing: ['T9027 · Colour 3 · Size 50 ×2'] } or { ok: false, error: '…' }
+function loyverseResult(b, orderId, result) {
+  if (!b || !isEmployee(b.auth)) return { success: false, error: 'Only Palladium can add deliveries to Loyverse.' };
+  result = result || {};
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var order = findOrder(orderId);
+    if (!order) return { success: false, error: 'Order not found: ' + orderId };
+    if (!/^Adding/.test(order.loyverse)) return { success: false, error: 'This order is not being added (' + (order.loyverse || 'nothing') + ').' };
+    var text;
+    if (result.ok) {
+      var missing = (result.missing || []).map(String).slice(0, 20);
+      text = 'Added ' + loyverseStamp() + ' · ' + (parseInt(result.pcs) || 0) + ' pcs'
+           + (missing.length ? ' · not in Loyverse, add by hand: ' + missing.join(', ') : '');
+    } else {
+      text = 'Failed: ' + String(result.error || 'unknown error').slice(0, 200);
+    }
+    updateOrderRow(orderId, { loyverse: text });
+    SpreadsheetApp.flush();
+    return { success: true, loyverse: text };
+  } finally { lock.releaseLock(); }
 }
 
 // ─── INTERNAL: SAVE SENT ORDER ────────────────────────────────
@@ -660,7 +733,9 @@ function findOrder(orderId) {
         status       : data[i][8],
         invoiceSent  : data[i][9],
         orderType    : data[i][11] || 'customer',
-        shopName     : data[i][12] || ''
+        shopName     : data[i][12] || '',
+        completed    : data[i][10],
+        loyverse     : String(data[i][13] || '')
       };
     }
   }
@@ -688,52 +763,23 @@ function updateOrderRow(orderId, updates) {
       }
       if (updates.invoiceSent !== undefined) writeStamp(sheet.getRange(r, 10), updates.invoiceSent);
       if (updates.completed   !== undefined) writeStamp(sheet.getRange(r, 11), updates.completed);
+      if (updates.loyverse    !== undefined) {
+        if (sheet.getRange(1, 14).getValue() !== 'Loyverse') sheet.getRange(1, 14).setValue('Loyverse').setFontWeight('bold');
+        sheet.getRange(r, 14).setValue(updates.loyverse);
+      }
       return;
     }
   }
 }
 
-// ─── INTERNAL: ADD STOCK TO RETAIL STORE (used when marking store order Done) ─
+
+
 // Stock sheets: first row whose column B says "Product ID" is the header
 function sheetDataStart(data) {
   for (var h = 0; h < data.length; h++) {
     if (String(data[h][1]).trim().toLowerCase() === 'product id') return h + 1;
   }
   return 1;
-}
-
-// Add quantities to a shop's stock sheet: one read, then only the changed cells + one append.
-// Each change is pushed to `changes` as {store,pid,col,sz,before,after} for the Stock History.
-function addItemsToStore(ss, shopName, lines, changes) {
-  var sheet = ss.getSheetByName(shopName + ' Stock');
-  if (!sheet) return lines.map(function(l) { return l.label + ': Sheet not found for store: ' + shopName; });
-  var data = sheet.getDataRange().getValues();
-  var rowOf = {};
-  for (var r = sheetDataStart(data); r < data.length; r++) {
-    var k = String(data[r][1]).trim() + '|' + String(data[r][3]).trim() + '|' + String(data[r][4]).trim();
-    if (rowOf[k] === undefined) rowOf[k] = r;
-  }
-  var changed = {}, appends = [], appendAt = {};
-  lines.forEach(function(l) {
-    var k = l.pid + '|' + l.col + '|' + l.sz, before;
-    if (rowOf[k] !== undefined) {
-      var row = rowOf[k];
-      before = parseInt(data[row][5]) || 0;
-      data[row][5] = before + l.qty;
-      changed[row] = true;
-    } else if (appendAt[k] !== undefined) {
-      before = appends[appendAt[k]][5];
-      appends[appendAt[k]][5] += l.qty;
-    } else {
-      before = 0;
-      appendAt[k] = appends.length;
-      appends.push([l.pid + l.col + l.sz, l.pid, '', l.col, l.sz, l.qty]);
-    }
-    if (changes) changes.push({ store: shopName, pid: l.pid, col: l.col, sz: l.sz, before: before, after: before + l.qty });
-  });
-  Object.keys(changed).forEach(function(row) { sheet.getRange(Number(row) + 1, 6).setValue(data[row][5]); });
-  if (appends.length) sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, 6).setValues(appends);
-  return [];
 }
 
 // Deduct an order from Palladium's stock tab in one pass (changes recorded as in addItemsToStore)
@@ -789,86 +835,12 @@ function notifyOwner(orderData, orderId, dateStr) {
   );
 }
 
-// ─── TRANSFER STOCK BETWEEN STORES ───────────────────────────
-// Code → row index for a stock sheet. A code is Product ID + Color + Size, taken from
-// columns B/D/E (what the app shows); the typed ID in column A is only a fallback.
+// ─── STOCK CODES ─────────────────────────────────────────────
 // Spaces are ignored, so "BZ003D BROWNL" and "BZ003DBROWNL" are the same code.
 function normCode(s) { return String(s || '').replace(/\s+/g, '').toUpperCase(); }
 
-function buildCodeIndex(data) {
-  var idx = {}, start = sheetDataStart(data), r, k;
-  for (r = start; r < data.length; r++) {
-    k = normCode(String(data[r][1]) + String(data[r][3]) + String(data[r][4]));
-    if (k && idx[k] === undefined) idx[k] = r;
-  }
-  for (r = start; r < data.length; r++) {
-    k = normCode(data[r][0]);
-    if (k && idx[k] === undefined) idx[k] = r;
-  }
-  return idx;
-}
-
-// transferId: sent again unchanged on a retry, so a resend can't move the stock twice
-function transferStock(fromStore, toStore, password, rowId, qty, transferId) {
-  if (!fromStore || !toStore) return { success: false, error: 'Select both stores.' };
-  if (fromStore === toStore) return { success: false, error: 'Source and destination must differ.' };
-  var validPass = isStorePass(fromStore, password)
-               || isEmployee(password);
-  if (!validPass) return { success: false, error: 'Wrong password — please log in again.' };
-  var sellQ = parseInt(qty) || 0;
-  if (sellQ <= 0) return { success: false, error: 'Quantity must be at least 1.' };
-  var cache = CacheService.getScriptCache();
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
-  try {
-    if (transferId) {
-      var prev = cache.get('transfer:' + transferId);
-      if (prev) { var p = JSON.parse(prev); p.alreadyDone = true; return p; }
-    }
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    function sheetFor(name) {
-      return name === 'Palladium' ? getPalladiumSheet(ss) : ss.getSheetByName(name + ' Stock');
-    }
-    var fromSheet = sheetFor(fromStore), toSheet = sheetFor(toStore);
-    if (!fromSheet) return { success: false, error: 'Sheet not found for: ' + fromStore };
-    if (!toSheet)   return { success: false, error: 'Sheet not found for: ' + toStore };
-    var code = normCode(rowId);
-
-    var fData = fromSheet.getDataRange().getValues();
-    var fr = buildCodeIndex(fData)[code];
-    if (fr === undefined) return { success: false, error: 'ID not found in ' + fromStore + ': ' + rowId };
-    var fromQty = parseInt(fData[fr][5]) || 0;
-    if (fromQty < sellQ) return { success: false, error: 'Not enough stock in ' + fromStore + '. Available: ' + fromQty };
-    var pid = String(fData[fr][1]).trim(), col = String(fData[fr][3]).trim(), sz = String(fData[fr][4]).trim();
-
-    // Receiving store: same product/color/size; create the row if the store never had it
-    var tData = toSheet.getDataRange().getValues();
-    var tr = buildCodeIndex(tData)[normCode(pid + col + sz)];
-    var toQty;
-    fromSheet.getRange(fr + 1, 6).setValue(fromQty - sellQ);
-    if (tr === undefined) {
-      toQty = sellQ;
-      toSheet.getRange(toSheet.getLastRow() + 1, 1, 1, 6).setValues([[pid + col + sz, pid, fData[fr][2] || '', col, sz, toQty]]);
-    } else {
-      toQty = (parseInt(tData[tr][5]) || 0) + sellQ;
-      toSheet.getRange(tr + 1, 6).setValue(toQty);
-    }
-    var by = whoIs(password, fromStore);
-    logHistory(ss, [
-      { store: fromStore, pid: pid, col: col, sz: sz, before: fromQty, after: fromQty - sellQ, action: 'Transfer out → ' + toStore },
-      { store: toStore, pid: pid, col: col, sz: sz, before: toQty - sellQ, after: toQty, action: 'Transfer in ← ' + fromStore }
-    ], '', transferId || '', by);
-    SpreadsheetApp.flush();
-    var result = { success: true, fromNewQty: fromQty - sellQ, toNewQty: toQty, created: tr === undefined,
-                   productId: pid, color: col, size: sz };
-    if (transferId) cache.put('transfer:' + transferId, JSON.stringify(result), 21600);
-    return result;
-  } catch(e) { return { success: false, error: e.toString() }; }
-  finally { lock.releaseLock(); }
-}
-
-// ─── SELL FROM RETAIL STORE ───────────────────────────────────
-// Every sale is logged here; the saleId makes a repeated request (retry / double tap) a no-op
+// ─── SALES LOG ────────────────────────────────────────────────
+// Palladium's direct sales are logged here (older shop sales from before 18 Nov 2026 too); the saleId makes a repeated request (retry / double tap) a no-op
 var SALES_LOG_SHEET = 'Sales Log';
 var SALES_LOG_HEADERS = ['Date/Time', 'Store', 'Code', 'Product ID', 'Color', 'Size', 'Qty', 'Stock After', 'Sale ID'];
 
@@ -892,112 +864,6 @@ function findLoggedSale(log, saleId) {
     if (String(rows[i][8]) === String(saleId)) return { newQty: rows[i][7] };
   }
   return null;
-}
-
-function sellRetailStock(storeName, password, rowId, qty, saleId) {
-  var validPass = isStorePass(storeName, password)
-               || isEmployee(password);
-  if (!validPass) return { success: false, error: 'Wrong password.' };
-  var sellQ = parseInt(qty) || 0;
-  if (sellQ <= 0) return { success: false, error: 'Quantity must be at least 1.' };
-
-  // One sale at a time, so a retry can't slip in before the first one is logged
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
-  try {
-    var ss  = SpreadsheetApp.getActiveSpreadsheet();
-    var log = getSalesLogSheet(ss);
-    if (saleId) {
-      var prev = findLoggedSale(log, saleId);
-      if (prev) return { success: true, newQty: prev.newQty, alreadyDone: true };
-    }
-    var sheet = ss.getSheetByName(storeName + ' Stock');
-    if (!sheet) return { success: false, error: 'Store sheet not found.' };
-    var data  = sheet.getDataRange().getValues();
-    var code  = normCode(rowId);
-    var r = buildCodeIndex(data)[code];
-    if (r !== undefined) {
-      var cur = parseInt(data[r][5]) || 0;
-      if (cur < sellQ) return { success: false, error: 'Not enough stock. Available: ' + cur };
-      var newQty = cur - sellQ;
-      sheet.getRange(r + 1, 6).setValue(newQty);
-      log.appendRow([new Date(), storeName, code, data[r][1], data[r][3], data[r][4], sellQ, newQty, saleId || '']);
-      logHistory(ss, [{ store: storeName, pid: String(data[r][1]).trim(), col: String(data[r][3]).trim(), sz: String(data[r][4]).trim(),
-                        before: cur, after: newQty }], 'Sale', saleId || '', whoIs(password, storeName));
-      SpreadsheetApp.flush();
-      return { success: true, newQty: newQty };
-    }
-    return { success: false, error: 'ID not found: ' + rowId };
-  } catch(e) {
-    return { success: false, error: e.toString() };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-// Sell up to 5 lines as one sale. All lines are checked before anything is deducted,
-// so a sale never goes through halfway. Lines are logged as saleId#1, saleId#2, …
-function sellRetailStockBatch(storeName, password, items, saleId) {
-  var validPass = isStorePass(storeName, password)
-               || isEmployee(password);
-  if (!validPass) return { success: false, error: 'Wrong password.' };
-  if (!saleId) return { success: false, error: 'Missing sale ID.' };
-  items = (items || []).map(function(it) {
-    return { code: normCode(it.rowId), qty: parseInt(it.qty) || 0 };
-  }).filter(function(it) { return it.code; });
-  if (!items.length) return { success: false, error: 'No items to sell.' };
-  if (items.length > 5) return { success: false, error: 'Maximum 5 items per sale.' };
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].qty <= 0) return { success: false, error: items[i].code + ': quantity must be at least 1.' };
-  }
-
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
-  try {
-    var ss  = SpreadsheetApp.getActiveSpreadsheet();
-    var log = getSalesLogSheet(ss);
-    if (findLoggedSale(log, saleId + '#1')) {
-      return { success: true, alreadyDone: true, lines: items.map(function(it, k) {
-        var p = findLoggedSale(log, saleId + '#' + (k + 1));
-        return { code: it.code, qty: it.qty, newQty: p ? p.newQty : '' };
-      }), sales: getSalesToday(storeName).sales };
-    }
-    var sheet = ss.getSheetByName(storeName + ' Stock');
-    if (!sheet) return { success: false, error: 'Store sheet not found.' };
-    var data = sheet.getDataRange().getValues();
-    var rowOf = buildCodeIndex(data);
-    // Validate everything first (same code on two lines counts together)
-    var left = {};
-    for (var j = 0; j < items.length; j++) {
-      var c = items[j].code;
-      if (rowOf[c] === undefined) return { success: false, error: 'ID not found: ' + c };
-      if (left[c] === undefined) left[c] = parseInt(data[rowOf[c]][5]) || 0;
-      left[c] -= items[j].qty;
-      if (left[c] < 0) return { success: false, error: c + ': not enough stock. Available: ' + (parseInt(data[rowOf[c]][5]) || 0) };
-    }
-    // Apply
-    var now = new Date(), stock = {}, logRows = [], lines = [];
-    items.forEach(function(it, k) {
-      var row = rowOf[it.code];
-      if (stock[it.code] === undefined) stock[it.code] = parseInt(data[row][5]) || 0;
-      stock[it.code] -= it.qty;
-      logRows.push([now, storeName, it.code, data[row][1], data[row][3], data[row][4], it.qty, stock[it.code], saleId + '#' + (k + 1)]);
-      lines.push({ code: it.code, qty: it.qty, newQty: stock[it.code] });
-    });
-    Object.keys(stock).forEach(function(code) { sheet.getRange(rowOf[code] + 1, 6).setValue(stock[code]); });
-    log.getRange(log.getLastRow() + 1, 1, logRows.length, SALES_LOG_HEADERS.length).setValues(logRows);
-    logHistory(ss, Object.keys(stock).map(function(code) {
-      var row = rowOf[code];
-      return { store: storeName, pid: String(data[row][1]).trim(), col: String(data[row][3]).trim(), sz: String(data[row][4]).trim(),
-               before: parseInt(data[row][5]) || 0, after: stock[code] };
-    }), 'Sale', saleId, whoIs(password, storeName));
-    SpreadsheetApp.flush();
-    return { success: true, lines: lines, sales: getSalesToday(storeName).sales };
-  } catch (e) {
-    return { success: false, error: e.toString() };
-  } finally {
-    lock.releaseLock();
-  }
 }
 
 // Today's sales for one store (newest first), in the script's time zone
@@ -1049,12 +915,11 @@ function verifyRetailStore(storeName, password, withData) {
 
 // Store stock + Palladium inventory/groups in one request
 function getStoreBundle(storeName) {
-  var st = getRetailStock(storeName);
-  if (!st.success) return st;
+  if (RETAIL_STORES.indexOf(storeName) === -1) return { success: false, error: 'Unknown store: ' + storeName };
   var inv = getInventory();
   return {
     success: true,
-    stores: st.stores,   // old shop stock sheets; since 18 Nov 2026 the app reads shop stock from Loyverse
+    stores: {},   // shop stock comes from Loyverse (Vercel /api/shop-stock), not from the old tabs
     inventory: inv.success ? inv.inventory : null,
     groups: inv.success ? inv.groups : [],
     onTheWay: ordersOnTheWay(SHARED_STOCK[storeName] || [storeName])
@@ -1103,17 +968,16 @@ function getAllRetailStock() {
 function getRetailStock(storeName) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    // Only real stores — an unknown name must not create a new tab
     if (storeName && RETAIL_STORES.indexOf(storeName) === -1 && storeName !== 'Palladium') return { success: false, error: 'Unknown store: ' + storeName };
-    var storeNames = storeName ? [storeName] : ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana', 'Palladium'];
+    // Since 18 Nov 2026 shop stock is in Loyverse: only Palladium's tab is read here. The shops
+    // come back empty, so nothing reads (or creates) the old Bicasso 1 / 2 / Nana Stock tabs.
+    var storeNames = (!storeName || storeName === 'Palladium') ? ['Palladium'] : [];
     var storesData = {};
+    RETAIL_STORES.forEach(function(name) { if (!storeName || storeName === name) storesData[name] = {}; });
     var groups = null; // Palladium's categories, same shape as getInventory().groups
 
     storeNames.forEach(function(name) {
-      var sheetName = name + ' Stock';
-      var sheet = name === 'Palladium' ? getPalladiumSheet(ss) : ss.getSheetByName(sheetName);
-      // Auto-create sheet from wholesale product list if missing (not for Palladium)
-      if (!sheet && name !== 'Palladium') sheet = createRetailSheet(ss, sheetName);
+      var sheet = getPalladiumSheet(ss);
       var inventory = {};
 
       if (sheet && sheet.getLastRow() > 1) {
@@ -1151,95 +1015,6 @@ function getRetailStock(storeName) {
   } catch(err) {
     return { success: false, error: err.toString() };
   }
-}
-
-// ─── CREATE RETAIL STORE SHEET (seeded from wholesale, qty=0) ─
-function createRetailSheet(ss, sheetName) {
-  try {
-    var wholesale = getPalladiumSheet(ss);
-    var newSheet = ss.insertSheet(sheetName);
-    if (wholesale) {
-      var src  = wholesale.getDataRange().getValues();
-      var dest = src.map(function(row) { return row.slice(0, 6); });
-      // Zero out stock column (F) for all data rows
-      var startRow = 1;
-      for (var h = 0; h < dest.length; h++) {
-        if (String(dest[h][1]).trim().toLowerCase() === 'product id') { startRow = h + 1; break; }
-      }
-      for (var r = startRow; r < dest.length; r++) { dest[r][5] = 0; }
-      newSheet.getRange(1, 1, dest.length, 6).setValues(dest);
-      newSheet.getRange(startRow, 1, 1, 6).setFontWeight('bold').setBackground('#1a1a2e').setFontColor('#ffffff');
-      newSheet.setFrozenRows(startRow);
-    } else {
-      var headers = [['ID','Product ID','Category','Color','Size','Stock']];
-      newSheet.getRange(1, 1, 1, 6).setValues(headers);
-      newSheet.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#1a1a2e').setFontColor('#ffffff');
-      newSheet.setFrozenRows(1);
-    }
-    return newSheet;
-  } catch(e) {
-    return null;
-  }
-}
-
-// ─── ADD MULTIPLE ROWS TO RETAIL STOCK SHEET (batch) ────────
-// items = [{productId, category, colorNum, size, qty}, ...]
-function addRetailStockItems(storeName, password, items) {
-  var validPass = isStorePass(storeName, password)
-               || isEmployee(password);
-  if (!validPass) return { success: false, error: 'Wrong password.' };
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
-  try {
-    var ss    = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(storeName + ' Stock');
-    if (!sheet) return { success: false, error: 'Sheet for "' + storeName + '" not found.' };
-
-    // One read; later items with the same key update the same row / pending append
-    var data  = sheet.getDataRange().getValues();
-    var rowOf = {};
-    for (var r = sheetDataStart(data); r < data.length; r++) {
-      var k = normCode(data[r][1]) + '|' + normCode(data[r][3]) + '|' + normCode(data[r][4]);
-      if (rowOf[k] === undefined) rowOf[k] = r;
-    }
-    var appends = [], appendAt = {}, results = [], changes = [];
-    (items || []).forEach(function(it) {
-      var pid = normCode(it.productId), col = String(it.colorNum).trim(), sz = String(it.size).trim();
-      var qty = parseInt(it.qty) || 0, key = pid + '|' + normCode(col) + '|' + normCode(sz);
-      if (!pid || !col || !sz) { results.push({ size: sz, ok: false }); return; }
-      if (rowOf[key] !== undefined) {
-        var row = rowOf[key];
-        changes.push({ store: storeName, pid: pid, col: col, sz: sz, before: parseInt(data[row][5]) || 0, after: qty });
-        data[row][5] = qty;
-        sheet.getRange(row + 1, 6).setValue(qty);
-      } else if (appendAt[key] !== undefined) {
-        changes.push({ store: storeName, pid: pid, col: col, sz: sz, before: appends[appendAt[key]][5], after: qty });
-        appends[appendAt[key]][5] = qty;
-      } else {
-        changes.push({ store: storeName, pid: pid, col: col, sz: sz, before: 0, after: qty });
-        appendAt[key] = appends.length;
-        appends.push([pid + col + sz, pid, it.category || '', col, sz, qty]);
-      }
-      results.push({ size: sz, ok: true });
-    });
-    if (appends.length) sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, 6).setValues(appends);
-    logHistory(ss, changes, isEmployee(password) ? 'Palladium edit' : 'Count', '', whoIs(password, storeName));
-    SpreadsheetApp.flush();
-    return { success: true, results: results };
-  } catch(err) {
-    return { success: false, error: err.toString() };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-// ─── ADD NEW ROW TO RETAIL STOCK SHEET ───────────────────────
-// Palladium/employee only — set one size's quantity in a store's sheet (adds the row if missing)
-function addRetailStockItem(storeName, password, productId, category, colorNum, size, qty) {
-  var validPass = isStorePass(storeName, password)
-               || isEmployee(password);
-  if (!validPass) return { success: false, error: 'Wrong password.' };
-  return addRetailStockItems(storeName, password, [{ productId: productId, category: category, colorNum: colorNum, size: size, qty: qty }]);
 }
 
 // ─── GENERATE MASTER SHEET ────────────────────────────────────────────────────
@@ -1282,14 +1057,13 @@ function sheetWriter(width) {
 }
 
 // Pivot layout: one section per product code, sizes as columns, colors as rows,
-// quantities = all stores combined (Palladium + Bicasso 1 + Bicasso 2 + Bicasso Nana).
+// quantities = all stores combined (Palladium + Burmelin + Nana; the shops from Loyverse, sent by the app).
 // Also writes "Order Plan": per color/size, how many to order to reach the targets.
-function generateMasterSheet(password, targets) {
+function generateMasterSheet(password, targets, retail) {
   if (!isEmployee(password)) return { success: false, error: 'Wrong password.' };
   targets = targets || {};
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var STORES = ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana'];
 
     var wsSheet = getPalladiumSheet(ss);
     if (!wsSheet) return { success: false, error: 'Palladium stock tab not found.' };
@@ -1309,25 +1083,13 @@ function generateMasterSheet(password, targets) {
     var width = 2;
     productOrder.forEach(function(p) { sizeOrder[p].sort(sortSizesGs); width = Math.max(width, sizeOrder[p].length + 2); });
 
+    // Shop stock (Burmelin + Nana) comes from Loyverse, sent by the app as { 'pid||colour||size': qty }.
+    // The old shop tabs are not read any more.
     var retailMap = {};
-    STORES.forEach(function(s) {
-      retailMap[s] = {};
-      var sh = ss.getSheetByName(s + ' Stock');
-      if (!sh) return;
-      var d = sh.getDataRange().getValues();
-      for (var r2 = sheetDataStart(d); r2 < d.length; r2++) {
-        var pid2 = String(d[r2][1]).trim(), cn2 = String(d[r2][3]).trim().replace(/^Color\s*/i, '');
-        var sz2 = String(d[r2][4]).trim(), qty2 = parseInt(d[r2][5]) || 0;
-        if (!pid2 || !cn2 || !sz2) continue;
-        var k = pid2 + '||' + cn2 + '||' + sz2;
-        retailMap[s][k] = (retailMap[s][k] || 0) + qty2;
-      }
-    });
+    Object.keys(retail || {}).forEach(function(k) { retailMap[k] = parseInt(retail[k]) || 0; });
     function totalAt(pid, cn, sz) {
       var pal = (palMap[pid][cn] && palMap[pid][cn][sz] !== undefined) ? (parseInt(palMap[pid][cn][sz]) || 0) : 0;
-      var retail = 0;
-      STORES.forEach(function(s) { retail += (retailMap[s][pid + '||' + cn + '||' + sz] || 0); });
-      return pal + retail;
+      return pal + (retailMap[pid + '||' + cn + '||' + sz] || 0);
     }
     function header(pid) {
       var h = [pid + (categoryMap[pid] ? '  ' + categoryMap[pid] : '')];
@@ -1399,7 +1161,7 @@ function generateMasterSheet(password, targets) {
 // One row per change to any stock number: what changed, before → after, why, and who.
 var HISTORY_SHEET   = 'Stock History';
 var HISTORY_HEADERS = ['Date/Time', 'Store', 'Product ID', 'Color', 'Size', 'Change', 'Before', 'After', 'Action', 'Reference', 'By'];
-var STOCK_TABS      = ['Bicasso 1 Stock', 'Bicasso 2 Stock', 'Bicasso Nana Stock'];
+var STOCK_TABS      = [];   // the old shop tabs (Bicasso 1 / 2 / Nana Stock) are an archive since 18 Nov 2026: edits there are not logged
 
 function getHistorySheet(ss) {
   var sh = ss.getSheetByName(HISTORY_SHEET);

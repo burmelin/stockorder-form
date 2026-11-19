@@ -149,6 +149,40 @@ function salesMoney(receipts, shopOf, tz) {
     .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.shop.localeCompare(b.shop)));
 }
 
+// A Burmelin delivery from Palladium -> the new Loyverse stock levels.
+// lines: [{ pid, col, sz, qty, label }] (Palladium's product / colour / size), levels: GET /inventory
+// rows for the store. Each line is matched to the Loyverse variant with that product, colour and
+// size (the same reading as the stock screens); a line with no such variant is listed in missing
+// so it can be added by hand. Returns { updates: [{ variant_id, store_id, stock_after }], pcs, missing }.
+// Loyverse sets a stock level (it doesn't add), so stock_after = what Loyverse has now + the delivery.
+function planReceive(idx, levels, lines, storeId) {
+  const norm = (v) => String(v == null ? '' : v).trim().toUpperCase();
+  const loose = (v) => norm(v).replace(/#$/, '');
+  const exact = new Map(), rough = new Map();
+  for (const [vid, p] of idx) {
+    if (p.kind !== 'sized') continue;
+    for (const [m, key] of [[exact, `${norm(p.pid)}|${norm(p.col)}|${norm(p.sz)}`], [rough, `${norm(p.pid)}|${loose(p.col)}|${norm(p.sz)}`]]) {
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(vid);
+    }
+  }
+  const have = new Map();
+  for (const lv of levels || []) if (!storeId || lv.store_id === storeId) have.set(lv.variant_id, Number(lv.in_stock) || 0);
+  const pick = (list) => (list || []).find((v) => have.has(v)) || (list || [])[0];
+  const add = new Map(), missing = [];
+  let pcs = 0;
+  for (const l of lines || []) {
+    const qty = parseInt(l.qty, 10) || 0;
+    if (qty <= 0) continue;
+    const vid = pick(exact.get(`${norm(l.pid)}|${norm(l.col)}|${norm(l.sz)}`)) || pick(rough.get(`${norm(l.pid)}|${loose(l.col)}|${norm(l.sz)}`));
+    if (!vid) { missing.push(`${l.label || `${l.pid} · Colour ${l.col} · Size ${l.sz}`} ×${qty}`); continue; }
+    add.set(vid, (add.get(vid) || 0) + qty);
+    pcs += qty;
+  }
+  const updates = [...add].map(([variant_id, qty]) => ({ variant_id, store_id: storeId, stock_after: (have.get(variant_id) || 0) + qty }));
+  return { updates, pcs, missing };
+}
+
 // The two shop stores and which staff-app shop each till belongs to.
 const STORES = { burmelin: 'Burmelin', nana: 'BICASSO 3 Nana' };
 const STORE_SHOP = { burmelin: 'Bicasso 1', nana: 'Bicasso Nana' };   // a till not named below
@@ -169,4 +203,4 @@ function tillShops(devices) {
   return mapDevices(devices, ['Bicasso 1', 'Bicasso 2', 'Bicasso Nana']).map;
 }
 
-module.exports = { CODE_MAP, codeMap, parseVariant, variantIndex, buildStock, salesLines, salesMoney, STORES, STORE_SHOP, storeIds, tillShops };
+module.exports = { CODE_MAP, codeMap, parseVariant, variantIndex, buildStock, salesLines, salesMoney, planReceive, STORES, STORE_SHOP, storeIds, tillShops };

@@ -423,6 +423,7 @@ tbody tr:last-child td{border-bottom:none}
 .sold-time{color:#86827B;font-size:.74rem;min-width:38px}
 .sold-what{flex:1}
 .sold-qty{font-weight:700;white-space:nowrap;text-align:right}
+.pal-lv{margin-top:8px;padding:9px 11px;background:#EDF2F8;border-radius:8px;font-size:.82rem;color:#003D7A;line-height:1.4}
 .sold-qty i,.sold-shop{font-style:normal;font-weight:600;font-size:.7rem;color:#6D6A65}
 .sold-money{background:#fff;border-radius:12px;box-shadow:0 1px 5px rgba(0,0,0,.07);margin-bottom:10px;overflow:hidden}
 .sold-money-row{display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr 1.1fr;gap:4px;align-items:center;padding:8px 10px;border-bottom:1px solid #ECE8E1;font-size:.78rem;color:#2A2A31;text-align:right}
@@ -1181,9 +1182,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, ownerEditLeave:1, ownerRemoveLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, sellRetailStock:1, sellRetailStockBatch:1, palladiumSell:1, transferStock:1, addRetailStockItem:1, addRetailStockItems:1, generateMasterSheet:1 };
-  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, sellRetailStock:1, sellRetailStockBatch:1, palladiumSell:1, markDone:1, transferStock:1, submitOrder:1 };
-  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], ownerEditLeave:['requestId','staffId','type','dates','reason','half'], ownerRemoveLeave:['requestId'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], sellRetailStock:['storeName','password','rowId','qty','saleId'], sellRetailStockBatch:['storeName','password','items','saleId'], palladiumSell:['items','saleId'], getSalesToday:['storeName'], transferStock:['fromStore','toStore','password','rowId','qty','transferId'], addRetailStockItem:['storeName','password','productId','category','colorNum','size','qty'], addRetailStockItems:['storeName','password','items'], generateMasterSheet:['password','targets'] };
+  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, ownerEditLeave:1, ownerRemoveLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, palladiumSell:1, generateMasterSheet:1 };
+  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, palladiumSell:1, markDone:1, submitOrder:1 };
+  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], ownerEditLeave:['requestId','staffId','type','dates','reason','half'], ownerRemoveLeave:['requestId'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], palladiumSell:['items','saleId'], getSalesToday:['storeName'], generateMasterSheet:['password','targets','retail'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -1310,7 +1311,6 @@ var ALL_STORES      = ['Bicasso 1','Bicasso 2','Bicasso Nana','Palladium'];
 var ALL_ORDERS      = [];
 var PAL_FILTER      = 'all';
 var STOCK_DATA      = null;
-var PAL_RETAIL_TAB  = 'Bicasso 1';
 
 // ── DOM REFS ──────────────────────────────────────────────────────
 var selProd  = document.getElementById('sel-product');
@@ -1436,7 +1436,7 @@ function appLogout() {
   PAL_SHOW_OLD     = false;
   CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
-  PAL_RETAIL_TAB   = 'Bicasso 1';
+  PAL_RETAIL_TAB   = 'Burmelin';
   LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all'; SOLD_WHEN = 'today'; SOLD_VIEW = 'product';
   cart = []; nextId = 1; lastOrder = null;
   document.getElementById('screen-app').classList.remove('active');
@@ -1482,7 +1482,7 @@ function refreshCurrent() {
   if (SESSION_STORE && SESSION_STORE.isPalladium) {
     if (CURRENT_PANEL === 'mystore') { ALL_ORDERS=[]; palLoadOrders(); }
     else if (CURRENT_PANEL === 'stores') { STOCK_DATA=null; palShowStock(); }
-    else if (CURRENT_PANEL === 'order')  { ALL_RETAIL_STOCK=null; palLoadRetail(); }
+    else if (CURRENT_PANEL === 'order')  { palLoadRetail(true); }
     else if (CURRENT_PANEL === 'plan')   { ALL_RETAIL_STOCK=null; STOCK_DATA=null; palShowPlan(); }
     else if (CURRENT_PANEL === 'report') { ALL_RETAIL_STOCK=null; REPORT_DATA={}; palShowReport(); }
     else if (CURRENT_PANEL === 'cash')   { palShowCash(); }
@@ -1572,6 +1572,7 @@ function loadStoreStock(fresh) {
 function applyAllRetail(r, fromCache) {
   ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {};
   Object.keys(r.stores || {}).forEach(function(k) {
+    if (k !== 'Palladium') return;   // shops come from Loyverse (applyLv)
     if (!fromCache || !ALL_RETAIL_STOCK[k]) ALL_RETAIL_STOCK[k] = r.stores[k];
   });
   if (r.stores && r.stores.Palladium && r.groups && (!fromCache || !STOCK_DATA)) {
@@ -1579,18 +1580,36 @@ function applyAllRetail(r, fromCache) {
   }
 }
 
-function loadAllRetail(onData, onFail) {
+// Palladium's screens see the shops as Burmelin and Nana, read from Loyverse (since 18 Nov 2026
+// the old Bicasso 1 / 2 / Nana Stock tabs are not used). Palladium's own stock comes from Apps Script.
+var PAL_SHOPS = ['Burmelin', 'Bicasso Nana'];
+var PAL_SHOP_OF = { burmelin: 'Burmelin', nana: 'Bicasso Nana' };
+var PAL_SHOP_SHORT = { 'Burmelin': 'Burmelin', 'Bicasso Nana': 'Nana' };
+function palShopsLoaded() { return !!ALL_RETAIL_STOCK && PAL_SHOPS.every(function(s) { return ALL_RETAIL_STOCK[s]; }); }
+
+// onData runs whenever a part arrives (saved copy first, then fresh data); onFail only when
+// Palladium's stock can't be read at all. Loyverse not answering leaves that shop empty, with a note.
+function loadAllRetail(onData, onFail, fresh) {
   var cached = cacheGet('allretail');
-  if (cached) { applyAllRetail(cached, true); onData(); }
+  var palIn = false;
+  var tell = function() { if (palIn || (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK.Palladium)) onData(); };
+  if (cached) { applyAllRetail(cached, true); palIn = true; onData(); }
   google.script.run
     .withSuccessHandler(function(r) {
-      if (r && r.success) { applyAllRetail(r, false); cacheSet('allretail', r); onData(); }
+      if (r && r.success) { applyAllRetail(r, false); cacheSet('allretail', r); palIn = true; tell(); }
       else if (!cached) onFail(r && r.error);
     })
     .withFailureHandler(function() {
       if (!cached) onFail(); else showToast('Could not update — showing saved stock');
     })
     .getAllRetailStock();
+  ['burmelin', 'nana'].forEach(function(key) {
+    lvLoad(key, fresh, tell, function(e, hadCopy) {
+      if (!hadCopy) { ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {}; ALL_RETAIL_STOCK[PAL_SHOP_OF[key]] = ALL_RETAIL_STOCK[PAL_SHOP_OF[key]] || {}; }
+      showToast('Could not read ' + PAL_SHOP_SHORT[PAL_SHOP_OF[key]] + ' from Loyverse' + (hadCopy ? ' — showing saved stock' : ''));
+      tell();
+    });
+  });
 }
 
 // ── STORE TABS ────────────────────────────────────────────────────
@@ -1609,15 +1628,11 @@ function switchStoreTab(tab) {
 // ── STOCK GROUPS: product card › color row › size boxes ──────────
 function stockLevel(qty, lowMax) { return qty <= 0 ? 'out' : qty <= lowMax ? 'low' : 'ok'; }
 
-function stockChipId(store, pid, colorKey, size) {
-  return ('chip-' + store + '-' + pid + '-' + colorKey + '-' + size).replace(/[^\w-]/g, '_');
-}
-
 function colorNumSort(a, b) {
   return sortSizes(String(a).replace(/^Color\s*/i,''), String(b).replace(/^Color\s*/i,''));
 }
 
-// inv = {pid:{colorKey:{size:qty}}}. opts: lowMax (qty counted as "low"), editStore (tap a box to edit)
+// inv = {pid:{colorKey:{size:qty}}}. opts: lowMax (qty counted as "low")
 function stockGroupsHtml(inv, q, opts) {
   opts = opts || {};
   var lowMax = opts.lowMax == null ? 1 : opts.lowMax;
@@ -1644,11 +1659,7 @@ function stockGroupsHtml(inv, q, opts) {
       sizes.forEach(function(sz) {
         var qty = parseInt(inv[pid][colorKey][sz]) || 0, lvl = stockLevel(qty, lowMax);
         cPcs += qty; if (lvl === 'low') pLow++; if (lvl === 'out') pOut++;
-        chips += opts.editStore
-          ? '<div class="sg-chip ' + lvl + ' edit" id="' + stockChipId(opts.editStore, pid, colorKey, sz) + '"'
-            + ' onclick="palEditRetail(\'' + palEsc(opts.editStore) + '\',\'' + palEsc(pid) + '\',\'' + palEsc(colorKey) + '\',\'' + palEsc(sz) + '\')">'
-            + '<span class="sz">' + sz + '</span><span class="q">' + qty + '</span></div>'
-          : '<div class="sg-chip ' + lvl + '"><span class="sz">' + sz + '</span><span class="q">' + qty + '</span></div>';
+        chips += '<div class="sg-chip ' + lvl + '"><span class="sz">' + sz + '</span><span class="q">' + qty + '</span></div>';
       });
       pPcs += cPcs; nColors++;
       colorsHtml += '<div class="sg-color"><div class="sg-color-head"><span class="sg-color-name">' + (/^\d+$/.test(cn) ? 'Color ' + cn : cn) + '</span>'
@@ -1692,7 +1703,7 @@ function stockGroupsHtml(inv, q, opts) {
     + '<div class="sg-legend"><span><i style="background:#C9DFD0"></i>In stock</span>'
     + '<span><i style="background:#EAD9B5"></i>Low (' + (lowMax === 1 ? '1' : '1–' + lowMax) + ')</span>'
     + '<span><i style="background:#EDCFCA"></i>Out</span>'
-    + (opts.editStore ? '<span style="margin-left:auto">Tap a box to edit</span>' : '') + '</div>'
+    + '</div>'
     + body;
 }
 
@@ -1918,7 +1929,7 @@ function palShowReport(days) {
     if (!retailIn) { retailIn = true; done(); }
     else if (CURRENT_PANEL === 'report' && REPORT_DAYS === d && REPORT_DATA[d]) palRenderReport();
   }
-  if (ALL_RETAIL_STOCK && ['Bicasso 1','Bicasso 2','Bicasso Nana'].every(function(s){ return ALL_RETAIL_STOCK[s]; })) retailDone();
+  if (palShopsLoaded()) retailDone();
   else loadAllRetail(retailDone, retailDone);
 }
 
@@ -1993,7 +2004,7 @@ function palRenderReport() {
 
   // Slow movers: in a store's stock, not one sale in the period
   var slow = {};
-  stores.forEach(function(s) {
+  PAL_SHOPS.forEach(function(s) {
     var inv = (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s]) || {};
     Object.keys(inv).forEach(function(pid) {
       Object.keys(inv[pid]).forEach(function(ck) {
@@ -2002,7 +2013,7 @@ function palRenderReport() {
         if (!pcs || soldKey[pid + '|' + col]) return;
         var k = pid + '|' + col;
         if (!slow[k]) slow[k] = { pid: pid, col: col, pcs: 0, where: [] };
-        slow[k].pcs += pcs; slow[k].where.push(s + ' ' + pcs);
+        slow[k].pcs += pcs; slow[k].where.push(PAL_SHOP_SHORT[s] + ' ' + pcs);
       });
     });
   });
@@ -2104,7 +2115,10 @@ function lvFetch(key, fresh) {
 }
 function applyLv(key, d) {
   LV[key] = d;
-  if (key === myLvKey() && SESSION_STORE) {
+  if (SESSION_STORE && SESSION_STORE.isPalladium) {
+    ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {};
+    ALL_RETAIL_STOCK[PAL_SHOP_OF[key]] = d.sized || {};
+  } else if (key === myLvKey() && SESSION_STORE) {
     ALL_RETAIL_STOCK = ALL_RETAIL_STOCK || {};
     ALL_RETAIL_STOCK[SESSION_STORE.name] = d.sized || {};
   }
@@ -3440,8 +3454,60 @@ function palBuildOrderCard(order) {
       +'<button class="pal-btn" style="background:#1D6E46;color:#fff" onclick="palSaveEdit(\''+palEsc(order.orderId)+'\')">💾 Save</button>'
       +'<button class="pal-btn" style="background:#fff;border:2px solid #D6D0C5;color:#6D6A65" onclick="palToggleEdit(\''+palEsc(order.orderId)+'\')">Cancel</button>'
       +'</div></div>':'')
+    +palLvLine(order)
     +'<div id="pmsg-'+order.orderId+'" style="margin-top:6px;font-size:.83rem;min-height:16px"></div>'
     +'</div></div>';
+}
+
+// ── BURMELIN DELIVERIES INTO LOYVERSE ──────────────────────────────
+// After Done, a Burmelin order's pieces are added to the Burmelin store in Loyverse by the app
+// (/api/loyverse-receive). The order's "loyverse" says how it went: To add / Adding … / Added … / Failed: …
+// Nana orders say "Add by hand" until Nana's Loyverse stock is counted.
+function palLvLine(order) {
+  var st = String(order.loyverse || '');
+  if (order.status !== 'Completed' || !st) return '';
+  var id = palEsc(order.orderId), body, btn = '';
+  if (/^Added/.test(st)) body = '✓ ' + lvEsc(st.replace(/^Added/, 'Added to Burmelin in Loyverse'));
+  else if (/^Adding/.test(st)) body = 'Adding to Loyverse… (' + lvEsc(st.replace(/^Adding\s*/, '')) + '). If this stays, check Burmelin in Loyverse before adding by hand.';
+  else if (st === 'To add' || /^Failed/.test(st)) {
+    body = st === 'To add' ? 'Not added to Loyverse yet.' : 'Not added to Loyverse: ' + lvEsc(st.replace(/^Failed:\s*/, ''));
+    btn = '<button class="pal-btn" style="background:#0054A5;color:#fff;margin-top:8px" id="plv-' + id + '" onclick="palAddToLoyverse(\'' + id + '\')">Add to Loyverse</button>';
+  }
+  else if (st === 'Add by hand') body = 'Add these pieces to Nana in Loyverse by hand (Nana is not counted in Loyverse yet).';
+  else body = lvEsc(st);
+  return '<div class="pal-lv" id="plvl-' + id + '">' + body + btn + '</div>';
+}
+function palAddToLoyverse(orderId, auto) {
+  var order = ALL_ORDERS.find(function(o) { return o.orderId === orderId; });
+  if (!order) return;
+  var btn = document.getElementById('plv-' + orderId); if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  var redraw = function(st) {
+    if (st) order.loyverse = st;
+    var el = document.getElementById('plvl-' + orderId), html = palLvLine(order);
+    if (el) el.outerHTML = html || '';
+  };
+  fetch('/api/loyverse-receive', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-staff-token': (SESSION_STORE && SESSION_STORE.token) || '' },
+    body: JSON.stringify({ orderId: orderId })
+  }).then(function(r) { return r.json().catch(function() { return {}; }).then(function(d) { return { ok: r.ok, d: d }; }); })
+    .then(function(x) {
+      var d = x.d || {};
+      if (x.ok && d.success) {
+        redraw(d.loyverse);
+        LV.burmelin = null; CS_ROWS = null; ALL_RETAIL_STOCK = null;
+        showToast(d.warning ? '⚠ ' + d.warning : '✓ ' + d.pcs + ' pcs added to Burmelin in Loyverse' + (d.missing && d.missing.length ? ' (' + d.missing.length + ' to add by hand)' : ''));
+      } else {
+        redraw(d.loyverse || (d.already ? null : order.loyverse));
+        if (d.already || d.busy) palLoadOrders();
+        showToast('⚠ ' + (d.error || 'Not added to Loyverse'));
+      }
+    })
+    .catch(function() {
+      // The request may have gone through: reload the orders to see, instead of trying again blind
+      showToast('⚠ Connection problem: checking the order…');
+      palLoadOrders();
+    });
 }
 
 function palToggleCard(id){ var b=document.getElementById('pob-'+id); if(b) b.classList.toggle('open'); }
@@ -3487,9 +3553,9 @@ function palMarkDone(orderId) {
   var order=ALL_ORDERS.find(function(o){ return o.orderId===orderId; });
   var isStore=order&&order.orderType==='store';
   var msg=isStore
-    ?(order.shopName==='Burmelin'
-      ?'Send '+orderId+' to Burmelin?\nItems will be deducted from Palladium. Burmelin\'s stock is in Loyverse: add the pieces there when they arrive. Cannot be undone.'
-      :'Send '+orderId+' to '+((order&&order.shopName)||'the store')+'?\nItems will be deducted from Palladium and added to '+((order&&order.shopName)||'the store')+'\'s stock. Cannot be undone.')
+    ?(order.shopName==='Bicasso Nana'
+      ?'Send '+orderId+' to Nana?\nItems will be deducted from Palladium. Add them to Nana in Loyverse by hand (Nana is not counted in Loyverse yet). Cannot be undone.'
+      :'Send '+orderId+' to Burmelin?\nItems will be deducted from Palladium and added to Burmelin in Loyverse. Cannot be undone.')
     :'Mark '+orderId+' as DONE?\nThis deducts stock from the sheet and cannot be undone.';
   if(!confirm(msg)) return;
   var btn=document.getElementById('pdone-'+orderId), msg=document.getElementById('pmsg-'+orderId);
@@ -3498,12 +3564,13 @@ function palMarkDone(orderId) {
     .withSuccessHandler(function(r){
       if(r.success){
         var order=ALL_ORDERS.find(function(o){ return o.orderId===orderId; });
-        if(order){ order.status='Completed'; order.completed='Just now'; }
+        if(order){ order.status='Completed'; order.completed='Just now'; if(r.loyverse) order.loyverse=r.loyverse; }
         // Stock moved on the server: reload it next time Stock / Retail / Master opens
         STOCK_DATA=null; ALL_RETAIL_STOCK=null; CS_ROWS=null;
         palUpdateCounts();
         var card=document.getElementById('poc-'+orderId); if(card) card.outerHTML=palBuildOrderCard(order);
         var b=document.getElementById('pob-'+orderId); if(b) b.classList.add('open');
+        if(order&&r.loyverse==='To add') palAddToLoyverse(orderId, true);
         if(r.warnings&&r.warnings.length){ var m=document.getElementById('pmsg-'+orderId); if(m){m.style.color='#7A5A1F';m.textContent='⚠ '+r.warnings.join('; ');} showToast('⚠ Done, with '+r.warnings.length+' warning'+(r.warnings.length>1?'s':'')+' — see the order'); }
       } else {
         if(btn){ btn.disabled=false; btn.textContent=isStore?'Send to Store':'Mark Done'; }
@@ -3576,49 +3643,37 @@ function palRenderStockCats(){
     +'<div id="pal-stock-body">'+palStockHtml('')+'</div>';
 }
 
-// ── RETAIL STOCK (Palladium can view & edit all 3 stores) ─────────
-function palLoadRetail(){
+// ── SHOP STOCK (Palladium sees Burmelin and Nana, read from Loyverse) ─────
+// Shop stock is changed only in Loyverse now (sales, counts, deliveries), so this screen only shows it.
+var PAL_RETAIL_TAB = 'Burmelin';
+function palLoadRetail(fresh){
   var el=document.getElementById('pal-retail-content'); if(!el) return;
-  var RSTORES=['Bicasso 1','Bicasso 2','Bicasso Nana'];
-  if(ALL_RETAIL_STOCK&&RSTORES.every(function(s){ return ALL_RETAIL_STOCK[s]; })){ palRenderRetailView(); return; }
-  el.innerHTML=loaderHtml('move', 'Loading store stock…');
+  if(!fresh&&palShopsLoaded()){ palRenderRetailView(); return; }
+  if(!document.getElementById('pal-retail-list')) el.innerHTML=loaderHtml('move', 'Reading shop stock from Loyverse…');
   loadAllRetail(function(){
-    if(CURRENT_PANEL!=='order') return;
+    if(CURRENT_PANEL!=='order'||!palShopsLoaded()) return;
     if(document.getElementById('pal-retail-list')) palRefreshRetailList(); else palRenderRetailView();
   },function(err){
-    el.innerHTML='<div class="sp-empty">⚠ '+(err||'Could not load retail stock.')+'</div>';
-    showToast('Connection error — tap Retry',function(){ ALL_RETAIL_STOCK=null; palLoadRetail(); });
-  });
+    el.innerHTML='<div class="sp-empty">⚠ '+(err||'Could not load shop stock.')+'</div>';
+    showToast('Connection error — tap Retry',function(){ palLoadRetail(true); });
+  }, fresh);
 }
 
 function palRenderRetailView(){
-  var RSTORES=['Bicasso 1','Bicasso 2','Bicasso Nana'];
   var el=document.getElementById('pal-retail-content');
-  var tabs=RSTORES.map(function(s){
-    var a=s===PAL_RETAIL_TAB;
-    return '<button class="mstab'+(a?' active':'')+'" onclick="palSelectRetailStore(\''+palEsc(s)+'\')">'+s+'</button>';
+  var tabs=PAL_SHOPS.map(function(s){
+    return '<button class="mstab'+(s===PAL_RETAIL_TAB?' active':'')+'" onclick="palSelectRetailStore(\''+palEsc(s)+'\')">'+PAL_SHOP_SHORT[s]+'</button>';
   }).join('');
-  el.innerHTML='<div style="font-size:.78rem;font-weight:700;color:#6D6A65;text-transform:uppercase;letter-spacing:.2em;margin-bottom:10px">Retail Stock</div>'
+  el.innerHTML='<div style="font-size:.78rem;font-weight:700;color:#6D6A65;text-transform:uppercase;letter-spacing:.2em;margin-bottom:10px">Shop Stock</div>'
     +'<div class="ms-tabs rp-tabs">'+tabs+'</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<input type="text" id="pal-retail-search" placeholder="Search ID or full code…" autocomplete="off" autocapitalize="characters" class="rs-search" oninput="palFilterRetail(this.value)" style="flex:1;margin-bottom:0">'
-    +'<button onclick="palShowAddItemForm()" style="padding:10px 14px;background:#0054A5;color:#fff;border:none;border-radius:10px;font-weight:700;font-size:.9rem;cursor:pointer;white-space:nowrap">+ Add</button>'
-    +'</div>'
-    +'<div id="pal-add-item-form" style="display:none;background:#F3F6FA;border:2px solid #0054A5;border-radius:12px;padding:14px;margin-bottom:12px">'
-    +'<div style="font-size:.78rem;font-weight:700;color:#003D7A;text-transform:uppercase;margin-bottom:10px">Add New Item to '+PAL_RETAIL_TAB+'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-    +'<input id="pai-pid" placeholder="Product ID (e.g. T9027)" style="padding:9px 11px;border:2px solid #D5E2F0;border-radius:8px;font-size:.88rem">'
-    +'<input id="pai-cat" placeholder="Category (e.g. T-Shirt)" style="padding:9px 11px;border:2px solid #D5E2F0;border-radius:8px;font-size:.88rem">'
-    +'<input id="pai-color" placeholder="Color # (e.g. 1)" style="padding:9px 11px;border:2px solid #D5E2F0;border-radius:8px;font-size:.88rem">'
-    +'<input id="pai-size" placeholder="Size (e.g. M)" style="padding:9px 11px;border:2px solid #D5E2F0;border-radius:8px;font-size:.88rem">'
-    +'<input id="pai-qty" type="number" min="0" placeholder="Qty" style="padding:9px 11px;border:2px solid #D5E2F0;border-radius:8px;font-size:.88rem">'
-    +'</div>'
-    +'<div id="pai-msg" style="font-size:.83rem;min-height:16px;margin-bottom:8px"></div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button onclick="palSaveAddItem()" style="background:#0054A5;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer">Save</button>'
-    +'<button onclick="palHideAddItemForm()" style="background:#fff;border:2px solid #D5E2F0;color:#003D7A;border-radius:8px;padding:9px 14px;font-weight:600;cursor:pointer">Cancel</button>'
-    +'</div></div>'
+    +'<div id="pal-retail-head">'+palRetailHead()+'</div>'
+    +'<input type="text" id="pal-retail-search" placeholder="Search ID or full code…" autocomplete="off" autocapitalize="characters" class="rs-search" oninput="palFilterRetail(this.value)">'
     +'<div id="pal-retail-list">'+palBuildRetailList(PAL_RETAIL_TAB,'')+'</div>';
+}
+function palRetailHead(){
+  var key=PAL_RETAIL_TAB==='Burmelin'?'burmelin':'nana', d=LV[key];
+  return '<div class="lv-head"><div><b>'+PAL_SHOP_SHORT[PAL_RETAIL_TAB]+'</b><span>From Loyverse · '+(lvUpdatedText(d)||'loading…')+' · change stock in Loyverse</span></div>'
+    +'<button class="lv-refresh" onclick="this.disabled=true;this.textContent=\'Reading…\';palLoadRetail(true)">Refresh</button></div>';
 }
 
 function palSelectRetailStore(s){ PAL_RETAIL_TAB=s; palRenderRetailView(); }
@@ -3627,77 +3682,18 @@ function palFilterRetail(q){ var el=document.getElementById('pal-retail-list'); 
 function palBuildRetailList(storeName,q){
   var inv=ALL_RETAIL_STOCK&&ALL_RETAIL_STOCK[storeName];
   if(!inv) return '<div class="sp-empty">No data.</div>';
+  var key=storeName==='Burmelin'?'burmelin':'nana';
+  if(!lvHasSized(LV[key])) return '<div class="lv-note">'+PAL_SHOP_SHORT[storeName]+' has no size/colour stock in Loyverse yet (not counted).</div>'+totalsHtml(LV[key]&&LV[key].totals,q);
   ensurePalRef(palRefreshRetailList);
   var groups=(STOCK_DATA&&STOCK_DATA.groups)||(GROUPS&&GROUPS.length?GROUPS:null);
-  return stockGroupsHtml(inv,q,{lowMax:1,editStore:storeName,refInv:palRefInv(),sections:groups,historyStore:storeName});
+  return stockGroupsHtml(inv,q,{lowMax:1,refInv:palRefInv(),sections:groups})+totalsHtml(LV[key]&&LV[key].totals,q);
 }
 
 function palRefreshRetailList(){
   var list=document.getElementById('pal-retail-list'); if(!list) return;
+  var h=document.getElementById('pal-retail-head'); if(h) h.innerHTML=palRetailHead();
   var s=document.getElementById('pal-retail-search');
   rerenderKeepOpen(list,palBuildRetailList(PAL_RETAIL_TAB,s?s.value:''));
-}
-
-function palCategoryOf(pid){
-  var gs=(STOCK_DATA&&STOCK_DATA.groups)||GROUPS||[];
-  var g=gs.find(function(x){ return x.products&&x.products.indexOf(pid)!==-1; });
-  return g?g.label:'';
-}
-
-function palEditRetail(storeName,pid,colorKey,sz){
-  var sizes=ALL_RETAIL_STOCK&&ALL_RETAIL_STOCK[storeName]&&ALL_RETAIL_STOCK[storeName][pid]&&ALL_RETAIL_STOCK[storeName][pid][colorKey];
-  if(!sizes) return;
-  var cur=parseInt(sizes[sz])||0;
-  var ans=prompt(storeName+'\n'+pid+' · '+colorKey+' · Size '+sz+'\n\nNew quantity:',cur);
-  if(ans===null) return;
-  var newQty=parseInt(ans,10);
-  if(isNaN(newQty)||newQty<0){ showToast('Enter a number, 0 or more'); return; }
-  if(newQty===cur&&sizes[sz]!==undefined) return;
-  var chip=document.getElementById(stockChipId(storeName,pid,colorKey,sz));
-  if(chip){ chip.style.opacity='.5'; chip.querySelector('.q').textContent='…'; }
-  // add-or-update: also creates the sheet row for sizes the store never had
-  google.script.run
-    .withSuccessHandler(function(r){
-      if(r&&r.success){ sizes[sz]=newQty; showToast('✓ '+pid+' '+colorKey+' size '+sz+' → '+newQty); }
-      else showToast('❌ '+(r&&r.error||'Save failed'));
-      palRefreshRetailList();
-    })
-    .withFailureHandler(function(){ showToast('❌ Connection error — not saved'); palRefreshRetailList(); })
-    .addRetailStockItem(storeName,SESSION_STORE.pass,pid,palCategoryOf(pid),colorKey.replace(/^Color\s*/i,''),sz,newQty);
-}
-
-function palShowAddItemForm(){ var f=document.getElementById('pal-add-item-form'); if(f){ f.style.display='block'; document.getElementById('pai-pid').focus(); } }
-function palHideAddItemForm(){ var f=document.getElementById('pal-add-item-form'); if(f) f.style.display='none'; }
-
-function palSaveAddItem(){
-  var pid=document.getElementById('pai-pid').value.trim();
-  var cat=document.getElementById('pai-cat').value.trim();
-  var color=document.getElementById('pai-color').value.trim();
-  var size=document.getElementById('pai-size').value.trim();
-  var qty=parseInt(document.getElementById('pai-qty').value)||0;
-  var msg=document.getElementById('pai-msg');
-  if(!pid||!color||!size){ msg.style.color='#A8261D'; msg.textContent='⚠ Product ID, Color and Size are required.'; return; }
-  msg.style.color='#003D7A'; msg.textContent='Saving…';
-  google.script.run
-    .withSuccessHandler(function(r){
-      if(r&&r.success){
-        if(!ALL_RETAIL_STOCK) ALL_RETAIL_STOCK={};
-        if(!ALL_RETAIL_STOCK[PAL_RETAIL_TAB]) ALL_RETAIL_STOCK[PAL_RETAIL_TAB]={};
-        if(!ALL_RETAIL_STOCK[PAL_RETAIL_TAB][pid]) ALL_RETAIL_STOCK[PAL_RETAIL_TAB][pid]={};
-        var ck='Color '+color.replace(/^Color\s*/i,'');
-        if(!ALL_RETAIL_STOCK[PAL_RETAIL_TAB][pid][ck]) ALL_RETAIL_STOCK[PAL_RETAIL_TAB][pid][ck]={};
-        ALL_RETAIL_STOCK[PAL_RETAIL_TAB][pid][ck][size]=qty;
-        palHideAddItemForm();
-        document.getElementById('pai-pid').value='';
-        document.getElementById('pai-cat').value='';
-        document.getElementById('pai-color').value='';
-        document.getElementById('pai-size').value='';
-        document.getElementById('pai-qty').value='';
-        palRefreshRetailList();
-      } else { msg.style.color='#A8261D'; msg.textContent='❌ '+(r&&r.error||'Error'); }
-    })
-    .withFailureHandler(function(){ msg.style.color='#A8261D'; msg.textContent='❌ Connection error.'; })
-    .addRetailStockItem(PAL_RETAIL_TAB,SESSION_STORE.pass,pid,cat,color,size,qty);
 }
 
 // ── PALLADIUM PURCHASE PLAN ───────────────────────────────────────
@@ -3706,10 +3702,9 @@ var PLAN_DATA = null; // combined retail+wholesale stock
 function palShowPlan() {
   var el = document.getElementById('plan-content'); if (!el) return;
   // Needs wholesale inventory + all retail stock; one request returns both
-  var allLoaded = STOCK_DATA && ALL_RETAIL_STOCK &&
-    ['Bicasso 1','Bicasso 2','Bicasso Nana'].every(function(s){ return ALL_RETAIL_STOCK[s]; });
+  var allLoaded = STOCK_DATA && palShopsLoaded();
   if (allLoaded) { palRenderPlan(); return; }
-  el.innerHTML = loaderHtml('stock', 'Adding up all 4 stores…');
+  el.innerHTML = loaderHtml('stock', 'Adding up Palladium, Burmelin and Nana…');
   loadAllRetail(function() {
     if (CURRENT_PANEL !== 'plan') return;
     if (!STOCK_DATA) {
@@ -3725,6 +3720,23 @@ function palShowPlan() {
     el.innerHTML = '<div class="sp-empty">⚠ Connection error.</div>';
     showToast('Connection error — tap Retry', function(){ palShowPlan(); });
   });
+}
+
+// Burmelin + Nana stock (Loyverse) as { 'pid||colour||size': pcs }, for the Master sheet
+function palRetailTotals() {
+  var out = {};
+  PAL_SHOPS.forEach(function(s) {
+    var inv = (ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s]) || {};
+    Object.keys(inv).forEach(function(pid) {
+      Object.keys(inv[pid]).forEach(function(ck) {
+        Object.keys(inv[pid][ck]).forEach(function(sz) {
+          var k = pid + '||' + ck.replace(/^Color\s*/i, '') + '||' + sz;
+          out[k] = (out[k] || 0) + (parseInt(inv[pid][ck][sz]) || 0);
+        });
+      });
+    });
+  });
+  return out;
 }
 
 function palGenerateMasterSheet() {
@@ -3749,13 +3761,13 @@ function palGenerateMasterSheet() {
       if (btn) { btn.textContent = 'Save to Sheet'; btn.disabled = false; }
       showToast('❌ Connection error');
     })
-    .generateMasterSheet(SESSION_STORE.pass, allTargets);
+    .generateMasterSheet(SESSION_STORE.pass, allTargets, palRetailTotals());
 }
 
 function palRenderPlan() {
   var el = document.getElementById('plan-content'); if (!el) return;
   var inv = STOCK_DATA && STOCK_DATA.inventory; if (!inv) return;
-  var RETAIL = ['Bicasso 1','Bicasso 2','Bicasso Nana'];
+  var RETAIL = PAL_SHOPS;   // Burmelin + Nana, from Loyverse
 
   function rQty(s, pid, colorKey, size) {
     return parseInt((ALL_RETAIL_STOCK && ALL_RETAIL_STOCK[s] && ALL_RETAIL_STOCK[s][pid] &&
@@ -3886,8 +3898,8 @@ function palSaveTarget(input) {
 
 function palPrintProduct(pid) {
   var inv = STOCK_DATA && STOCK_DATA.inventory; if (!inv || !inv[pid]) return;
-  var RETAIL = ['Bicasso 1','Bicasso 2','Bicasso Nana'];
-  var STORE_SHORT = ['B1','B2','BN'];
+  var RETAIL = PAL_SHOPS;   // Burmelin + Nana, from Loyverse
+  var STORE_SHORT = PAL_SHOPS.map(function(s) { return PAL_SHOP_SHORT[s]; });
   var prodData = inv[pid];
   var catLabel = '';
   (STOCK_DATA.groups || []).forEach(function(g){ if(g.products.indexOf(pid)!==-1) catLabel=g.label; });
@@ -3943,7 +3955,7 @@ function palPrintProduct(pid) {
     +'<div style="margin-bottom:14px"><span style="font-size:1.1rem;font-weight:700;color:#111118;letter-spacing:.04em">'+pid+'</span>'
     +(catLabel?' <span style="font-size:.82rem;color:#6D6A65;margin-left:8px">'+catLabel+'</span>':'')+'</div>'
     +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.83rem">'+thead+'<tbody>'+tbody+'</tbody></table></div>'
-    +'<div style="margin-top:14px;font-size:.72rem;color:#9C978F">Pal = Palladium warehouse · B1/B2/BN = Bicasso stores</div>';
+    +'<div style="margin-top:14px;font-size:.72rem;color:#9C978F">Pal = Palladium warehouse · Burmelin and Nana from Loyverse</div>';
   showPdfOverlay('Burmelin-Stock-'+pid);
 }
 
