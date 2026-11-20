@@ -2099,8 +2099,9 @@ function lvHasSized(d) {
   return Object.keys(inv).some(function(p) { return Object.keys(inv[p]).some(function(c) { return Object.keys(inv[p][c]).some(function(z) { return inv[p][c][z]; }); }); });
 }
 function myLvKey() { return SESSION_STORE && SESSION_STORE.name === 'Bicasso Nana' ? 'nana' : 'burmelin'; }
-// Pieces per size the shop should hold: 6 for Burmelin (two POS, one stock), 3 for Nana (owner, 18 Nov 2026)
-function reorderTarget() { return myLvKey() === 'burmelin' ? 6 : 3; }
+// Pieces per size the shop should hold: 4 for Burmelin (two POS, one stock), 2 for Nana (owner, 20 Nov 2026;
+// same numbers as the Loyverse low stock alert). Was 6 and 3.
+function reorderTarget() { return myLvKey() === 'burmelin' ? 4 : 2; }
 
 function lvFetch(key, fresh) {
   return fetch('/api/shop-stock?store=' + key + (fresh ? '&fresh=1' : ''), {
