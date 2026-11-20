@@ -2,6 +2,7 @@
 // Loyverse for the staff app (see _shopstock.js for how items become product / colour / size).
 // Open to every staff-app login (x-staff-token) and the owner. Answers are kept for 10 minutes;
 // fresh=1 (the Refresh button) reads Loyverse again if the kept copy is over a minute old.
+// POST { orderId } (Palladium only) adds a Burmelin delivery to Loyverse: see _receive.js.
 // Token: LOYVERSE_STAFF_TOKEN (its own token, so it can be switched off alone), else LOYVERSE_TOKEN.
 const { lvGetAll, localDate, addDays, TIMEZONE } = require('./_loyverse');
 const { loginOfToken, isOwnerRequest } = require('./_google');
@@ -11,6 +12,7 @@ const KEEP_MS = 10 * 60 * 1000;
 const FRESH_MIN_MS = 60 * 1000;
 const DAYS = 7;
 const SALES_FROM = process.env.SHOP_SALES_FROM || '2026-11-18';
+const receive = require('./_receive');
 const kept = new Map();   // store key -> { at, data }
 
 const token = () => process.env.LOYVERSE_STAFF_TOKEN || process.env.LOYVERSE_TOKEN || '';
@@ -47,7 +49,11 @@ async function readStore(key) {
 }
 
 module.exports = async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
+  if (req.method === 'POST') {
+    kept.delete('burmelin');   // its stock is about to change
+    return receive(req, res);
+  }
+  if (req.method !== 'GET') return res.status(405).json({ error: 'GET or POST only' });
   const login = await loginOfToken(req.headers['x-staff-token']);
   if (!login && !(await isOwnerRequest(req))) {
     return res.status(401).json({ error: 'Please log out and log in again.', needLogin: true });

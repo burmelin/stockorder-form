@@ -36,6 +36,26 @@ async function lvGet(path, params, token) {
   }
 }
 
+// POST to Loyverse (e.g. /inventory to set stock levels). Not retried after a timeout, so a
+// write can't be sent twice; a 429 (too many requests) is retried as nothing was done.
+async function lvPost(path, body, token) {
+  for (let attempt = 0; ; attempt++) {
+    const resp = await fetch(API + path, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token || process.env.LOYVERSE_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (resp.status === 429 && attempt < 3) {
+      const wait = (parseInt(resp.headers.get('retry-after'), 10) || 2 ** attempt) * 1000;
+      await new Promise((r) => setTimeout(r, Math.min(wait, 10000)));
+      continue;
+    }
+    if (resp.status === 401) throw new Error('Loyverse rejected the token — create a new one in Back Office → Access tokens');
+    if (!resp.ok) throw new Error(`Loyverse ${path} failed (${resp.status}): ${(await resp.text()).slice(0, 200)}`);
+    return resp.json().catch(() => ({}));
+  }
+}
+
 // Follows Loyverse's cursor pagination and returns every item under `key`.
 async function lvGetAll(path, key, params, token) {
   const items = [];
@@ -509,4 +529,4 @@ function loyverseClash(existingRows, entries) {
   return null;
 }
 
-module.exports = { TAG, TIMEZONE, lvGetAll, localDate, localTime, addDays, mapStores, mapDevices, shopResolver, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };
+module.exports = { TAG, TIMEZONE, lvGetAll, lvPost, localDate, localTime, addDays, mapStores, mapDevices, shopResolver, neighbourAccounts, dailyTotals, cardReceipts, isQr, QR_TO_BANK_FROM, planSync, planMovements, planFees, FEE_CATEGORY, FEE_SHOPS, loyverseClash, payoutClash };

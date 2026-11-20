@@ -39,7 +39,7 @@
       "maxDuration": 60
     },
     "api/shop-stock.js": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   }
 }

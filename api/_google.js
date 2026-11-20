@@ -120,6 +120,23 @@ async function loginOfToken(token) {
   return login;
 }
 
+// Calls the staff app's Apps Script server (same address as the login checks) and returns its
+// JSON answer. payload carries the phone's token, so Apps Script checks the login itself.
+async function askScript(action, payload) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25000);
+  try {
+    const resp = await fetch(OWNER_CHECK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ ...payload, action }),
+      redirect: 'follow',
+      signal: ctrl.signal,
+    });
+    return await resp.json();
+  } finally { clearTimeout(timer); }
+}
+
 // Gate for the Palladium cash drawer: the Palladium login (x-staff-token) or the owner.
 // Returns 'Palladium manager' / 'Owner' for the Entered By column, or null after a 401.
 async function checkDrawer(req, res) {
@@ -321,4 +338,4 @@ async function lastSync(sheets) {
 // Shown when a save would go past the bottom of Master Entry.
 const sheetFullError = (lastRow) => `Master Entry is full (row ${lastRow}). Add more rows at the bottom of the sheet, copying the last row's formulas.`;
 
-module.exports = { loginOfToken, isOwnerRequest, OFFICE, DRAWER, checkDrawer, rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
+module.exports = { askScript, loginOfToken, isOwnerRequest, OFFICE, DRAWER, checkDrawer, rowMismatch, verifyWritten, masterSheetId, logSync, lastSync, SHEET_ID, MOCK, MOCK_CUSTOMER_SHOPS, getSheetsClient, currentPin, checkPin, serialToDate, num, readMasterEntry, sheetFullError, customerShopMap, creditShopError };
