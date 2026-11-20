@@ -1437,6 +1437,7 @@ function appLogout() {
   CASH_DATA = null; CASH_KIND = ''; SALE = null;
   STOCK_DATA       = null;
   PAL_RETAIL_TAB   = 'Burmelin';
+  var rb = document.getElementById('restock-body'); if (rb) rb.innerHTML = '';   // it was this shop's list
   LV = {}; ON_THE_WAY = {}; SOLD_SHOP = 'all'; SOLD_WHEN = 'today'; SOLD_VIEW = 'product';
   cart = []; nextId = 1; lastOrder = null;
   document.getElementById('screen-app').classList.remove('active');
@@ -1511,6 +1512,8 @@ function showPanel(name) {
   } else {
     if (name === 'stores') renderOtherStores();
     if (name === 'order')  loadInventory();
+    // Restock is worked out for the shop logged in now: never show a list left from an earlier login
+    if (name === 'order' && ORDER_MODE === 'restock') renderReorderTab();
   }
   updateBackBtn();
 }
