@@ -125,6 +125,7 @@ function jsonOut(value) {
 // login with every request as auth/authStore (in the request body, never in a link).
 var READ_ACTIONS = { getInventory: 1, getAllRetailStock: 1, getStoreStock: 1, getStoreBundle: 1,
                      getSalesToday: 1, getStockHistory: 1, getSalesReport: 1 };
+var OWNER_READS = { getInventory: 1, getStockHistory: 1 };   // the owner's Palladium Stock tab (recount)
 function isLoggedIn(b) { return !!b && (isEmployee(b.auth) || isStorePass(b.authStore, b.auth)); }
 
 // ─── 30-DAY SIGN-IN TOKENS ───────────────────────────────────
@@ -202,7 +203,7 @@ function handleApi(action, params, body) {
   } else if (body && body.auth && body.authStore && passwordOf(body.authStore) === body.auth) {
     renewFor = body.authStore;   // a phone still saving the password: switch it to a token
   }
-  if ((READ_ACTIONS[action] || action === 'submitOrder') && !isLoggedIn(body)) {
+  if ((READ_ACTIONS[action] || action === 'submitOrder') && !isLoggedIn(body) && !(OWNER_READS[action] && body && isOwner(body.auth))) {
     return jsonOut({ success: false, error: 'Please log out and log in again.', needLogin: true });
   }
   // Since 18 Nov 2026 shop stock is kept only in Loyverse: nothing (shop or Palladium phone, old
@@ -234,6 +235,8 @@ function handleApi(action, params, body) {
     case 'verifyOwner':          out = verifyOwner(body.password); break;
     // Which login a token is for (the finance server asks, e.g. for the Palladium cash drawer)
     case 'palladiumSell':        out = palladiumSell(body, body.items, body.saleId); break;
+    case 'palladiumCounters':    out = palladiumCounters(body); break;
+    case 'palladiumRecount':     out = palladiumRecount(body, body.lines, body.reason, body.note, body.countedBy, body.recountId); break;
     case 'whoAmI':               out = (body && body.token && body.authStore) ? { success: true, login: body.authStore } : { success: false, error: 'Please log in again.', needLogin: true }; break;
     case 'leaveStaffList':       out = leaveStaffList(body); break;
     case 'leaveSignIn':          out = leaveSignIn(body, body.staffId, body.pin); break;
@@ -1195,7 +1198,7 @@ function whoIs(password, store) { return isEmployee(password) ? 'Palladium' : (s
 // Recent changes for one store (and optionally one product), newest first.
 // A store may only read its own history; Palladium may read any.
 function getStockHistory(b, store, productId) {
-  if (!isEmployee(b.auth) && b.authStore !== store) return { success: false, error: 'You can only see your own store\'s history.' };
+  if (!isEmployee(b.auth) && !isOwner(b.auth) && b.authStore !== store) return { success: false, error: 'You can only see your own store\'s history.' };
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(HISTORY_SHEET);
@@ -1300,6 +1303,102 @@ function palladiumSell(b, items, saleId) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ─── PALLADIUM RECOUNT ────────────────────────────────────────
+// Since 21 Nov 2026 nobody types in the Palladium Stock tab: a recount (or any fix to a number)
+// is done in the app, item by item, checked on a review screen, then saved here. Every changed
+// size is written to Stock History: when, who counted, old -> new, the reason and a note.
+var RECOUNT_REASONS = ['Recount', 'New delivery', 'Damaged', 'Found', 'Fix a mistake'];
+var RECOUNT_MAX_LINES = 300;
+
+function canRecount(b) { return !!b && (isEmployee(b.auth) || isOwner(b.auth)); }
+
+// Names for "Who counted?": staff who work at Palladium
+function palladiumCounters(b) {
+  if (!canRecount(b)) return { success: false, error: 'Please log out and log in again as Palladium.', needLogin: true };
+  var names = readStaffRows(SpreadsheetApp.getActiveSpreadsheet())
+    .filter(function(s) { return s.places.indexOf('Palladium') > -1; })
+    .map(function(s) { return s.name; });
+  return { success: true, names: names };
+}
+
+// lines: [{ pid, col, sz, was, now }] — `was` is the number the phone showed. If the sheet no longer
+// has that number (an order was sent meanwhile), nothing is saved and the fresh numbers come back.
+// A repeated recountId (a retry after a dropped connection) changes nothing.
+function palladiumRecount(b, lines, reason, note, countedBy, recountId) {
+  if (!canRecount(b)) return { success: false, error: 'Please log out and log in again as Palladium.', needLogin: true };
+  recountId = String(recountId || '').trim();
+  if (!/^RC-[A-Za-z0-9]{4,20}$/.test(recountId)) return { success: false, error: 'Missing recount ID. Close the app and open it again.' };
+  if (RECOUNT_REASONS.indexOf(reason) === -1) return { success: false, error: 'Choose a reason.' };
+  note = String(note || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  countedBy = String(countedBy || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (!countedBy) return { success: false, error: 'Choose who counted.' };
+  var bad = null;
+  lines = (lines || []).map(function(l) {
+    var now = Number(l.now), was = Number(l.was);
+    if (!(now >= 0 && now <= 9999 && Math.floor(now) === now) || !(Math.floor(was) === was)) bad = l;
+    return { pid: String(l.pid || '').trim(), col: String(l.col || '').trim(), sz: String(l.sz || '').trim(), was: was, now: now };
+  }).filter(function(l) { return l.pid && l.col && l.sz; });
+  if (bad) return { success: false, error: 'Numbers must be whole pieces from 0 to 9999.' };
+  if (!lines.length) return { success: false, error: 'Nothing changed.' };
+  if (lines.length > RECOUNT_MAX_LINES) return { success: false, error: 'Too many lines at once (' + RECOUNT_MAX_LINES + ' max). Save in two parts.' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (recountSaved(ss, recountId)) return { success: true, alreadyDone: true };
+    var sheet = getPalladiumSheet(ss);
+    if (!sheet) return { success: false, error: 'Palladium stock tab not found.' };
+    var data = sheet.getDataRange().getValues();
+    var rowOf = {};
+    for (var r = sheetDataStart(data); r < data.length; r++) {
+      var k = String(data[r][1]).trim() + '|' + String(data[r][3]).trim() + '|' + String(data[r][4]).trim();
+      if (rowOf[k] === undefined) rowOf[k] = r;
+    }
+    var seen = {}, moved = [];
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i], key = l.pid + '|' + l.col + '|' + l.sz;
+      if (seen[key]) return { success: false, error: l.pid + ' colour ' + l.col + ' size ' + l.sz + ' is listed twice.' };
+      seen[key] = 1;
+      if (rowOf[key] === undefined) return { success: false, error: l.pid + ' colour ' + l.col + ' size ' + l.sz + ' is not in Palladium Stock.' };
+      var have = parseInt(data[rowOf[key]][5]) || 0;
+      if (have !== l.was) moved.push({ pid: l.pid, col: l.col, sz: l.sz, was: l.was, now: have });
+    }
+    if (moved.length) {
+      return { success: false, changedMeanwhile: moved,
+               error: 'Stock changed while you were counting (an order or sale). Nothing was saved. The new numbers are shown — check them and save again.' };
+    }
+    var changes = [];
+    lines.forEach(function(l) {
+      var row = rowOf[l.pid + '|' + l.col + '|' + l.sz];
+      if (l.now === l.was) return;
+      sheet.getRange(row + 1, 6).setValue(l.now);
+      changes.push({ store: 'Palladium', pid: l.pid, col: l.col, sz: l.sz, before: l.was, after: l.now });
+    });
+    var login = isEmployee(b.auth) ? 'Palladium' : 'Owner';
+    logHistory(ss, changes, 'Recount: ' + reason, recountId + (note ? ' · ' + note : ''), countedBy + ' (' + login + ' login)');
+    SpreadsheetApp.flush();
+    return { success: true, saved: changes.length };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Was this recount already written to Stock History? (looks at the newest 3,000 rows)
+function recountSaved(ss, recountId) {
+  var sh = ss.getSheetByName(HISTORY_SHEET);
+  if (!sh || sh.getLastRow() < 2) return false;
+  var last = sh.getLastRow(), from = Math.max(2, last - 2999);
+  var refs = sh.getRange(from, 10, last - from + 1, 1).getValues();
+  for (var i = refs.length - 1; i >= 0; i--) {
+    var ref = String(refs[i][0]);
+    if (ref === recountId || ref.indexOf(recountId + ' · ') === 0) return true;
+  }
+  return false;
 }
 
 // ─── SALES REPORT ─────────────────────────────────────────────

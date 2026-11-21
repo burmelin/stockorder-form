@@ -344,6 +344,44 @@ tbody tr:last-child td{border-bottom:none}
 .cd-total{font-size:.95rem;margin:0 0 10px;min-height:1.2em}
 .cd-del{background:none;border:1px solid var(--line);border-radius:999px;color:var(--stone);font-size:.72rem;padding:4px 9px;cursor:pointer}
 .pal-mode .nav-btn{padding-left:2px;padding-right:2px}
+/* ── PALLADIUM RECOUNT ── */
+.sg-hist .rc-open{margin-right:6px}
+#rc-overlay{display:none;position:fixed;inset:0;background:var(--linen);z-index:9000;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#rc-overlay.open{display:block}
+.rc-wrap{max-width:560px;margin:0 auto;padding:16px 16px 110px}
+.rc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.rc-top h2{flex:1;margin:0;font-size:1.15rem;color:#111118}
+.rc-x{background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-weight:700;color:#4A4844;cursor:pointer}
+.rc-help{font-size:.82rem;color:#4A4844;margin:0 0 14px;line-height:1.4}
+.rc-col{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.rc-col-head{display:flex;justify-content:space-between;font-weight:700;font-size:.9rem;margin-bottom:10px;color:#111118}
+.rc-col-head span{font-weight:600;color:var(--stone);font-size:.8rem}
+.rc-sizes{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:8px}
+.rc-cell{border:1.5px solid var(--line);border-radius:10px;padding:6px 6px 7px;text-align:center;background:#FCFBF9}
+.rc-cell.changed{border-color:var(--brass);background:#FBF6EC}
+.rc-cell label{display:block;font-size:.74rem;font-weight:700;color:#4A4844;margin-bottom:3px}
+.rc-cell input{width:100%;box-sizing:border-box;font-size:1.15rem;font-weight:700;text-align:center;border:1px solid var(--line);border-radius:7px;padding:6px 2px;background:#fff;color:#111118}
+.rc-was{display:block;font-size:.68rem;color:var(--warn);margin-top:3px;min-height:1em}
+.rc-sec{font-size:.74rem;font-weight:700;color:#6D6A65;text-transform:uppercase;letter-spacing:.16em;margin:18px 0 8px}
+.rc-chips{display:flex;flex-wrap:wrap;gap:8px}
+.rc-chip{background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:9px 14px;font-weight:700;font-size:.85rem;color:#4A4844;cursor:pointer}
+.rc-chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.rc-note{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;padding:11px;font-size:.92rem;background:#fff}
+.rc-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:9001}
+.rc-bar-in{max-width:560px;margin:0 auto;display:flex;gap:10px}
+.rc-bar button{flex:1;padding:14px;border-radius:9px;font-weight:700;font-size:.98rem;cursor:pointer;border:1.5px solid var(--blue)}
+.rc-go{background:var(--blue);color:#fff}
+.rc-go:disabled{background:#B8C6D6;border-color:#B8C6D6}
+.rc-back{background:#fff;color:var(--blue);flex:0 0 34%!important}
+.rc-msg{font-size:.84rem;color:#8A6A2E;background:#FBF6EC;border:1px solid #EAD9B5;border-radius:10px;padding:10px 12px;margin:0 0 12px;display:none}
+.rc-rev{background:#fff;border:1px solid var(--line);border-radius:12px;padding:4px 14px;margin-bottom:12px}
+.rc-rev-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F0ECE6;font-size:.9rem}
+.rc-rev-row:last-child{border-bottom:none}
+.rc-rev-row b{flex:1}
+.rc-rev-ba{color:#4A4844;white-space:nowrap}
+.rc-rev-ch{font-weight:700;min-width:44px;text-align:right;color:#111118}
+.rc-sum{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.88rem;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.rc-sum span{color:var(--stone)}
 /* ── STOCK HISTORY ── */
 .sg-hist{padding:8px 14px 12px;border-top:1px solid #ECE8E1}
 .sg-hist-btn{background:none;border:1px solid var(--line);color:var(--blue);font-weight:700;font-size:.74rem;padding:6px 11px;border-radius:999px;cursor:pointer}
@@ -823,6 +861,9 @@ tbody tr:last-child td{border-bottom:none}
 <!-- Shown on the Order screen while the order has items: jumps to the summary to review and submit -->
 <button id="order-cart-bar" hidden onclick="var c=document.getElementById('cart-wrap'); if(c) c.scrollIntoView({block:'center'})"><span id="order-cart-bar-txt"></span><span>Review &amp; Submit ↓</span></button>
 
+<!-- Palladium recount -->
+<div id="rc-overlay" role="dialog" aria-modal="true"><div class="rc-wrap" id="rc-body"></div><div class="rc-bar"><div class="rc-bar-in" id="rc-bar"></div></div></div>
+
 <!-- PDF overlay -->
 <div id="pdf-overlay">
   <div class="pdf-toolbar">
@@ -1182,9 +1223,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   var GET_ACTIONS = { getBusinessName:1 };
   // Only reads and repeat-safe writes may be auto-retried; a retried write could apply twice
   // Writes get longer before giving up: a false 'connection error' while the server is still working leads to re-taps
-  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, ownerEditLeave:1, ownerRemoveLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, palladiumSell:1, generateMasterSheet:1 };
-  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, palladiumSell:1, markDone:1, submitOrder:1 };
-  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], ownerEditLeave:['requestId','staffId','type','dates','reason','half'], ownerRemoveLeave:['requestId'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], palladiumSell:['items','saleId'], getSalesToday:['storeName'], generateMasterSheet:['password','targets','retail'] };
+  var WRITES = { ownerSaveStaff:1, ownerDeleteStaff:1, leaveSignIn:1, leaveRequest:1, leaveCancel:1, ownerDecideLeave:1, ownerAddLeave:1, ownerEditLeave:1, ownerRemoveLeave:1, submitOrder:1, sendInvoice:1, deleteOrder:1, editOrderItems:1, markDone:1, palladiumSell:1, palladiumRecount:1, generateMasterSheet:1 };
+  var RETRY_OK = { verifyOwner:1, leaveStaffList:1, leaveMine:1, ownerLeave:1, getInventory:1, getAllRetailStock:1, getStockHistory:1, getSalesReport:1, palladiumCounters:1, palladiumRecount:1, getOrders:1, getStoreStock:1, getStoreBundle:1, verifyRetailStore:1, getSalesToday:1, palladiumSell:1, markDone:1, submitOrder:1 };
+  var POST_ARGS = { ownerSaveStaff:['staff'], ownerDeleteStaff:['id'], verifyOwner:['password'], leaveStaffList:[], leaveSignIn:['staffId','pin'], leaveMine:['staffToken'], leaveRequest:['staffToken','type','dates','reason','half'], leaveCancel:['staffToken','requestId'], ownerLeave:[], ownerDecideLeave:['requestId','decision','note'], ownerAddLeave:['staffId','type','dates','reason','half'], ownerEditLeave:['requestId','staffId','type','dates','reason','half'], ownerRemoveLeave:['requestId'], getInventory:[], getAllRetailStock:[], getStockHistory:['store','productId'], getSalesReport:['days'], getOrders:['password'], submitOrder:['order'], sendInvoice:['orderId','password'], deleteOrder:['orderId','password'], editOrderItems:['orderId','newItems','password'], markDone:['orderId','password'], verifyRetailStore:['storeName','password','withData'], getStoreBundle:['storeName'], getStoreStock:['storeName'], palladiumSell:['items','saleId'], palladiumCounters:[], palladiumRecount:['lines','reason','note','countedBy','recountId'], getSalesToday:['storeName'], generateMasterSheet:['password','targets','retail'] };
   function makeRunner(){ var onOk=null,onErr=null; var runner={ withSuccessHandler:function(cb){onOk=cb;return runner;}, withFailureHandler:function(cb){onErr=cb;return runner;} }; function attach(name){ runner[name]=function(){ var args=arguments; function attempt(tries){ var ctrl=new AbortController(); var tid=setTimeout(function(){ctrl.abort();},WRITES[name]?45000:20000); var req; if(GET_ACTIONS[name]){ req=fetch(API_URL+'?action='+encodeURIComponent(name),{signal:ctrl.signal}); }else{ var payload={action:name}; (POST_ARGS[name]||[]).forEach(function(k,i){payload[k]=args[i];}); if(typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ if(SESSION_STORE.token){ payload.token=SESSION_STORE.token; } else { payload.auth=SESSION_STORE.pass; payload.authStore=SESSION_STORE.name; } } req=fetch(API_URL,{method:'POST',body:JSON.stringify(payload),signal:ctrl.signal}); } req.then(function(r){clearTimeout(tid);if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){ if(res&&res._token&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ keepToken(res._token); } if(res&&res.needLogin&&typeof SESSION_STORE!=='undefined'&&SESSION_STORE){ showToast('Your login has expired — please log in again'); appLogout(); return; } if(onOk)onOk(res);}).catch(function(err){ clearTimeout(tid); if(tries>0){ setTimeout(function(){attempt(tries-1);},1500); }else{ if(onErr)onErr(err); } }); } attempt((GET_ACTIONS[name]||RETRY_OK[name])?1:0); }; } Object.keys(GET_ACTIONS).forEach(attach); Object.keys(POST_ARGS).forEach(attach); return runner; }
   window.google=window.google||{}; window.google.script=window.google.script||{}; Object.defineProperty(window.google.script,'run',{get:makeRunner});
 })();
@@ -1426,7 +1467,7 @@ function appLogout() {
   try { localStorage.removeItem('burmelin_session'); } catch(e){}
   document.getElementById('screen-leave').classList.remove('active');
   document.getElementById('screen-owner').classList.remove('active');
-  OWNER_DATA = null; LEAVE_ME = null; OWNER_TAB = 'leave'; OWNER_EDIT = null;
+  OWNER_DATA = null; LEAVE_ME = null; OWNER_TAB = 'leave'; OWNER_EDIT = null; STOCK_DATA = null; rcClose(true);
   cacheClear();
   INVENTORY_LOADED = false;
   SESSION_STORE    = null;
@@ -1675,7 +1716,7 @@ function stockGroupsHtml(inv, q, opts) {
       + (pOut ? '<span class="sg-pill out">' + pOut + ' out</span>' : '')
       + (pLow ? '<span class="sg-pill low">' + pLow + ' low</span>' : '')
       + '<span class="sg-total">' + pPcs + ' pcs</span></summary>' + colorsHtml
-      + (opts.historyStore ? '<div class="sg-hist"><button class="sg-hist-btn" onclick="showHistory(this,\'' + palEsc(opts.historyStore) + '\',\'' + palEsc(pid) + '\')">🕘 History</button><div class="hist-list"></div></div>' : '') });
+      + (opts.historyStore ? '<div class="sg-hist">' + (opts.recount ? '<button class="sg-hist-btn rc-open" onclick="rcOpen(\'' + palEsc(pid) + '\')">✏️ Recount</button>' : '') + '<button class="sg-hist-btn" onclick="showHistory(this,\'' + palEsc(opts.historyStore) + '\',\'' + palEsc(pid) + '\')">🕘 History</button><div class="hist-list"></div></div>' : '') });
   });
 
   if (!cards.length) {
@@ -3029,7 +3070,27 @@ function ownerTab(tab) { OWNER_TAB = tab; OWNER_EDIT = null; OWNER_ADD = null; o
 function ownerTabsHtml(pending) {
   return '<div class="ms-tabs rp-tabs">'
     + '<button class="mstab' + (OWNER_TAB === 'leave' ? ' active' : '') + '" onclick="ownerTab(\'leave\')">Leave' + (pending ? ' · ' + pending : '') + '</button>'
-    + '<button class="mstab' + (OWNER_TAB === 'staff' ? ' active' : '') + '" onclick="ownerTab(\'staff\')">Staff</button></div>';
+    + '<button class="mstab' + (OWNER_TAB === 'staff' ? ' active' : '') + '" onclick="ownerTab(\'staff\')">Staff</button>'
+    + '<button class="mstab' + (OWNER_TAB === 'stock' ? ' active' : '') + '" onclick="ownerTab(\'stock\')">Palladium stock</button></div>';
+}
+// Owner's Palladium stock: the same list as the Palladium login's Stock tab, with ✏️ Recount
+function ownerStockRender(tabs) {
+  var body = document.getElementById('owner-body');
+  var head = tabs + '<div class="lv-hint" style="margin:0 0 10px">Open a product and tap ✏️ Recount to change its numbers. Every change is saved in its 🕘 History.</div>';
+  if (!STOCK_DATA) {
+    body.innerHTML = head + loaderHtml('stock', 'Loading Palladium stock…');
+    google.script.run.withSuccessHandler(function(r) {
+      if (OWNER_TAB !== 'stock') return;
+      if (r && r.success) { STOCK_DATA = r; ownerStockRender(tabs); }
+      else body.innerHTML = head + '<div class="sp-empty">⚠ ' + ((r && r.error) || 'Could not load stock.') + '</div>';
+    }).withFailureHandler(function() {
+      if (OWNER_TAB === 'stock') body.innerHTML = head + '<div class="sp-empty">⚠ Connection error — tap Palladium stock again.</div>';
+    }).getInventory();
+    return;
+  }
+  body.innerHTML = head
+    + '<input type="text" id="pal-ss" class="rs-search" placeholder="Search ID or full code…" autocomplete="off" autocapitalize="characters" oninput="palStockFilter(this.value)">'
+    + '<div id="pal-stock-body">' + palStockHtml('') + '</div>';
 }
 function ownerDayOffText(s) {
   return s.dayOffRule === 'fixed' ? 'Off every ' + s.fixedDayOff : s.daysOffPerMonth + ' days off a month';
@@ -3140,6 +3201,7 @@ function ownerRender() {
   var past = r.requests.filter(function(q) { return q.status !== 'Pending' && upcoming.indexOf(q) < 0; });
   document.getElementById('owner-count').textContent = pending.length ? pending.length + ' waiting' : '';
   var h = ownerTabsHtml(pending.length);
+  if (OWNER_TAB === 'stock') { ownerStockRender(h); return; }
   if (OWNER_TAB === 'staff') {
     document.getElementById('owner-body').innerHTML = h + ownerStaffHtml() + '<div class="lv-title" style="margin-top:18px">Get the app</div><div data-ig-entry></div>';
     igRefreshEntries();
@@ -3639,7 +3701,7 @@ function palShowStock() {
 }
 
 function palStockHtml(q){
-  return stockGroupsHtml(STOCK_DATA.inventory,q,{lowMax:3,sections:STOCK_DATA.groups,historyStore:'Palladium'});
+  return stockGroupsHtml(STOCK_DATA.inventory,q,{lowMax:3,sections:STOCK_DATA.groups,historyStore:'Palladium',recount:true});
 }
 
 function palStockFilter(q){
@@ -3653,6 +3715,160 @@ function palRenderStockCats(){
     '<div style="font-size:.78rem;font-weight:700;color:#6D6A65;text-transform:uppercase;letter-spacing:.2em;margin-bottom:10px">Palladium Stock</div>'
     +'<input type="text" id="pal-ss" class="rs-search" placeholder="Search ID or full code (e.g. T8028848)…" autocomplete="off" autocapitalize="characters" oninput="palStockFilter(this.value)">'
     +'<div id="pal-stock-body">'+palStockHtml('')+'</div>';
+}
+
+// ── PALLADIUM RECOUNT ─────────────────────────────────────────────
+// Since 21 Nov 2026 nobody types in the Palladium Stock sheet: numbers are changed here, one product
+// at a time. Type what is on the shelf, pick a reason and who counted, check the review, then save.
+// The server refuses if an order changed a number meanwhile, and logs every change in Stock History.
+var RC = null, RC_COUNTERS = null;
+var RC_REASONS = [['Recount','Counted the shelf'],['New delivery','New pieces came in'],['Damaged','Damaged or thrown away'],['Found','Found pieces'],['Fix a mistake','A number was wrong']];
+function rcKey(cn, sz) { return cn + '|' + sz; }
+function rcOpen(pid) {
+  var inv = STOCK_DATA && STOCK_DATA.inventory && STOCK_DATA.inventory[pid];
+  if (!inv) { showToast('Stock not loaded yet — try again'); return; }
+  var orig = {}, cols = [];
+  Object.keys(inv).sort(colorNumSort).forEach(function(ck) {
+    var cn = ck.replace(/^Color\s*/i, ''), sizes = Object.keys(inv[ck]).sort(sortSizes);
+    cols.push({ cn: cn, sizes: sizes });
+    sizes.forEach(function(sz) { orig[rcKey(cn, sz)] = parseInt(inv[ck][sz]) || 0; });
+  });
+  RC = { pid: pid, cols: cols, orig: orig, now: Object.assign({}, orig), reason: '', by: '', note: '',
+         id: 'RC-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), step: 'count' };
+  document.getElementById('rc-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  rcRenderCount();
+  if (!RC_COUNTERS) google.script.run.withSuccessHandler(function(r) {
+    if (r && r.success) { RC_COUNTERS = r.names || []; if (RC && RC.step === 'count') rcRenderWho(); }
+  }).palladiumCounters();
+}
+function rcClose(force) {
+  if (!force && RC && rcChanges().length && !confirmClose()) return;
+  RC = null;
+  document.getElementById('rc-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function confirmClose() { return window.confirm('Close without saving? Your numbers will be lost.'); }
+function rcChanges() {
+  if (!RC) return [];
+  var out = [];
+  RC.cols.forEach(function(c) { c.sizes.forEach(function(sz) {
+    var k = rcKey(c.cn, sz);
+    if (RC.now[k] !== RC.orig[k]) out.push({ pid: RC.pid, col: c.cn, sz: sz, was: RC.orig[k], now: RC.now[k] });
+  }); });
+  return out;
+}
+function rcColName(cn) { return /^\d+$/.test(cn) ? 'Color ' + cn : cn; }
+function rcRenderCount(msg) {
+  RC.step = 'count';
+  var html = '<div class="rc-top"><h2>Recount ' + RC.pid + '</h2><button class="rc-x" onclick="rcClose()">✕ Close</button></div>'
+    + '<p class="rc-help">Type the number of pieces on the shelf for each size. Only sizes you change are saved. You will check everything before it is saved.</p>'
+    + '<div class="rc-msg" id="rc-msg"' + (msg ? ' style="display:block"' : '') + '>' + (msg || '') + '</div>';
+  RC.cols.forEach(function(c) {
+    var tot = 0; c.sizes.forEach(function(sz) { tot += RC.orig[rcKey(c.cn, sz)]; });
+    html += '<div class="rc-col"><div class="rc-col-head">' + rcColName(c.cn) + '<span>now ' + tot + ' pcs</span></div><div class="rc-sizes">';
+    c.sizes.forEach(function(sz) {
+      var k = rcKey(c.cn, sz), ch = RC.now[k] !== RC.orig[k];
+      html += '<div class="rc-cell' + (ch ? ' changed' : '') + '" data-k="' + k.replace(/"/g, '&quot;') + '"><label>' + sz + '</label>'
+        + '<input type="number" inputmode="numeric" min="0" max="9999" value="' + RC.now[k] + '" onfocus="this.select()" oninput="rcInput(this)">'
+        + '<span class="rc-was">' + (ch ? 'was ' + RC.orig[k] : '') + '</span></div>';
+    });
+    html += '</div></div>';
+  });
+  html += '<div class="rc-sec">Why are you changing it?</div><div class="rc-chips">'
+    + RC_REASONS.map(function(r) { return '<button class="rc-chip' + (RC.reason === r[0] ? ' on' : '') + '" title="' + r[1] + '" onclick="rcPick(\'reason\',\'' + palEsc(r[0]) + '\')">' + r[0] + '</button>'; }).join('')
+    + '</div><div class="rc-sec">Who counted?</div><div class="rc-chips" id="rc-who"></div>'
+    + '<div class="rc-sec">Note (optional)</div><input class="rc-note" id="rc-note" maxlength="120" placeholder="e.g. 2 torn, thrown away" value="' + String(RC.note).replace(/"/g, '&quot;') + '" oninput="RC.note=this.value">';
+  document.getElementById('rc-body').innerHTML = html;
+  rcRenderWho(); rcRenderBar();
+  document.getElementById('rc-overlay').scrollTop = 0;
+}
+function rcRenderWho() {
+  var el = document.getElementById('rc-who'); if (!el || !RC) return;
+  var names = (RC_COUNTERS || []).slice();
+  if (names.indexOf('Owner') === -1) names.push('Owner');
+  el.innerHTML = RC_COUNTERS ? names.map(function(n) {
+    return '<button class="rc-chip' + (RC.by === n ? ' on' : '') + '" onclick="rcPick(\'by\',\'' + palEsc(n) + '\')">' + n + '</button>';
+  }).join('') : '<span class="rc-help" style="margin:0">Loading names…</span>';
+}
+function rcPick(field, v) {
+  RC[field] = v;
+  if (field === 'reason') document.querySelectorAll('#rc-body .rc-chips:not(#rc-who) .rc-chip').forEach(function(b) { b.classList.toggle('on', b.textContent === v); });
+  else rcRenderWho();
+  rcRenderBar();
+}
+function rcInput(inp) {
+  var cell = inp.closest('.rc-cell'), k = cell.getAttribute('data-k');
+  var v = inp.value === '' ? RC.orig[k] : Math.max(0, Math.min(9999, Math.floor(Number(inp.value)) || 0));
+  RC.now[k] = v;
+  var ch = v !== RC.orig[k];
+  cell.classList.toggle('changed', ch);
+  cell.querySelector('.rc-was').textContent = ch ? 'was ' + RC.orig[k] : '';
+  rcRenderBar();
+}
+function rcRenderBar() {
+  var bar = document.getElementById('rc-bar'); if (!RC) return;
+  if (RC.step === 'count') {
+    var n = rcChanges().length, need = !n ? 'Change a number first' : !RC.reason ? 'Choose a reason' : !RC.by ? 'Choose who counted' : '';
+    bar.innerHTML = '<button class="rc-go" ' + (need ? 'disabled' : '') + ' onclick="rcReview()">' + (need || 'Review ' + n + ' change' + (n === 1 ? '' : 's')) + '</button>';
+  } else if (RC.step === 'review') {
+    bar.innerHTML = '<button class="rc-back" onclick="rcRenderCount()">Back</button><button class="rc-go" onclick="rcSave(this)">Save to Palladium Stock</button>';
+  }
+}
+function rcReview() {
+  var ch = rcChanges(); if (!ch.length) return;
+  RC.step = 'review';
+  var up = 0, down = 0;
+  var rows = ch.map(function(c) {
+    var d = c.now - c.was; if (d > 0) up += d; else down -= d;
+    return '<div class="rc-rev-row"><b>' + rcColName(c.col) + ' · ' + c.sz + '</b><span class="rc-rev-ba">' + c.was + ' → ' + c.now + '</span><span class="rc-rev-ch">' + (d > 0 ? '+' + d : d) + '</span></div>';
+  }).join('');
+  document.getElementById('rc-body').innerHTML =
+    '<div class="rc-top"><h2>Check before saving</h2><button class="rc-x" onclick="rcClose()">✕ Close</button></div>'
+    + '<p class="rc-help">These numbers will replace the ones in Palladium Stock. Tap Back to fix anything.</p>'
+    + '<div class="rc-msg" id="rc-msg"></div>'
+    + '<div class="rc-sec" style="margin-top:4px">' + RC.pid + ' · ' + ch.length + ' size' + (ch.length === 1 ? '' : 's') + ' changing</div>'
+    + '<div class="rc-rev">' + rows + '</div>'
+    + '<div class="rc-sum"><span>Pieces added</span><b>' + up + '</b><span>Pieces taken off</span><b>' + down + '</b>'
+    + '<span>Reason</span><b>' + RC.reason + '</b><span>Counted by</span><b>' + RC.by + '</b>'
+    + (RC.note.trim() ? '<span>Note</span><b>' + RC.note.trim().replace(/</g, '&lt;') + '</b>' : '') + '</div>';
+  rcRenderBar();
+  document.getElementById('rc-overlay').scrollTop = 0;
+}
+function rcSave(btn) {
+  var ch = rcChanges(); if (!ch.length || !RC) return;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var pid = RC.pid;
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if (!RC || RC.pid !== pid) return;
+      if (r && r.success) {
+        var inv = STOCK_DATA && STOCK_DATA.inventory && STOCK_DATA.inventory[pid];
+        if (inv) ch.forEach(function(c) { var ck = 'Color ' + c.col; if (inv[ck]) inv[ck][c.sz] = c.now; });
+        cacheSet('palinv', STOCK_DATA);
+        rcClose(true);
+        showToast(r.alreadyDone ? 'Already saved' : 'Saved ' + ch.length + ' change' + (ch.length === 1 ? '' : 's') + ' to ' + pid);
+        var s = document.getElementById('pal-ss'); palStockFilter(s ? s.value : '');
+        return;
+      }
+      if (r && r.changedMeanwhile) {
+        r.changedMeanwhile.forEach(function(m) {
+          var k = rcKey(m.col, m.sz), typed = RC.now[k];
+          RC.orig[k] = m.now; if (typed === m.was) RC.now[k] = m.now;
+          var inv = STOCK_DATA.inventory[pid]; if (inv && inv['Color ' + m.col]) inv['Color ' + m.col][m.sz] = m.now;
+        });
+        RC.id = 'RC-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        rcRenderCount(r.error);
+        return;
+      }
+      btn.disabled = false; btn.textContent = 'Save to Palladium Stock';
+      var m = document.getElementById('rc-msg'); if (m) { m.textContent = '⚠ ' + ((r && r.error) || 'Could not save'); m.style.display = 'block'; }
+    })
+    .withFailureHandler(function() {
+      btn.disabled = false; btn.textContent = 'Save to Palladium Stock';
+      var m = document.getElementById('rc-msg'); if (m) { m.textContent = '⚠ Connection problem. Nothing is lost — tap Save again.'; m.style.display = 'block'; }
+    })
+    .palladiumRecount(ch, RC.reason, RC.note.trim(), RC.by, RC.id);
 }
 
 // ── SHOP STOCK (Palladium sees Burmelin and Nana, read from Loyverse) ─────
