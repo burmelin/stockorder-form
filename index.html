@@ -2364,6 +2364,14 @@ function csSearchFlat(q) {
     resEl.innerHTML = '<div class="sp-empty" style="padding:32px 0">No results for <strong>' + q + '</strong></div>';
     return;
   }
+  // Leave out lines with no stock at any of the three places (0 or no number everywhere)
+  filtered = filtered.filter(function(r) {
+    return CS_COLS.some(function(c) { return (r.stores[c.key] || 0) > 0; });
+  });
+  if (!filtered.length) {
+    resEl.innerHTML = '<div class="sp-empty" style="padding:32px 0">No stock anywhere for <strong>' + q + '</strong><br><span style="font-size:.78rem">Burmelin, Nana and Pal all have 0.</span></div>';
+    return;
+  }
 
   // Group by product ID for visual grouping
   var byPid = {}, pidOrder = [];
