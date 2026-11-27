@@ -342,6 +342,20 @@ tbody tr:last-child td{border-bottom:none}
 .cd-qty b{font-size:1.4rem;min-width:28px;text-align:center}
 .cd-qty small{color:var(--stone);margin-left:auto}
 .cd-total{font-size:.95rem;margin:0 0 10px;min-height:1.2em}
+.cd-basket .cd-line{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--sunk)}
+.cd-basket .cd-line .cd-what{flex:1;min-width:0;font-size:.9rem}
+.cd-basket .cd-line .cd-what small{display:block;color:var(--stone);font-size:.76rem;margin-top:2px}
+.cd-basket .cd-line .cd-amt{font-weight:700;white-space:nowrap}
+.cd-basket .cd-sum{border-bottom:none;padding-top:10px}
+.cd-form .cd-add{background:#fff;color:var(--blue);border:1.5px solid var(--blue)}
+.cd-pay{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.cd-pay button{padding:13px 4px;border-radius:10px;border:1.5px solid var(--blue);background:#fff;color:var(--blue);font-weight:700;font-size:.88rem;cursor:pointer}
+.cd-pay button.on{background:var(--blue);color:#fff}
+.cd-pay-sm{grid-template-columns:1fr 1fr;margin:8px 0 2px}
+.cd-pay-sm button{padding:9px 4px;font-size:.8rem}
+.cd-hint{font-size:.8rem;color:var(--stone);margin:-2px 0 10px;line-height:1.35}
+.cd-tag{display:inline-block;font-size:.66rem;font-weight:700;color:var(--stone);border:1px solid var(--line);border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:1px}
+.cd-owe{align-items:flex-start}
 .cd-del{background:none;border:1px solid var(--line);border-radius:999px;color:var(--stone);font-size:.72rem;padding:4px 9px;cursor:pointer}
 .pal-mode .nav-btn{padding-left:2px;padding-right:2px}
 /* ── PALLADIUM RECOUNT ── */
@@ -1808,10 +1822,16 @@ function palShowCash() {
   cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash(); })
     .catch(function(e) { el.innerHTML = '<p class="cd-msg">Could not load: ' + lvEsc(e.message) + '</p>'; });
 }
-// A sale = one item: product → colour → size (tapped from Palladium's stock), quantity and
-// price per piece (remembered per product on this phone). The pieces come off Palladium Stock
-// (Apps Script palladiumSell), then qty × price goes into the drawer (/api/drawer).
+// A sale = a basket of one or more lines. Each line: product → colour → size (tapped from
+// Palladium's stock), quantity and price per piece (remembered per product on this phone),
+// then "Add to sale". When the basket is ready: who bought, how it was paid (Cash / Bank /
+// Not paid yet), Save. All pieces come off Palladium Stock in one go (Apps Script
+// palladiumSell), then the total goes to the Finance sheet (/api/drawer):
+//   Cash → into the drawer; Bank → company bank, not the drawer; Not paid yet → the buyer
+//   owes it and it stays on the "Not paid yet" list until "Mark paid".
 var SALE = null;
+var PAY_LABEL = { cash: 'Cash', bank: 'Bank', unpaid: 'Not paid yet' };
+function newSale() { return { lines: [], pick: { pid: '', col: '', sz: '', qty: 1, price: '' }, who: '', pay: '' }; }
 function palInventory() { return (STOCK_DATA && STOCK_DATA.inventory) || ((cacheGet('palinv') || {}).inventory) || null; }
 function palLoadInventory() {
   if (palInventory()) return;
@@ -1821,57 +1841,108 @@ function palLoadInventory() {
 }
 function salePrice(pid) { try { return parseFloat(localStorage.getItem('bm_price_' + pid)) || ''; } catch (e) { return ''; } }
 function pcs(obj) { return Object.keys(obj || {}).reduce(function(n, k) { return n + (typeof obj[k] === 'object' ? pcs(obj[k]) : (parseInt(obj[k]) || 0)); }, 0); }
+// Pieces of one size already in the basket
+function inBasket(pid, col, sz) {
+  return SALE.lines.reduce(function(n, l) { return n + (l.pid === pid && (col == null || l.col === col) && (sz == null || l.sz === sz) ? l.qty : 0); }, 0);
+}
+// What is still free to sell = Palladium stock − what is already in the basket
+function freeSize(pid, col, sz) { var inv = palInventory(); return Math.max(0, (parseInt(((inv[pid] || {})[col] || {})[sz]) || 0) - inBasket(pid, col, sz)); }
+function freeCol(pid, col) { var s = palInventory()[pid][col]; return Object.keys(s).reduce(function(n, z) { return n + freeSize(pid, col, z); }, 0); }
+function freeItem(pid) { var c = palInventory()[pid]; return Object.keys(c).reduce(function(n, k) { return n + freeCol(pid, k); }, 0); }
+function saleSum() { return SALE.lines.reduce(function(n, l) { return n + l.qty * l.price; }, 0); }
+function salePcs() { return SALE.lines.reduce(function(n, l) { return n + l.qty; }, 0); }
+function lineText(l) { return l.pid + ' · Colour ' + l.col.replace(/^Color /, '') + ' · Size ' + l.sz; }
 function chipsHtml(list, on, fn) {
   return '<div class="cd-chips">' + list.map(function(c) {
-    return '<button class="cd-chip' + (c.v === on ? ' on' : '') + '" onclick="' + fn + '(\'' + palEsc(c.v) + '\')">' + lvEsc(c.t) + '<small>' + c.n + '</small></button>';
+    return '<button class="cd-chip' + (c.v === on ? ' on' : '') + '" onclick="' + fn + '(\'' + palEsc(c.v) + '\')">' + lvEsc(c.t) + (c.n != null ? '<small>' + c.n + '</small>' : '') + '</button>';
   }).join('') + '</div>';
 }
-function saleFormHtml() {
-  var inv = palInventory();
-  if (!inv) { palLoadInventory(); return '<div class="cd-form"><p class="cd-msg">Loading Palladium stock…</p></div>'; }
-  var S = SALE, h = '<div class="cd-form">';
+function basketHtml() {
+  var S = SALE;
+  if (!S.lines.length) return '';
+  var h = '<div class="cd-form cd-basket"><div class="cd-step">This sale · ' + salePcs() + ' pc</div>';
+  S.lines.forEach(function(l, i) {
+    h += '<div class="cd-line"><div class="cd-what">' + lvEsc(lineText(l)) + '<small>' + l.qty + ' × ' + cashBaht(l.price) + '</small></div>'
+      + '<span class="cd-amt">' + cashBaht(l.qty * l.price) + '</span>'
+      + (S.stockDone ? '' : '<button class="cd-del" onclick="saleRemove(' + i + ')">Remove</button>') + '</div>';
+  });
+  h += '<div class="cd-line cd-sum"><div class="cd-what"><b>Total</b></div><span class="cd-amt">' + cashBaht(saleSum()) + '</span></div>';
+  return h + '</div>';
+}
+function pickHtml() {
+  var inv = palInventory(), S = SALE, P = S.pick;
+  var h = '<div class="cd-form">';
   var groups = (STOCK_DATA && STOCK_DATA.groups) || [{ label: '', products: Object.keys(inv) }];
-  if (!S.pid) {
-    h += '<div class="cd-step">1 · Item</div>';
+  var head = S.lines.length ? 'Add another item' : '1 · Item';
+  if (!P.pid) {
+    h += '<div class="cd-step">' + head + '</div>';
     groups.forEach(function(g) {
-      var list = g.products.filter(function(p) { return inv[p] && pcs(inv[p]) > 0; }).map(function(p) { return { v: p, t: p, n: pcs(inv[p]) }; });
+      var list = g.products.filter(function(p) { return inv[p] && freeItem(p) > 0; }).map(function(p) { return { v: p, t: p, n: freeItem(p) }; });
       if (!list.length) return;
       if (g.label) h += '<div class="cd-sub">' + lvEsc(g.label) + '</div>';
       h += chipsHtml(list, '', 'salePick');
     });
     return h + '</div>';
   }
-  h += '<div class="cd-picked"><b>' + lvEsc(S.pid) + '</b>' + (S.col ? ' · ' + lvEsc(S.col) : '') + (S.sz ? ' · Size ' + lvEsc(S.sz) : '') + '<button class="cd-del" onclick="saleBack()">Change</button></div>';
-  if (!S.col) {
-    var cols = Object.keys(inv[S.pid]).filter(function(c) { return pcs(inv[S.pid][c]) > 0; }).map(function(c) { return { v: c, t: c.replace(/^Color /, ''), n: pcs(inv[S.pid][c]) }; });
-    return h + '<div class="cd-step">2 · Colour</div>' + chipsHtml(cols, '', 'salePickCol') + '</div>';
+  h += '<div class="cd-picked"><b>' + lvEsc(P.pid) + '</b>' + (P.col ? ' · ' + lvEsc(P.col) : '') + (P.sz ? ' · Size ' + lvEsc(P.sz) : '') + '<button class="cd-del" onclick="saleBack()">Change</button></div>';
+  if (!P.col) {
+    var cols = Object.keys(inv[P.pid]).filter(function(c) { return freeCol(P.pid, c) > 0; }).map(function(c) { return { v: c, t: c.replace(/^Color /, ''), n: freeCol(P.pid, c) }; });
+    return h + '<div class="cd-step">Colour</div>' + chipsHtml(cols, '', 'salePickCol') + '</div>';
   }
-  if (!S.sz) {
-    var sizes = inv[S.pid][S.col], list = Object.keys(sizes).filter(function(z) { return (parseInt(sizes[z]) || 0) > 0; }).map(function(z) { return { v: z, t: z, n: sizes[z] }; });
-    return h + '<div class="cd-step">3 · Size</div>' + chipsHtml(list, '', 'salePickSize') + '</div>';
+  if (!P.sz) {
+    var list = Object.keys(inv[P.pid][P.col]).filter(function(z) { return freeSize(P.pid, P.col, z) > 0; }).map(function(z) { return { v: z, t: z, n: freeSize(P.pid, P.col, z) }; });
+    return h + '<div class="cd-step">Size</div>' + chipsHtml(list, '', 'salePickSize') + '</div>';
   }
-  var have = parseInt(inv[S.pid][S.col][S.sz]) || 0;
-  var total = (S.qty || 0) * (parseFloat(S.price) || 0);
-  h += '<div class="cd-step">4 · How many and price</div>'
-    + '<div class="cd-qty"><button onclick="saleQty(-1)">−</button><b>' + S.qty + '</b><button onclick="saleQty(1)">+</button><small>' + have + ' in stock</small></div>'
-    + '<input id="cd-price" type="number" inputmode="numeric" min="1" placeholder="Price per piece ฿" value="' + (S.price || '') + '" oninput="SALE.price=this.value;saleTotal()">'
-    + '<input id="cd-note" type="text" maxlength="60" placeholder="Who bought? (optional)" value="' + lvEsc(S.who || '') + '" oninput="SALE.who=this.value">'
-    + '<div class="cd-total" id="cd-total">' + (total ? S.qty + ' × ' + cashBaht(parseFloat(S.price)) + ' = <b>' + cashBaht(total) + '</b>' : '') + '</div>'
-    + '<button class="cd-save" id="cd-save" onclick="palSaveCash()">' + (S.stockDone ? 'Save the money again' : 'Save sale') + '</button>';
+  var total = (P.qty || 0) * (parseFloat(P.price) || 0);
+  h += '<div class="cd-step">How many and price</div>'
+    + '<div class="cd-qty"><button onclick="saleQty(-1)">−</button><b>' + P.qty + '</b><button onclick="saleQty(1)">+</button><small>' + freeSize(P.pid, P.col, P.sz) + ' in stock</small></div>'
+    + '<input id="cd-price" type="number" inputmode="numeric" min="1" placeholder="Price per piece ฿" value="' + (P.price || '') + '" oninput="SALE.pick.price=this.value;saleTotal()">'
+    + '<div class="cd-total" id="cd-total">' + (total ? P.qty + ' × ' + cashBaht(parseFloat(P.price)) + ' = <b>' + cashBaht(total) + '</b>' : '') + '</div>'
+    + '<button class="cd-save cd-add" onclick="saleAdd()">Add to sale</button>';
   return h + '</div>';
 }
-function salePick(p) { SALE = { pid: p, col: '', sz: '', qty: 1, price: salePrice(p), who: SALE ? SALE.who : '' }; palRenderCash(); }
-function salePickCol(c) { SALE.col = c; palRenderCash(); }
-function salePickSize(z) { SALE.sz = z; SALE.qty = 1; palRenderCash(); }
-function saleBack() { if (SALE.stockDone) return; if (SALE.sz) SALE.sz = ''; else if (SALE.col) SALE.col = ''; else SALE.pid = ''; palRenderCash(); }
+function finishHtml() {
+  var S = SALE;
+  if (!S.lines.length || (S.pick.pid && !S.stockDone)) return '';
+  var label = S.stockDone ? 'Save the money again' : 'Save sale · ' + cashBaht(saleSum());
+  return '<div class="cd-form"><div class="cd-step">How was it paid?</div>'
+    + '<div class="cd-pay">' + ['cash', 'bank', 'unpaid'].map(function(p) {
+        return '<button class="' + (S.pay === p ? 'on' : '') + '" onclick="salePay(\'' + p + '\')">' + PAY_LABEL[p] + '</button>';
+      }).join('') + '</div>'
+    + (S.pay === 'bank' ? '<p class="cd-hint">Transfer or QR into the company bank. It does not go in your cash drawer.</p>' : '')
+    + (S.pay === 'unpaid' ? '<p class="cd-hint">The buyer owes this. It stays on the “Not paid yet” list until you tap Mark paid.</p>' : '')
+    + '<input id="cd-note" type="text" maxlength="40" placeholder="' + (S.pay === 'unpaid' ? 'Who will pay? (needed)' : 'Who bought? (optional)') + '" value="' + lvEsc(S.who || '') + '" oninput="SALE.who=this.value">'
+    + '<button class="cd-save" id="cd-save" onclick="palSaveCash()"' + (S.pay ? '' : ' disabled') + '>' + label + '</button></div>';
+}
+function saleFormHtml() {
+  if (!palInventory()) { palLoadInventory(); return '<div class="cd-form"><p class="cd-msg">Loading Palladium stock…</p></div>'; }
+  return basketHtml() + (SALE.stockDone ? '' : pickHtml()) + finishHtml();
+}
+function salePick(p) { SALE.pick = { pid: p, col: '', sz: '', qty: 1, price: salePrice(p) }; palRenderCash(); }
+function salePickCol(c) { SALE.pick.col = c; palRenderCash(); }
+function salePickSize(z) { SALE.pick.sz = z; SALE.pick.qty = 1; palRenderCash(); }
+function saleBack() { var P = SALE.pick; if (P.sz) P.sz = ''; else if (P.col) P.col = ''; else P.pid = ''; palRenderCash(); }
 function saleQty(d) {
-  var have = parseInt(palInventory()[SALE.pid][SALE.col][SALE.sz]) || 0;
-  SALE.qty = Math.min(Math.max(1, SALE.qty + d), Math.max(1, have)); palRenderCash();
+  var P = SALE.pick, have = freeSize(P.pid, P.col, P.sz);
+  P.qty = Math.min(Math.max(1, P.qty + d), Math.max(1, have)); palRenderCash();
 }
 function saleTotal() {
-  var t = SALE.qty * (parseFloat(SALE.price) || 0), el = document.getElementById('cd-total');
-  if (el) el.innerHTML = t ? SALE.qty + ' × ' + cashBaht(parseFloat(SALE.price)) + ' = <b>' + cashBaht(t) + '</b>' : '';
+  var P = SALE.pick, t = P.qty * (parseFloat(P.price) || 0), el = document.getElementById('cd-total');
+  if (el) el.innerHTML = t ? P.qty + ' × ' + cashBaht(parseFloat(P.price)) + ' = <b>' + cashBaht(t) + '</b>' : '';
 }
+function saleAdd() {
+  var P = SALE.pick, price = parseFloat(P.price) || 0;
+  if (!(price > 0)) { alert('Type the price per piece'); return; }
+  if (SALE.lines.length >= 20) { alert('A sale can have up to 20 lines. Save this one and start a new sale.'); return; }
+  try { localStorage.setItem('bm_price_' + P.pid, String(price)); } catch (e) {}
+  var same = SALE.lines.filter(function(l) { return l.pid === P.pid && l.col === P.col && l.sz === P.sz && l.price === price; })[0];
+  if (same) same.qty += P.qty;
+  else SALE.lines.push({ pid: P.pid, col: P.col, sz: P.sz, qty: P.qty, price: price });
+  SALE.pick = { pid: '', col: '', sz: '', qty: 1, price: '' };
+  palRenderCash();
+}
+function saleRemove(i) { if (SALE.stockDone) return; SALE.lines.splice(i, 1); palRenderCash(); }
+function salePay(p) { SALE.pay = p; palRenderCash(); }
 function palRenderCash(msg) {
   var d = CASH_DATA, el = document.getElementById('cash-content');
   var form = CASH_KIND === 'sale' ? saleFormHtml() : CASH_KIND !== 'expense' ? '' : '<div class="cd-form">'
@@ -1879,22 +1950,48 @@ function palRenderCash(msg) {
     + '<input id="cd-note" type="text" maxlength="120" placeholder="What for? e.g. water, taxi">'
     + '<button class="cd-save" id="cd-save" onclick="palSaveCash()">Save expense</button></div>';
   var rows = d.entries.map(function(e, i) {
-    return '<div class="cd-row"><div class="cd-what">' + lvEsc(e.what) + '<small>' + cashDay(e.date) + (e.notes ? ' · ' + lvEsc(e.notes) : '') + '</small></div>'
+    var tag = e.pay === 'bank' ? 'Bank · not in drawer' : e.pay === 'unpaid' ? 'Not paid yet' : '';
+    return '<div class="cd-row"><div class="cd-what">' + lvEsc(e.what) + (tag ? ' <span class="cd-tag">' + tag + '</span>' : '')
+      + '<small>' + cashDay(e.date) + (e.notes ? ' · ' + lvEsc(e.notes.replace(/ · Ref PS[a-z0-9]+$/, '')) : '') + '</small></div>'
       + '<span class="cd-amt">' + (e.amount > 0 ? '+ ' : '− ') + cashBaht(Math.abs(e.amount)) + '</span>'
-      + (e.canDelete && e.category !== 'Retail Sale' ? '<button class="cd-del" onclick="palDeleteCash(' + i + ')">Delete</button>' : '') + '</div>';
+      + (e.canDelete && e.what !== 'Sale' ? '<button class="cd-del" onclick="palDeleteCash(' + i + ')">Delete</button>' : '') + '</div>';
+  }).join('');
+  var unpaid = (d.unpaid || []).map(function(u, i) {
+    var open = PAYING === u.ref;
+    return '<div class="cd-row cd-owe"><div class="cd-what">' + lvEsc(oweWho(u.notes)) + '<small>' + cashDay(u.date) + ' · ' + lvEsc(oweItems(u.notes)) + '</small>'
+      + (open ? '<div class="cd-pay cd-pay-sm"><button onclick="palMarkPaid(' + i + ',\'cash\')">Paid cash</button><button onclick="palMarkPaid(' + i + ',\'bank\')">Paid to bank</button></div>' : '')
+      + '</div><span class="cd-amt">' + cashBaht(u.amount) + '</span>'
+      + '<button class="cd-del" onclick="palPaying(\'' + palEsc(u.ref) + '\')">' + (open ? 'Cancel' : 'Mark paid') + '</button></div>';
   }).join('');
   el.innerHTML = '<div class="cd-hand"><span>Cash in hand</span><b>' + cashBaht(d.cash) + '</b></div>'
     + '<div class="cd-btns"><button class="' + (CASH_KIND === 'sale' ? 'on' : '') + '" onclick="palCashKind(\'sale\')">+ Sale</button>'
     + '<button class="' + (CASH_KIND === 'expense' ? 'on' : '') + '" onclick="palCashKind(\'expense\')">− Expense</button></div>'
     + form + (msg ? '<p class="cd-msg">' + lvEsc(msg) + '</p>' : '')
+    + (unpaid ? '<div class="rp-title" style="margin:16px 2px 8px">Not paid yet<span class="rp-sub">' + cashBaht(d.unpaidTotal) + ' owed</span></div><div class="cd-list">' + unpaid + '</div>' : '')
     + '<div class="rp-title" style="margin:16px 2px 8px">This month</div>'
     + (rows ? '<div class="cd-list">' + rows + '</div>' : '<p class="cd-msg">Nothing yet this month.</p>');
   if (CASH_KIND === 'expense') { var a = document.getElementById('cd-amount'); if (a) a.focus(); }
 }
+// Notes of an unpaid sale: "<items> · <who> · Ref PS…"
+function oweParts(notes) { var p = String(notes || '').split(' · '); if (/^Ref /.test(p[p.length - 1])) p.pop(); return p; }
+function oweWho(notes) { var p = oweParts(notes); return p.length > 1 ? p[p.length - 1] : 'Unpaid sale'; }
+function oweItems(notes) { var p = oweParts(notes); return p.length > 1 ? p.slice(0, -1).join(' · ') : p[0] || ''; }
+var PAYING = '';
+function palPaying(ref) { PAYING = PAYING === ref ? '' : ref; palRenderCash(); }
+function palMarkPaid(i, pay) {
+  var u = CASH_DATA.unpaid[i];
+  if (!u || !confirm(oweWho(u.notes) + ' paid ' + cashBaht(u.amount) + (pay === 'cash' ? ' in cash (goes in your drawer)' : ' to the bank') + '?')) return;
+  cashFetch('POST', { kind: 'paid', ref: u.ref, pay: pay }).then(function() {
+    PAYING = '';
+    return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Marked paid: ' + cashBaht(u.amount) + (pay === 'cash' ? ' cash' : ' to bank')); });
+  }).catch(function(e) { alert('Not saved: ' + e.message); });
+}
 function palCashKind(k) {
   if (SALE && SALE.stockDone && k !== 'sale') { alert('The pieces were taken off stock but the money is not saved yet. Tap “Save the money again” first.'); return; }
+  if (CASH_KIND === 'sale' && k !== 'sale' && SALE && SALE.lines.length && !confirm('Leave this sale? The items you added will be cleared.')) return;
+  if (CASH_KIND === 'sale' && k === 'sale' && SALE && SALE.lines.length && !SALE.stockDone && !confirm('Close this sale? The items you added will be cleared.')) return;
   CASH_KIND = CASH_KIND === k ? '' : k;
-  if (CASH_KIND === 'sale' && !(SALE && SALE.stockDone)) SALE = { pid: '', col: '', sz: '', qty: 1, price: '', who: '' };
+  if (CASH_KIND === 'sale' && !(SALE && SALE.stockDone)) SALE = newSale();
   palRenderCash();
 }
 function palSaveCash() {
@@ -1910,32 +2007,37 @@ function palSaveCash() {
     return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Expense saved: ' + cashBaht(amount)); });
   }).catch(function(e) { btn.disabled = false; btn.textContent = 'Save expense'; alert('Not saved: ' + e.message); });
 }
-// Stock first (a retry with the same saleId never takes pieces twice), then the money.
+// Stock first (a retry with the same saleId never takes pieces twice), then the money (the
+// server also skips a second save with the same saleId).
 function palSaveSale() {
-  var S = SALE, price = parseFloat(S.price) || 0;
-  if (!(price > 0)) { alert('Type the price per piece'); return; }
+  var S = SALE, total = saleSum(), who = (S.who || '').trim();
+  if (!S.lines.length) { alert('Add an item first'); return; }
+  if (!S.pay) { alert('Choose how it was paid'); return; }
+  if (S.pay === 'unpaid' && !who) { alert('Write who will pay later'); var n = document.getElementById('cd-note'); if (n) n.focus(); return; }
   S.saleId = S.saleId || ('PS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
   var btn = document.getElementById('cd-save');
   btn.disabled = true; btn.textContent = 'Saving…';
-  var colNo = S.col.replace(/^Color /, '');
-  var fail = function(e) { btn.disabled = false; btn.textContent = S.stockDone ? 'Save the money again' : 'Save sale'; alert('Not saved: ' + (e && e.message || e)); };
+  var fail = function(e) { btn.disabled = false; btn.textContent = S.stockDone ? 'Save the money again' : 'Save sale · ' + cashBaht(total); alert('Not saved: ' + (e && e.message || e)); };
   var saveMoney = function() {
-    try { localStorage.setItem('bm_price_' + S.pid, String(price)); } catch (e) {}
-    var note = S.pid + ' · Colour ' + colNo + ' · Size ' + S.sz + ' · ' + S.qty + ' × ' + price + (S.who && S.who.trim() ? ' · ' + S.who.trim() : '');
-    cashFetch('POST', { kind: 'sale', amount: S.qty * price, note: note }).then(function() {
-      var inv = palInventory(); if (inv && inv[S.pid] && inv[S.pid][S.col]) inv[S.pid][S.col][S.sz] = Math.max(0, (parseInt(inv[S.pid][S.col][S.sz]) || 0) - S.qty);
+    var note = S.lines.map(function(l) { return lineText(l) + ' · ' + l.qty + ' × ' + l.price; }).join(' + ');
+    cashFetch('POST', { kind: 'sale', amount: total, note: note, pay: S.pay, who: who, ref: S.saleId }).then(function() {
+      var inv = palInventory();
+      S.lines.forEach(function(l) { if (inv && inv[l.pid] && inv[l.pid][l.col]) inv[l.pid][l.col][l.sz] = Math.max(0, (parseInt(inv[l.pid][l.col][l.sz]) || 0) - l.qty); });
       if (STOCK_DATA) cacheSet('palinv', STOCK_DATA);
       CASH_KIND = ''; SALE = null;
-      return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Sale saved: ' + cashBaht(S.qty * price) + ', ' + S.qty + ' pc taken off stock'); });
+      var how = S.pay === 'cash' ? 'cash in drawer' : S.pay === 'bank' ? 'paid to bank' : who + ' owes it';
+      return cashFetch('GET').then(function(d) { CASH_DATA = d; palRenderCash('Sale saved: ' + cashBaht(total) + ' (' + how + '), ' + salePcsOf(S) + ' pc taken off stock'); });
     }).catch(fail);
   };
   if (S.stockDone) return saveMoney();
+  var items = S.lines.map(function(l) { return { pid: l.pid, col: l.col.replace(/^Color /, ''), sz: l.sz, qty: l.qty }; });
   google.script.run.withSuccessHandler(function(r) {
     if (!r || !r.success) return fail((r && r.error) || 'Stock not changed');
     S.stockDone = true; saveMoney();
   }).withFailureHandler(function() { fail('Connection error. Nothing was taken off stock, try again.'); })
-    .palladiumSell([{ pid: S.pid, col: colNo, sz: S.sz, qty: S.qty }], S.saleId);
+    .palladiumSell(items, S.saleId);
 }
+function salePcsOf(S) { return S.lines.reduce(function(n, l) { return n + l.qty; }, 0); }
 function palDeleteCash(i) {
   var e = CASH_DATA.entries[i];
   if (!e || !confirm('Delete ' + e.what.toLowerCase() + ' ' + cashBaht(Math.abs(e.amount)) + '?')) return;
