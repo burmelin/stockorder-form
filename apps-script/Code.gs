@@ -1258,7 +1258,7 @@ function palladiumSell(b, items, saleId) {
   items = (items || []).map(function(it) {
     return { pid: String(it.pid || '').trim(), col: String(it.col || '').trim(), sz: String(it.sz || '').trim(), qty: parseInt(it.qty) || 0 };
   }).filter(function(it) { return it.pid; });
-  if (!items.length || items.length > 10) return { success: false, error: 'Pick the item.' };
+  if (!items.length || items.length > 20) return { success: false, error: 'Pick the item.' };
   for (var i = 0; i < items.length; i++) if (items[i].qty <= 0) return { success: false, error: 'Quantity must be at least 1.' };
   var lock = LockService.getScriptLock();
   try { lock.waitLock(25000); } catch (e) { return { success: false, error: 'Server busy — please try again.' }; }
